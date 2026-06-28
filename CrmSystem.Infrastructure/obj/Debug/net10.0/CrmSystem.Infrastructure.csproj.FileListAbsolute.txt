@@ -15,3 +15,4 @@ C:\Users\abays\Desktop\CRM_system\CrmSystem.Infrastructure\obj\Debug\net10.0\Crm
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Infrastructure\obj\Debug\net10.0\ref\CrmSystem.Infrastructure.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Infrastructure\bin\Debug\net10.0\CrmSystem.Infrastructure.runtimeconfig.json
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Infrastructure\obj\Debug\net10.0\CrmSystem.Infrastructure.genruntimeconfig.cache
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Infrastructure\obj\Debug\net10.0\CrmSystem.Infrastructure.sourcelink.json

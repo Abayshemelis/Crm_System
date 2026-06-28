@@ -9,3 +9,4 @@ C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.D
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\refint\CrmSystem.Domain.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.pdb
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\ref\CrmSystem.Domain.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.sourcelink.json
