@@ -1,0 +1,11 @@
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\bin\Debug\net10.0\CrmSystem.Domain.deps.json
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\bin\Debug\net10.0\CrmSystem.Domain.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\bin\Debug\net10.0\CrmSystem.Domain.pdb
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.AssemblyInfoInputs.cache
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.AssemblyInfo.cs
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.csproj.CoreCompileInputs.cache
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\refint\CrmSystem.Domain.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\CrmSystem.Domain.pdb
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Domain\obj\Debug\net10.0\ref\CrmSystem.Domain.dll
