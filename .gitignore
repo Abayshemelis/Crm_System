@@ -1,0 +1,14 @@
+## Build / IDE
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+## Secrets — never commit
+**/appsettings.*.local.json
+secrets.json
+
+## OS
+Thumbs.db
+.DS_Store
