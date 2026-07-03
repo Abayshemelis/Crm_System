@@ -12,3 +12,9 @@ secrets.json
 ## OS
 Thumbs.db
 .DS_Store
+
+## Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
