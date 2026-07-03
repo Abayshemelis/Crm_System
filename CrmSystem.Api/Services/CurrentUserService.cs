@@ -1,0 +1,59 @@
+using System.Security.Claims;
+using CrmSystem.Domain.Entities;
+
+namespace CrmSystem.Api.Services;
+
+public class CurrentUserService : ICurrentUserService
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    private ClaimsPrincipal? User => _httpContextAccessor.HttpContext?.User;
+
+    public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
+
+    public int? UserId
+    {
+        get
+        {
+            var value = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User?.FindFirstValue("sub");
+
+            return int.TryParse(value, out var userId) ? userId : null;
+        }
+    }
+
+    public string? Email => User?.FindFirstValue(ClaimTypes.Email);
+
+    public UserRole? Role
+    {
+        get
+        {
+            var value = User?.FindFirstValue(ClaimTypes.Role);
+            return Enum.TryParse<UserRole>(value, out var role) ? role : null;
+        }
+    }
+
+    public bool IsAdmin => Role == UserRole.Admin;
+
+    public bool IsManagerOrAbove => Role is UserRole.Manager or UserRole.Admin;
+
+    public bool CanAccessOwnedRecord(int? ownerRepId)
+    {
+        if (!IsAuthenticated || UserId is null)
+        {
+            return false;
+        }
+
+        if (IsManagerOrAbove)
+        {
+            return true;
+        }
+
+        return ownerRepId == UserId;
+    }
+}

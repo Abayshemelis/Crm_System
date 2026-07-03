@@ -1,7 +1,10 @@
 ﻿using System.Text;
+using CrmSystem.Api.Dtos;
+using CrmSystem.Api.Services;
 using CrmSystem.Infrastructure;
 using CrmSystem.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -14,8 +17,23 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var response = ApiErrorResponse.FromModelState(
+            StatusCodes.Status422UnprocessableEntity,
+            "Validation failed",
+            context.ModelState);
+
+        return new UnprocessableEntityObjectResult(response);
+    };
+});
 
 var jwtSigningKey = builder.Configuration["Jwt:SigningKey"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
