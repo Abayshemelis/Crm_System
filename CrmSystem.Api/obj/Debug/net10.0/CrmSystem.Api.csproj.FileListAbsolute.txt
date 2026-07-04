@@ -163,3 +163,4 @@ C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\zh-Hans\Micros
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\zh-Hant\Microsoft.CodeAnalysis.Workspaces.MSBuild.resources.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\BCrypt-Net-Next.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\CrmSystem.Api.staticwebassets.runtime.json
