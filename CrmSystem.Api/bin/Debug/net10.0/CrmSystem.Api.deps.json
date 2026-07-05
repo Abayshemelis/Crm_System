@@ -8,6 +8,7 @@
     ".NETCoreApp,Version=v10.0": {
       "CrmSystem.Api/1.0.0": {
         "dependencies": {
+          "CrmSystem.Domain": "1.0.0",
           "CrmSystem.Infrastructure": "1.0.0",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "10.0.9",
           "Microsoft.AspNetCore.OpenApi": "10.0.9",

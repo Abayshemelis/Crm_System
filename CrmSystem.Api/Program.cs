@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using CrmSystem.Domain.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +32,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddScoped<IOpportunityService, OpportunityService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
@@ -88,4 +90,22 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+    var adminEmail = "admin@test.com";
+    if (!await db.Users.AnyAsync(u => u.Email == adminEmail))
+    {
+        var adminUser = new User
+        {
+            Name = "Admin",
+            Email = adminEmail,
+            Role = UserRole.Admin,
+            PasswordHash = passwordHasher.Hash("admin123")
+        };
+        db.Users.Add(adminUser);
+        await db.SaveChangesAsync();
+    }
+}
 app.Run();

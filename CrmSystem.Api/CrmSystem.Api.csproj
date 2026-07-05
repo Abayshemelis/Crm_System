@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CrmSystem.Domain\CrmSystem.Domain.csproj" />
     <ProjectReference Include="..\CrmSystem.Infrastructure\CrmSystem.Infrastructure.csproj" />
   </ItemGroup>
 
