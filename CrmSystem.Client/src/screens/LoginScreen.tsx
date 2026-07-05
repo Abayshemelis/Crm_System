@@ -43,7 +43,7 @@ export const LoginScreen: React.FC = () => {
         <div className="login-header">
           <div className="brand-logo-large"><Building2 size={32} /></div>
           <h2>Welcome back</h2>
-          <p>Sign in to your NexusCRM account</p>
+          <p>Sign in to your CRM account</p>
         </div>
         <form onSubmit={handleLogin} className="login-form">
           <Input label="Email address" type="email" placeholder="admin@test.com" value={email} onChange={e => setEmail(e.target.value)} required />
