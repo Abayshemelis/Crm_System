@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CrmSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260628173733_InitialCreate")]
+    [Migration("InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

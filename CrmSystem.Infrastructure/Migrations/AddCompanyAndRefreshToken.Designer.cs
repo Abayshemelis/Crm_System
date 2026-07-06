@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CrmSystem.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260703201851_AddCustomersAndTags")]
-    partial class AddCustomersAndTags
+    [Migration("AddCompanyAndRefreshToken")]
+    partial class AddCompanyAndRefreshToken
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,58 +63,6 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.ToTable("Companies");
                 });
 
-            modelBuilder.Entity("CrmSystem.Domain.Entities.Customer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Address")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("AssignedRepId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CompanyId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("FirstName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("LastName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Source")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedRepId");
-
-                    b.HasIndex("CompanyId");
-
-                    b.ToTable("Customers");
-                });
-
             modelBuilder.Entity("CrmSystem.Domain.Entities.RefreshToken", b =>
                 {
                     b.Property<int>("RefreshTokenId")
@@ -148,32 +96,6 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
-                });
-
-            modelBuilder.Entity("CrmSystem.Domain.Entities.Tag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ColorHex")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("Tags");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.User", b =>
@@ -214,21 +136,6 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("CustomerTag", b =>
-                {
-                    b.Property<int>("CustomersId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TagsId")
-                        .HasColumnType("int");
-
-                    b.HasKey("CustomersId", "TagsId");
-
-                    b.HasIndex("TagsId");
-
-                    b.ToTable("CustomerTags", (string)null);
-                });
-
             modelBuilder.Entity("CrmSystem.Domain.Entities.Company", b =>
                 {
                     b.HasOne("CrmSystem.Domain.Entities.User", "AssignedRep")
@@ -237,23 +144,6 @@ namespace CrmSystem.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AssignedRep");
-                });
-
-            modelBuilder.Entity("CrmSystem.Domain.Entities.Customer", b =>
-                {
-                    b.HasOne("CrmSystem.Domain.Entities.User", "AssignedRep")
-                        .WithMany()
-                        .HasForeignKey("AssignedRepId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("CrmSystem.Domain.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("AssignedRep");
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.RefreshToken", b =>
@@ -265,21 +155,6 @@ namespace CrmSystem.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("CustomerTag", b =>
-                {
-                    b.HasOne("CrmSystem.Domain.Entities.Customer", null)
-                        .WithMany()
-                        .HasForeignKey("CustomersId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CrmSystem.Domain.Entities.Tag", null)
-                        .WithMany()
-                        .HasForeignKey("TagsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
