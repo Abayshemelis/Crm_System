@@ -114,49 +114,48 @@ namespace CrmSystem.Infrastructure.Migrations
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Opportunity", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("OpportunityId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("OpportunityId"));
 
-                    b.Property<int?>("AccountId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CloseDate")
+                    b.Property<DateTime?>("ActualCloseDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<int?>("ContactId")
-                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("CreatedByUserId")
+                    b.Property<int>("CustomerId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<decimal>("EstimatedValue")
+                        .HasColumnType("decimal(12,2)");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<DateTime?>("ExpectedCloseDate")
+                        .HasColumnType("datetime2");
 
-                    b.Property<int>("Probability")
+                    b.Property<int>("OwnerId")
                         .HasColumnType("int");
 
                     b.Property<string>("Stage")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.HasKey("Id");
+                    b.HasKey("OpportunityId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("OwnerId");
 
                     b.ToTable("Opportunities");
                 });
@@ -295,6 +294,25 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("AssignedRep");
 
                     b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Opportunity", b =>
+                {
+                    b.HasOne("CrmSystem.Domain.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CrmSystem.Domain.Entities.User", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Owner");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.RefreshToken", b =>

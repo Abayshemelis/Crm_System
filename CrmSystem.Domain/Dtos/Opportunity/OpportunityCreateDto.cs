@@ -4,13 +4,11 @@ namespace CrmSystem.Domain.Dtos.Opportunity
 {
     public class OpportunityCreateDto
     {
-        public string Name { get; set; } = string.Empty;
-        public decimal Amount { get; set; }
-        public string Currency { get; set; } = "USD";
-        public DateTime CloseDate { get; set; }
-        public string Stage { get; set; } = "Prospecting";
-        public int? AccountId { get; set; }
-        public int? ContactId { get; set; }
-        public int Probability { get; set; }
+        public int CustomerId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Stage { get; set; } = "New";
+        public decimal EstimatedValue { get; set; }
+        public DateTime? ExpectedCloseDate { get; set; }
+        public int OwnerId { get; set; }
     }
 }

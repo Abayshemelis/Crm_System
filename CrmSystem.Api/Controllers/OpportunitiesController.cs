@@ -36,7 +36,7 @@ public class OpportunitiesController : ControllerBase
     public async Task<ActionResult<OpportunityReadDto>> Create([FromBody] OpportunityCreateDto dto)
     {
         var created = await _service.CreateAsync(dto);
-        return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+        return CreatedAtAction(nameof(Get), new { id = created.OpportunityId }, created);
     }
 
     [HttpPut("{id}")]

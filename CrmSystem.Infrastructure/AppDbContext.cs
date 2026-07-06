@@ -89,5 +89,23 @@ public class AppDbContext : DbContext
                   .HasForeignKey(rt => rt.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<Opportunity>(entity =>
+        {
+            entity.HasKey(o => o.OpportunityId);
+            entity.Property(o => o.Title).HasMaxLength(150).IsRequired();
+            entity.Property(o => o.Stage).HasMaxLength(30).IsRequired();
+            entity.Property(o => o.EstimatedValue).HasColumnType("decimal(12,2)").IsRequired();
+
+            entity.HasOne(o => o.Customer)
+                  .WithMany()
+                  .HasForeignKey(o => o.CustomerId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(o => o.Owner)
+                  .WithMany()
+                  .HasForeignKey(o => o.OwnerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }

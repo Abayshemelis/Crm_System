@@ -21,13 +21,12 @@ namespace CrmSystem.Infrastructure.Services
         {
             var opportunity = new Opportunity
             {
-                Name = dto.Name,
-                Amount = dto.Amount,
-                Currency = dto.Currency,
-                CloseDate = dto.CloseDate,
+                CustomerId = dto.CustomerId,
+                Title = dto.Title,
                 Stage = dto.Stage,
-                AccountId = dto.AccountId,
-                ContactId = dto.ContactId
+                EstimatedValue = dto.EstimatedValue,
+                ExpectedCloseDate = dto.ExpectedCloseDate,
+                OwnerId = dto.OwnerId
             };
 
             _context.Opportunities.Add(opportunity);
@@ -53,13 +52,12 @@ namespace CrmSystem.Infrastructure.Services
             var opp = await _context.Opportunities.FindAsync(id);
             if (opp == null) return false;
 
-            if (dto.Name != null) opp.Name = dto.Name;
-            if (dto.Amount.HasValue) opp.Amount = dto.Amount.Value;
-            if (dto.Currency != null) opp.Currency = dto.Currency;
-            if (dto.CloseDate.HasValue) opp.CloseDate = dto.CloseDate.Value;
+            if (dto.Title != null) opp.Title = dto.Title;
             if (dto.Stage != null) opp.Stage = dto.Stage;
-            if (dto.AccountId.HasValue) opp.AccountId = dto.AccountId.Value;
-            if (dto.ContactId.HasValue) opp.ContactId = dto.ContactId.Value;
+            if (dto.EstimatedValue.HasValue) opp.EstimatedValue = dto.EstimatedValue.Value;
+            if (dto.ExpectedCloseDate.HasValue) opp.ExpectedCloseDate = dto.ExpectedCloseDate.Value;
+            if (dto.ActualCloseDate.HasValue) opp.ActualCloseDate = dto.ActualCloseDate.Value;
+            if (dto.OwnerId.HasValue) opp.OwnerId = dto.OwnerId.Value;
 
             await _context.SaveChangesAsync();
             return true;
@@ -77,15 +75,14 @@ namespace CrmSystem.Infrastructure.Services
 
         private static OpportunityReadDto MapToReadDto(Opportunity opp) => new()
         {
-            Id = opp.Id,
-            Name = opp.Name,
-            Amount = opp.Amount,
-            Currency = opp.Currency,
-            CloseDate = opp.CloseDate,
+            OpportunityId = opp.OpportunityId,
+            CustomerId = opp.CustomerId,
+            Title = opp.Title,
             Stage = opp.Stage,
-            AccountId = opp.AccountId,
-            ContactId = opp.ContactId,
-            Probability = opp.Probability
+            EstimatedValue = opp.EstimatedValue,
+            ExpectedCloseDate = opp.ExpectedCloseDate,
+            ActualCloseDate = opp.ActualCloseDate,
+            OwnerId = opp.OwnerId
         };
     }
 }
