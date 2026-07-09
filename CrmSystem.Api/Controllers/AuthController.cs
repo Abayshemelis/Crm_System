@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using CrmSystem.Api.Dtos;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
@@ -27,41 +27,50 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
-        var emailExists = await _db.Users.AnyAsync(u => u.Email == request.Email);
+        var emailExists = await _db.Identities.AnyAsync(u => u.Email == request.Email);
         if (emailExists)
         {
             return Conflict(new { message = "A user with this email already exists." });
         }
 
-        var user = new User
+        var salesRepRole = await _db.Roles.SingleOrDefaultAsync(r => r.Name == "SalesRep");
+        if (salesRepRole is null)
+        {
+            return BadRequest(new { message = "SalesRep role is not configured in the database." });
+        }
+
+        var identity = new Identity
         {
             Name = request.Name,
             Email = request.Email,
             PasswordHash = _passwordHasher.Hash(request.Password),
-            Role = UserRole.SalesRep
+            RoleId = salesRepRole.RoleId
         };
 
-        _db.Users.Add(user);
+        _db.Identities.Add(identity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(user.UserId, user.Name, user.Email, user.Role.ToString(), null, null));
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, salesRepRole.Name, null, null));
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var user = await _db.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
-        if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash))
+        var identity = await _db.Identities
+            .Include(i => i.Role)
+            .SingleOrDefaultAsync(i => i.Email == request.Email);
+
+        if (identity is null || !_passwordHasher.Verify(request.Password, identity.PasswordHash))
         {
             return Unauthorized(new { message = "Invalid email or password." });
         }
 
-        var accessToken = _tokenService.GenerateAccessToken(user);
+        var accessToken = _tokenService.GenerateAccessToken(identity);
         var rawRefreshToken = _tokenService.GenerateRefreshToken();
 
         var refreshTokenEntity = new RefreshToken
         {
-            UserId = user.UserId,
+            IdentityId = identity.IdentityId,
             TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
             ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
             IsRevoked = false
@@ -70,7 +79,7 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(refreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(user.UserId, user.Name, user.Email, user.Role.ToString(), accessToken, rawRefreshToken));
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, identity.Role?.Name ?? string.Empty, accessToken, rawRefreshToken));
     }
 
     [HttpPost("refresh")]
@@ -79,7 +88,8 @@ public class AuthController : ControllerBase
         var incomingHash = _tokenService.HashRefreshToken(request.RefreshToken);
 
         var storedToken = await _db.RefreshTokens
-            .Include(rt => rt.User)
+            .Include(rt => rt.Identity)
+                .ThenInclude(i => i.Role)
             .SingleOrDefaultAsync(rt => rt.TokenHash == incomingHash);
 
         if (storedToken is null || storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)
@@ -89,13 +99,13 @@ public class AuthController : ControllerBase
 
         storedToken.IsRevoked = true;
 
-        var user = storedToken.User!;
-        var newAccessToken = _tokenService.GenerateAccessToken(user);
+        var identity = storedToken.Identity!;
+        var newAccessToken = _tokenService.GenerateAccessToken(identity);
         var newRawRefreshToken = _tokenService.GenerateRefreshToken();
 
         var newRefreshTokenEntity = new RefreshToken
         {
-            UserId = user.UserId,
+            IdentityId = identity.IdentityId,
             TokenHash = _tokenService.HashRefreshToken(newRawRefreshToken),
             ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
             IsRevoked = false
@@ -104,7 +114,7 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(newRefreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(user.UserId, user.Name, user.Email, user.Role.ToString(), newAccessToken, newRawRefreshToken));
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, identity.Role?.Name ?? string.Empty, newAccessToken, newRawRefreshToken));
     }
 
     [Authorize]

@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,7 +10,7 @@ namespace CrmSystem.Infrastructure.Services;
 
 public interface ITokenService
 {
-    string GenerateAccessToken(User user);
+    string GenerateAccessToken(Identity identity);
     string GenerateRefreshToken();
     string HashRefreshToken(string rawToken);
     int RefreshTokenExpiryDays { get; }
@@ -27,7 +27,7 @@ public class JwtTokenService : ITokenService
 
     public int RefreshTokenExpiryDays => 7;
 
-    public string GenerateAccessToken(User user)
+    public string GenerateAccessToken(Identity identity)
     {
         var signingKey = _configuration["Jwt:SigningKey"]!;
         var issuer = _configuration["Jwt:Issuer"]!;
@@ -35,9 +35,9 @@ public class JwtTokenService : ITokenService
 
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Role, user.Role.ToString()),
+            new(JwtRegisteredClaimNames.Sub, identity.IdentityId.ToString()),
+            new(ClaimTypes.Email, identity.Email),
+            new(ClaimTypes.Role, identity.Role?.Name ?? string.Empty),
             new(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
