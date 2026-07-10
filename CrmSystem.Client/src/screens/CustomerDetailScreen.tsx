@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, Paperclip, Trash2, Upload, X, Plus } from 'lucide-react';
 import './screens.css';
@@ -11,8 +12,9 @@ interface Customer {
   id: number; firstName: string; lastName: string;
   email: string; phone?: string; address?: string;
   source?: string; companyId?: number; companyName?: string;
-  tags?: string[];
+  tags?: CustomerTag[];
 }
+interface CustomerTag { tagId: number; name: string; }
 interface TagItem { tagId: number; name: string; }
 interface Attachment {
   attachmentId: number; fileName: string; fileUrl: string;
@@ -80,15 +82,13 @@ export const CustomerDetailScreen: React.FC = () => {
     fetchAll();
   };
 
-  const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`;
+  const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
   if (isLoading || !customer) {
     return <Layout><div className="loading-state"><div className="spinner" /><p>Loading customer...</p></div></Layout>;
   }
 
-  const assignedTagIds = new Set(
-    allTags.filter(t => customer.tags?.includes(t.name)).map(t => t.tagId)
-  );
+  const assignedTagIds = new Set(customer.tags?.map(t => t.tagId) ?? []);
   const availableTags = allTags.filter(t => !assignedTagIds.has(t.tagId));
 
   return (
@@ -103,6 +103,14 @@ export const CustomerDetailScreen: React.FC = () => {
             <h1>{customer.firstName} {customer.lastName}</h1>
             <p>{customer.source ?? 'No source'} {customer.companyName ? `· ${customer.companyName}` : ''}</p>
           </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button onClick={() => navigate(`/customers/${customer.id}/edit`)} size="sm">Edit</Button>
+          <Button variant="danger" size="sm" onClick={async () => {
+            if (!window.confirm('Delete this customer?')) return;
+            await api.delete(`/api/customers/${customer.id}`);
+            navigate('/customers');
+          }}>Delete</Button>
         </div>
       </div>
 
@@ -120,7 +128,7 @@ export const CustomerDetailScreen: React.FC = () => {
             {customer.tags && customer.tags.length > 0 && (
               <div style={{ marginTop: '1.5rem' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>TAGS</p>
-                <div className="tag-list">{customer.tags.map(t => <span key={t} className="tag-badge">{t}</span>)}</div>
+                <div className="tag-list">{customer.tags.map(tag => <span key={tag.tagId} className="tag-badge">{tag.name}</span>)}</div>
               </div>
             )}
           </Card.Content>
@@ -159,15 +167,15 @@ export const CustomerDetailScreen: React.FC = () => {
                   <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.875rem' }}>Current tags</p>
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
-                      ? customer.tags.map(name => {
-                          const t = allTags.find(x => x.name === name);
-                          return (
-                            <span key={name} className="tag-badge tag-badge-removable">
-                              {name}
-                              {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
-                            </span>
-                          );
-                        })
+                      ? customer.tags.map(tag => {
+                        const t = allTags.find(x => x.name === tag.name);
+                        return (
+                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                            {tag.name}
+                            {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
+                          </span>
+                        );
+                      })
                       : <p style={{ color: 'var(--text-muted)' }}>No tags assigned.</p>
                     }
                   </div>

@@ -67,7 +67,13 @@ export const CompanyDetailScreen: React.FC = () => {
     fetchAll();
   };
 
-  const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`;
+  const deleteCompany = async () => {
+    if (!company || !window.confirm('Delete this company? This cannot be undone.')) return;
+    await api.delete(`/api/companies/${company.companyId}`);
+    navigate('/companies');
+  };
+
+  const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
   if (isLoading || !company) {
     return <Layout><div className="loading-state"><div className="spinner" /><p>Loading company...</p></div></Layout>;
@@ -85,6 +91,10 @@ export const CompanyDetailScreen: React.FC = () => {
             <h1>{company.name}</h1>
             <p>{company.industry ?? 'No industry specified'}</p>
           </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button onClick={() => navigate(`/companies/${company.companyId}/edit`)} size="sm">Edit</Button>
+          <Button variant="danger" size="sm" onClick={deleteCompany}>Delete</Button>
         </div>
       </div>
 

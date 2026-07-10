@@ -12,29 +12,33 @@ export const Navbar: React.FC = () => {
       <div className="navbar-left">
         <div className="search-bar-global">
           <Search className="search-icon" size={18} />
-          <input type="text" placeholder="Search everywhere..." />
+          <input type="text" placeholder="Search everywhere..." disabled={!user} />
         </div>
       </div>
       
       <div className="navbar-right">
-        <button className="nav-icon-btn">
-          <Bell size={20} />
-          <span className="badge">3</span>
-        </button>
-        
-        <div className="user-menu">
-          <div className="user-info">
-            <span className="user-name">{user?.name}</span>
-            <span className="user-role">{user?.role}</span>
-          </div>
-          <div className="avatar">
-            <User size={20} />
-          </div>
-        </div>
+        {user && (
+          <>
+            <button className="nav-icon-btn">
+              <Bell size={20} />
+              <span className="badge">3</span>
+            </button>
+            
+            <div className="user-menu">
+              <div className="user-info">
+                <span className="user-name">{user?.name}</span>
+                <span className="user-role">{user?.role}</span>
+              </div>
+              <div className="avatar">
+                <User size={20} />
+              </div>
+            </div>
 
-        <button onClick={logout} className="logout-btn" title="Logout">
-          <LogOut size={20} />
-        </button>
+            <button onClick={logout} className="logout-btn" title="Logout">
+              <LogOut size={20} />
+            </button>
+          </>
+        )}
       </div>
     </nav>
   );

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Card } from '../components/ui/Card';
 import { useAuth } from '../context/AuthContext';
-import { Building2 } from 'lucide-react';
+import { AuthLayout } from '../components/auth/AuthLayout';
+import { showToast } from '../lib/toast';
 import './screens.css';
 
 export const LoginScreen: React.FC = () => {
@@ -25,10 +25,19 @@ export const LoginScreen: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      if (!response.ok) throw new Error('Invalid email or password');
+      if (response.status === 401) {
+        throw new Error('Incorrect email or password');
+      }
+      if (response.status === 429) {
+        throw new Error('Too many attempts, please try again in a minute');
+      }
+      if (!response.ok) {
+        throw new Error('Something went wrong');
+      }
       const data = await response.json();
       login(data.accessToken);
-      navigate('/customers');
+      showToast('Signed in successfully', 'success');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
     } finally {
@@ -37,23 +46,18 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-bg-glow" />
-      <Card className="login-card glass-panel animate-fade-in">
-        <div className="login-header">
-          <div className="brand-logo-large"><Building2 size={32} /></div>
-          <h2>Welcome back</h2>
-          <p>Sign in to your CRM account</p>
+    <AuthLayout title="Welcome back" subtitle="Sign in to your CRM account">
+      <form onSubmit={handleLogin} className="login-form">
+        <Input label="Email address" type="email" placeholder="admin@test.com" value={email} onChange={e => setEmail(e.target.value)} required />
+        <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+        {error && <div className="error-message">{error}</div>}
+        <Button type="submit" fullWidth size="lg" disabled={isLoading}>
+          {isLoading ? 'Signing in...' : 'Sign in'}
+        </Button>
+        <div style={{ textAlign: 'center' }}>
+          <Link to="/forgot-password" className="forgot-password-link">Forgot password?</Link>
         </div>
-        <form onSubmit={handleLogin} className="login-form">
-          <Input label="Email address" type="email" placeholder="admin@test.com" value={email} onChange={e => setEmail(e.target.value)} required />
-          <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
-          {error && <div className="error-message">{error}</div>}
-          <Button type="submit" fullWidth size="lg" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
-          </Button>
-        </form>
-      </Card>
-    </div>
+      </form>
+    </AuthLayout>
   );
 };

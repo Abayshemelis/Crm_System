@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -17,11 +17,11 @@ interface Customer {
   phone?: string;
   address?: string;
   source?: string;
-  tags?: string[];
+  tags?: Tag[];
   assignedRepId?: number;
 }
 
-interface Tag { tagId: number; name: string; }
+interface Tag { tagId: number; name: string; colorHex?: string; }
 
 const SOURCES = ['', 'Referral', 'Website', 'Advertisement', 'ColdCall', 'TradeShow'];
 
@@ -36,25 +36,26 @@ export const CustomersScreen: React.FC = () => {
   const [showBulkPanel, setShowBulkPanel] = useState(false);
   const [bulkTagId, setBulkTagId] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { isManagerOrAbove } = useAuth();
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [cData, tData] = await Promise.all([
-        api.get<{ items: Customer[] }>('/api/customers?page=1&pageSize=100'),
+        api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
         api.get<Tag[]>('/api/tags'),
       ]);
-      setCustomers(cData.items ?? []);
+      setCustomers(cData.data ?? []);
       setTags(tData ?? []);
     } catch {
-      navigate('/login');
+      // Show empty list on error; do not redirect to login
     } finally {
       setIsLoading(false);
     }
-  }, [navigate]);
+  }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, location.key]);
 
   useEffect(() => {
     let list = customers;
@@ -78,11 +79,11 @@ export const CustomersScreen: React.FC = () => {
   };
 
   const handleBulkAddTag = async () => {
-    if (!bulkTagId) return;
+    if (!bulkTagId || selected.size === 0) return;
     await api.post('/api/customers/bulk', {
       customerIds: Array.from(selected),
-      actionType: 'AddTag',
-      actionValue: bulkTagId,
+      action: 'tag',
+      tagId: Number(bulkTagId),
     });
     setSelected(new Set());
     setShowBulkPanel(false);
@@ -184,7 +185,7 @@ export const CustomersScreen: React.FC = () => {
                   <div className="detail-row tag-row">
                     <Tag size={14} />
                     <div className="tag-list">
-                      {customer.tags.map(t => <span key={t} className="tag-badge">{t}</span>)}
+                      {customer.tags.map(t => <span key={t.tagId} className="tag-badge">{t.name}</span>)}
                     </div>
                   </div>
                 )}

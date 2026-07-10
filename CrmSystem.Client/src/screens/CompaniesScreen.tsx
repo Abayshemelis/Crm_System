@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -15,13 +15,15 @@ export const CompaniesScreen: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    api.get<{ items: Company[] }>('/api/companies?page=1&pageSize=100')
-      .then(d => setCompanies(d.items ?? []))
-      .catch(() => navigate('/login'))
+    setIsLoading(true);
+    api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=100')
+      .then(d => setCompanies(d.data ?? []))
+      .catch(() => { /* show empty list on error */ })
       .finally(() => setIsLoading(false));
-  }, [navigate]);
+  }, [location.key]);
 
   if (isLoading) return <Layout><div className="loading-state"><div className="spinner" /><p>Loading companies...</p></div></Layout>;
 
@@ -32,7 +34,7 @@ export const CompaniesScreen: React.FC = () => {
           <h1>Companies</h1>
           <p>{companies.length} accounts</p>
         </div>
-        <Button><Plus size={16} style={{ marginRight: 6 }} /> New Company</Button>
+        <Button onClick={() => navigate('/companies/new')}><Plus size={16} style={{ marginRight: 6 }} /> New Company</Button>
       </div>
       <div className="customers-grid">
         {companies.map((c, i) => (
