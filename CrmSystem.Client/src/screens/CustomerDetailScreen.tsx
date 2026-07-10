@@ -4,14 +4,15 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, Paperclip, Trash2, Upload, X, Plus } from 'lucide-react';
 import './screens.css';
 
 interface Customer {
-  id: number; firstName: string; lastName: string;
-  email: string; phone?: string; address?: string;
-  source?: string; companyId?: number; companyName?: string;
+  customerId: number; firstName: string; lastName: string;
+  email: string; phone?: string; jobTitle?: string;
+  sourceName?: string; companyId?: number; companyName?: string;
   tags?: CustomerTag[];
 }
 interface CustomerTag { tagId: number; name: string; }
@@ -84,8 +85,49 @@ export const CustomerDetailScreen: React.FC = () => {
 
   const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
+  // Loading state with skeleton
   if (isLoading || !customer) {
-    return <Layout><div className="loading-state"><div className="spinner" /><p>Loading customer...</p></div></Layout>;
+    return (
+      <Layout>
+        <div className="detail-skeleton">
+          {/* Header skeleton */}
+          <div className="skeleton-header" style={{ marginBottom: 'var(--space-6)' }}>
+            <Skeleton variant="avatar" className="skeleton-avatar-large" />
+            <div className="skeleton-header-text">
+              <Skeleton variant="text" className="skeleton-header-title" />
+              <Skeleton variant="text" className="skeleton-header-subtitle" />
+            </div>
+          </div>
+
+          {/* Sidebar skeleton */}
+          <Card className="glass-panel skeleton-sidebar">
+            <Card.Content>
+              <Skeleton variant="text" style={{ width: '60%', marginBottom: '1rem' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+            </Card.Content>
+          </Card>
+
+          {/* Main content skeleton */}
+          <div className="skeleton-main">
+            <div className="tabs-bar">
+              <Skeleton variant="rect" style={{ width: 80, height: 30, borderRadius: 'var(--radius-sm)' }} />
+              <Skeleton variant="rect" style={{ width: 60, height: 30, borderRadius: 'var(--radius-sm)' }} />
+              <Skeleton variant="rect" style={{ width: 100, height: 30, borderRadius: 'var(--radius-sm)' }} />
+            </div>
+            <Card className="glass-panel">
+              <Card.Content>
+                <Skeleton variant="text" style={{ width: '40%', marginBottom: '1rem' }} />
+                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                <Skeleton variant="text" style={{ width: '60%' }} />
+              </Card.Content>
+            </Card>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   const assignedTagIds = new Set(customer.tags?.map(t => t.tagId) ?? []);
@@ -101,14 +143,14 @@ export const CustomerDetailScreen: React.FC = () => {
           <div className="customer-avatar large">{customer.firstName[0]}{customer.lastName[0]}</div>
           <div>
             <h1>{customer.firstName} {customer.lastName}</h1>
-            <p>{customer.source ?? 'No source'} {customer.companyName ? `· ${customer.companyName}` : ''}</p>
+            <p>{customer.sourceName ?? 'No source'} {customer.companyName ? `· ${customer.companyName}` : ''}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Button onClick={() => navigate(`/customers/${customer.id}/edit`)} size="sm">Edit</Button>
+          <Button onClick={() => navigate(`/customers/${customer.customerId}/edit`)} size="sm">Edit</Button>
           <Button variant="danger" size="sm" onClick={async () => {
             if (!window.confirm('Delete this customer?')) return;
-            await api.delete(`/api/customers/${customer.id}`);
+            await api.delete(`/api/customers/${customer.customerId}`);
             navigate('/customers');
           }}>Delete</Button>
         </div>
@@ -122,7 +164,6 @@ export const CustomerDetailScreen: React.FC = () => {
             <div className="customer-details">
               <div className="detail-row"><Mail size={15} /><span>{customer.email}</span></div>
               {customer.phone && <div className="detail-row"><Phone size={15} /><span>{customer.phone}</span></div>}
-              {customer.address && <div className="detail-row"><MapPin size={15} /><span>{customer.address}</span></div>}
               {customer.companyName && <div className="detail-row"><Building2 size={15} /><span>{customer.companyName}</span></div>}
             </div>
             {customer.tags && customer.tags.length > 0 && (
@@ -155,9 +196,9 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="profile-field"><label>Last Name</label><p>{customer.lastName}</p></div>
                   <div className="profile-field"><label>Email</label><p>{customer.email}</p></div>
                   <div className="profile-field"><label>Phone</label><p>{customer.phone ?? '—'}</p></div>
-                  <div className="profile-field"><label>Source</label><p>{customer.source ?? '—'}</p></div>
-                  <div className="profile-field"><label>Company</label><p>{customer.companyName ?? 'Individual (B2C)'}</p></div>
-                  <div className="profile-field" style={{ gridColumn: '1 / -1' }}><label>Address</label><p>{customer.address ?? '—'}</p></div>
+                  <div className="profile-field"><label>Job Title</label><p>{customer.jobTitle ?? '—'}</p></div>
+                  <div className="profile-field"><label>Source</label><p>{customer.sourceName ?? '—'}</p></div>
+                  <div className="profile-field" style={{ gridColumn: '1 / -1' }}><label>Company</label><p>{customer.companyName ?? 'Individual (B2C)'}</p></div>
                 </div>
               )}
 
@@ -168,14 +209,14 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
                       ? customer.tags.map(tag => {
-                        const t = allTags.find(x => x.name === tag.name);
-                        return (
-                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
-                            {tag.name}
-                            {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
-                          </span>
-                        );
-                      })
+                          const t = allTags.find(x => x.name === tag.name);
+                          return (
+                            <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                              {tag.name}
+                              {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
+                            </span>
+                          );
+                        })
                       : <p style={{ color: 'var(--text-muted)' }}>No tags assigned.</p>
                     }
                   </div>

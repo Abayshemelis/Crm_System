@@ -440,3 +440,87 @@
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Form Error Banner ===== */
+.form-error-banner {
+  padding: var(--space-3);
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ===== Error Banner ===== */
+.error-banner {
+  padding: var(--space-3);
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-bottom: var(--space-4);
+  text-align: center;
+}
+
+/* ===== Skeleton Grid (for list loading) ===== */
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-6);
+}
+
+.skeleton-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-6);
+}
+
+/* ===== Detail Skeleton ===== */
+.detail-skeleton {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.skeleton-sidebar {
+  height: fit-content;
+}
+
+.skeleton-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.skeleton-avatar-large {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.skeleton-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.skeleton-header-title {
+  height: 28px;
+  width: 200px;
+}
+
+.skeleton-header-subtitle {
+  height: 16px;
+  width: 150px;
+}

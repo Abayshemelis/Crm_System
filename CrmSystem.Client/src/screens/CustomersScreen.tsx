@@ -4,21 +4,22 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Mail, Phone, MapPin, Plus, Search, Tag, UserCheck, X } from 'lucide-react';
+import { Mail, Phone, MapPin, Plus, Search, Tag, UserCheck, X, Users } from 'lucide-react';
 import './screens.css';
 
 interface Customer {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  source?: string;
-  tags?: Tag[];
-  assignedRepId?: number;
+    customerId: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    sourceName?: string;
+    tags?: Tag[];
+    assignedRepId?: number;
 }
 
 interface Tag { tagId: number; name: string; colorHex?: string; }
@@ -29,6 +30,7 @@ export const CustomersScreen: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filtered, setFiltered] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -41,6 +43,7 @@ export const CustomersScreen: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [cData, tData] = await Promise.all([
         api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
@@ -48,8 +51,8 @@ export const CustomersScreen: React.FC = () => {
       ]);
       setCustomers(cData.data ?? []);
       setTags(tData ?? []);
-    } catch {
-      // Show empty list on error; do not redirect to login
+    } catch (error: any) {
+      setLoadError('Failed to load customers. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -66,14 +69,14 @@ export const CustomersScreen: React.FC = () => {
         c.email.toLowerCase().includes(s)
       );
     }
-    if (sourceFilter) list = list.filter(c => c.source === sourceFilter);
+    if (sourceFilter) list = list.filter(c => c.sourceName === sourceFilter);
     setFiltered(list);
   }, [customers, search, sourceFilter]);
 
-  const toggleSelect = (id: number) => {
+  const toggleSelect = (customerId: number) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(customerId) ? next.delete(customerId) : next.add(customerId);
       return next;
     });
   };
@@ -90,12 +93,21 @@ export const CustomersScreen: React.FC = () => {
     fetchData();
   };
 
+  // Loading state with skeleton cards
   if (isLoading) {
     return (
       <Layout>
-        <div className="loading-state">
-          <div className="spinner" />
-          <p>Loading customers...</p>
+        <div className="dashboard-header animate-fade-in">
+          <div className="dashboard-title">
+            <h1>Customers</h1>
+            <p>Loading customers...</p>
+          </div>
+          <Button disabled><Plus size={16} style={{ marginRight: 6 }} /> New Customer</Button>
+        </div>
+        <div className="skeleton-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} variant="card" className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties} />
+          ))}
         </div>
       </Layout>
     );
@@ -112,6 +124,12 @@ export const CustomersScreen: React.FC = () => {
           <Plus size={16} style={{ marginRight: 6 }} /> New Customer
         </Button>
       </div>
+
+      {loadError && (
+        <div className="error-banner animate-fade-in">
+          {loadError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="filters-bar animate-fade-in">
@@ -153,8 +171,8 @@ export const CustomersScreen: React.FC = () => {
       <div className="customers-grid">
         {filtered.map((customer, i) => (
           <Card
-            key={customer.id}
-            className={`customer-card glass-panel animate-fade-in ${selected.has(customer.id) ? 'card-selected' : ''}`}
+            key={customer.customerId}
+            className={`customer-card glass-panel animate-fade-in ${selected.has(customer.customerId) ? 'card-selected' : ''}`}
             style={{ animationDelay: `${i * 0.04}s` } as React.CSSProperties}
           >
             <Card.Content>
@@ -162,20 +180,20 @@ export const CustomersScreen: React.FC = () => {
                 <input
                   type="checkbox"
                   className="customer-checkbox"
-                  checked={selected.has(customer.id)}
-                  onChange={() => toggleSelect(customer.id)}
+                  checked={selected.has(customer.customerId)}
+                  onChange={() => toggleSelect(customer.customerId)}
                   onClick={e => e.stopPropagation()}
                 />
                 <div
                   className="customer-avatar"
-                  onClick={() => navigate(`/customers/${customer.id}`)}
+                  onClick={() => navigate(`/customers/${customer.customerId}`)}
                   style={{ cursor: 'pointer' }}
                 >
                   {customer.firstName[0]}{customer.lastName[0]}
                 </div>
-                <div className="customer-info" onClick={() => navigate(`/customers/${customer.id}`)} style={{ cursor: 'pointer' }}>
+                <div className="customer-info" onClick={() => navigate(`/customers/${customer.customerId}`)} style={{ cursor: 'pointer' }}>
                   <h3>{customer.firstName} {customer.lastName}</h3>
-                  <p>{customer.source ?? 'No source'}</p>
+                  <p>{customer.sourceName ?? 'No source'}</p>
                 </div>
               </div>
               <div className="customer-details">
@@ -193,10 +211,14 @@ export const CustomersScreen: React.FC = () => {
             </Card.Content>
           </Card>
         ))}
-        {filtered.length === 0 && (
-          <div className="loading-state" style={{ gridColumn: '1 / -1' }}>
-            <p>No customers match your filters.</p>
-          </div>
+        {filtered.length === 0 && !loadError && (
+          <EmptyState
+            title="No customers found"
+            description="Try adjusting your search or filter criteria, or create a new customer."
+            icon={Users}
+            actionText="New Customer"
+            onActionClick={() => navigate('/customers/new')}
+          />
         )}
       </div>
     </Layout>

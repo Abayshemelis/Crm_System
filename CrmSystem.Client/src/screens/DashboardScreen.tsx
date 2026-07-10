@@ -137,21 +137,6 @@ export const DashboardScreen: React.FC = () => {
                 ))}
             </div>
 
-            {user && (
-                <div className="dashboard-section">
-                    <h2>Quick Actions</h2>
-                    <div className="quick-actions">
-                        <Button onClick={() => navigate('/customers/new')}>
-                            <Users size={16} style={{ marginRight: 6 }} />
-                            Add Customer
-                        </Button>
-                        <Button variant="secondary" onClick={() => navigate('/companies/new')}>
-                            <Building2 size={16} style={{ marginRight: 6 }} />
-                            Add Company
-                        </Button>
-                    </div>
-                </div>
-            )}
         </Layout>
     );
 };

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, Tag, ClipboardX } from 'lucide-react';
 import './screens.css';
@@ -47,8 +48,44 @@ export const LeadDetailScreen: React.FC = () => {
 
     useEffect(() => { fetchLead(); }, [fetchLead]);
 
+    // Loading state with skeleton
     if (isLoading || !lead) {
-        return <Layout><div className="loading-state"><div className="spinner" /><p>Loading lead...</p></div></Layout>;
+        return (
+            <Layout>
+                <div className="detail-skeleton">
+                    {/* Header skeleton */}
+                    <div className="skeleton-header" style={{ marginBottom: 'var(--space-6)' }}>
+                        <Skeleton variant="avatar" className="skeleton-avatar-large" />
+                        <div className="skeleton-header-text">
+                            <Skeleton variant="text" className="skeleton-header-title" />
+                            <Skeleton variant="text" className="skeleton-header-subtitle" />
+                        </div>
+                    </div>
+
+                    {/* Sidebar skeleton */}
+                    <Card className="glass-panel skeleton-sidebar">
+                        <Card.Content>
+                            <Skeleton variant="text" style={{ width: '60%', marginBottom: '1rem' }} />
+                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                        </Card.Content>
+                    </Card>
+
+                    {/* Main content skeleton */}
+                    <div className="skeleton-main">
+                        <Card className="glass-panel">
+                            <Card.Content>
+                                <Skeleton variant="text" style={{ width: '40%', marginBottom: '1rem' }} />
+                                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                                <Skeleton variant="text" style={{ width: '60%' }} />
+                            </Card.Content>
+                        </Card>
+                    </div>
+                </div>
+            </Layout>
+        );
     }
 
     return (

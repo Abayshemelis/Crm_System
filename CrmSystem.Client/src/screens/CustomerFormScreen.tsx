@@ -35,9 +35,11 @@ export const CustomerFormScreen: React.FC = () => {
         companyName: '',
         sourceId: ''
     });
-    const [companies, setCompanies] = useState<Company[]>([]);
-    const [sources, setSources] = useState<Source[]>([]);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [sources, setSources] = useState<Source[]>([]);
+    const [companies, setCompanies] = useState<Company[]>([]);
     const isEdit = Boolean(id);
 
     useEffect(() => {
@@ -61,7 +63,7 @@ export const CustomerFormScreen: React.FC = () => {
                     email: customer.email,
                     phone: customer.phone ?? '',
                     jobTitle: customer.jobTitle ?? '',
-                    companyId: String(customer.companyId ?? ''),
+                    companyId: customer.companyId ? String(customer.companyId) : '',
                     companyName: customer.companyName ?? '',
                     sourceId: customer.sourceId ? String(customer.sourceId) : '',
                 });
@@ -72,15 +74,41 @@ export const CustomerFormScreen: React.FC = () => {
 
     const handleChange = (field: keyof FormState, value: string) => {
         setForm(prev => ({ ...prev, [field]: value }));
+        // clear errors on change
+        if (errors[field]) {
+            setErrors(prev => {
+                const next = { ...prev };
+                delete next[field];
+                return next;
+            });
+        }
+        setApiError(null);
+    };
+
+    const validate = (): boolean => {
+        const tempErrors: Record<string, string> = {};
+        if (!form.firstName.trim()) tempErrors.firstName = 'First name is required';
+        if (!form.lastName.trim()) tempErrors.lastName = 'Last name is required';
+        if (!form.email.trim()) {
+            tempErrors.email = 'Email is required';
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+            tempErrors.email = 'Email address is invalid';
+        }
+
+        setErrors(tempErrors);
+        return Object.keys(tempErrors).length === 0;
     };
 
     const handleSubmit = async () => {
+        setApiError(null);
+        if (!validate()) return;
+
         const payload = {
-            firstName: form.firstName,
-            lastName: form.lastName,
-            email: form.email,
-            phone: form.phone || null,
-            jobTitle: form.jobTitle || null,
+            firstName: form.firstName.trim(),
+            lastName: form.lastName.trim(),
+            email: form.email.trim(),
+            phone: form.phone.trim() || null,
+            jobTitle: form.jobTitle.trim() || null,
             companyId: form.companyId ? Number(form.companyId) : null,
             sourceId: form.sourceId ? Number(form.sourceId) : null,
             assignedRepId: null
@@ -93,8 +121,9 @@ export const CustomerFormScreen: React.FC = () => {
                 await api.post('/api/customers', payload);
             }
             navigate('/customers');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
+            setApiError(error.message || 'An error occurred while saving the customer record.');
         }
     };
 
@@ -114,12 +143,43 @@ export const CustomerFormScreen: React.FC = () => {
 
             <Card className="glass-panel">
                 <Card.Content>
+                    {apiError && (
+                        <div className="form-error-banner animate-fade-in">
+                            {apiError}
+                        </div>
+                    )}
                     <div className="form-grid">
-                        <Input label="First Name" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} />
-                        <Input label="Last Name" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} />
-                        <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} />
-                        <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} />
-                        <Input label="Job Title" value={form.jobTitle} onChange={e => handleChange('jobTitle', e.target.value)} />
+                        <Input 
+                            label="First Name" 
+                            value={form.firstName} 
+                            onChange={e => handleChange('firstName', e.target.value)} 
+                            error={errors.firstName}
+                        />
+                        <Input 
+                            label="Last Name" 
+                            value={form.lastName} 
+                            onChange={e => handleChange('lastName', e.target.value)} 
+                            error={errors.lastName}
+                        />
+                        <Input 
+                            label="Email" 
+                            type="email" 
+                            value={form.email} 
+                            onChange={e => handleChange('email', e.target.value)} 
+                            error={errors.email}
+                        />
+                        <Input 
+                            label="Phone" 
+                            value={form.phone} 
+                            onChange={e => handleChange('phone', e.target.value)} 
+                            error={errors.phone}
+                        />
+                        <Input 
+                            label="Job Title" 
+                            value={form.jobTitle} 
+                            onChange={e => handleChange('jobTitle', e.target.value)} 
+                            error={errors.jobTitle}
+                        />
                         <div className="input-wrapper">
                             <label className="input-label">Source</label>
                             <select value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)} className="input-field">

@@ -28,6 +28,8 @@ export const CompanyFormScreen: React.FC = () => {
         phone: '',
         email: ''
     });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const isEdit = Boolean(id);
 
@@ -51,17 +53,39 @@ export const CompanyFormScreen: React.FC = () => {
 
     const handleChange = (field: keyof FormState, value: string) => {
         setForm(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) {
+            setErrors(prev => {
+                const next = { ...prev };
+                delete next[field];
+                return next;
+            });
+        }
+        setApiError(null);
+    };
+
+    const validate = (): boolean => {
+        const tempErrors: Record<string, string> = {};
+        if (!form.name.trim()) tempErrors.name = 'Company name is required';
+        if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+            tempErrors.email = 'Email address is invalid';
+        }
+
+        setErrors(tempErrors);
+        return Object.keys(tempErrors).length === 0;
     };
 
     const handleSubmit = async () => {
+        setApiError(null);
+        if (!validate()) return;
+
         const payload = {
-            name: form.name,
-            industry: form.industry || null,
+            name: form.name.trim(),
+            industry: form.industry.trim() || null,
             companySize: null,
-            website: form.website || null,
-            address: form.address || null,
-            phone: form.phone || null,
-            email: form.email || null,
+            website: form.website.trim() || null,
+            address: form.address.trim() || null,
+            phone: form.phone.trim() || null,
+            email: form.email.trim() || null,
             sourceId: null,
             assignedRepId: null
         };
@@ -73,8 +97,9 @@ export const CompanyFormScreen: React.FC = () => {
                 await api.post('/api/companies', payload);
             }
             navigate('/companies');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
+            setApiError(error.message || 'An error occurred while saving the company record.');
         }
     };
 
@@ -94,13 +119,18 @@ export const CompanyFormScreen: React.FC = () => {
 
             <Card className="glass-panel">
                 <Card.Content>
+                    {apiError && (
+                        <div className="form-error-banner animate-fade-in">
+                            {apiError}
+                        </div>
+                    )}
                     <div className="form-grid">
-                        <Input label="Name" value={form.name} onChange={e => handleChange('name', e.target.value)} />
-                        <Input label="Industry" value={form.industry} onChange={e => handleChange('industry', e.target.value)} />
-                        <Input label="Website" value={form.website} onChange={e => handleChange('website', e.target.value)} />
-                        <Input label="Address" value={form.address} onChange={e => handleChange('address', e.target.value)} />
-                        <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} />
-                        <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} />
+                        <Input label="Name" value={form.name} onChange={e => handleChange('name', e.target.value)} error={errors.name} />
+                        <Input label="Industry" value={form.industry} onChange={e => handleChange('industry', e.target.value)} error={errors.industry} />
+                        <Input label="Website" value={form.website} onChange={e => handleChange('website', e.target.value)} error={errors.website} />
+                        <Input label="Address" value={form.address} onChange={e => handleChange('address', e.target.value)} error={errors.address} />
+                        <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />
+                        <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
                     </div>
                     <div style={{ marginTop: '1rem' }}>
                         <Button onClick={handleSubmit}>{isEdit ? 'Save changes' : 'Create company'}</Button>

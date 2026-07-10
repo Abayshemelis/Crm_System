@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
 import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Paperclip, Upload, Trash2 } from 'lucide-react';
 import './screens.css';
@@ -11,7 +12,7 @@ interface Company {
   companyId: number; name: string; industry?: string;
   website?: string; address?: string;
 }
-interface Contact { id: number; firstName: string; lastName: string; email: string; phone?: string; }
+interface Contact { customerId: number; firstName: string; lastName: string; email: string; phone?: string; }
 interface Attachment {
   attachmentId: number; fileName: string; fileUrl: string;
   fileSizeBytes: number; uploadedByName: string; uploadedAt: string;
@@ -35,10 +36,10 @@ export const CompanyDetailScreen: React.FC = () => {
     setIsLoading(true);
     try {
       const [comp, atts] = await Promise.all([
-        api.get<{ company: Company; contacts: Contact[] }>(`/api/companies/${id}`),
+        api.get<any>(`/api/companies/${id}`),
         api.get<Attachment[]>(`/api/attachments?companyId=${id}`),
       ]);
-      setCompany(comp.company);
+      setCompany(comp);
       setContacts(comp.contacts ?? []);
       setAttachments(atts ?? []);
     } catch {
@@ -75,8 +76,49 @@ export const CompanyDetailScreen: React.FC = () => {
 
   const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
+  // Loading state with skeleton
   if (isLoading || !company) {
-    return <Layout><div className="loading-state"><div className="spinner" /><p>Loading company...</p></div></Layout>;
+    return (
+      <Layout>
+        <div className="detail-skeleton">
+          {/* Header skeleton */}
+          <div className="skeleton-header" style={{ marginBottom: 'var(--space-6)' }}>
+            <Skeleton variant="avatar" className="skeleton-avatar-large" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }} />
+            <div className="skeleton-header-text">
+              <Skeleton variant="text" className="skeleton-header-title" />
+              <Skeleton variant="text" className="skeleton-header-subtitle" />
+            </div>
+          </div>
+
+          {/* Sidebar skeleton */}
+          <Card className="glass-panel skeleton-sidebar">
+            <Card.Content>
+              <Skeleton variant="text" style={{ width: '60%', marginBottom: '1rem' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+              <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+            </Card.Content>
+          </Card>
+
+          {/* Main content skeleton */}
+          <div className="skeleton-main">
+            <div className="tabs-bar">
+              <Skeleton variant="rect" style={{ width: 100, height: 30, borderRadius: 'var(--radius-sm)' }} />
+              <Skeleton variant="rect" style={{ width: 120, height: 30, borderRadius: 'var(--radius-sm)' }} />
+            </div>
+            <Card className="glass-panel">
+              <Card.Content>
+                <Skeleton variant="text" style={{ width: '40%', marginBottom: '1rem' }} />
+                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
+                <Skeleton variant="text" style={{ width: '60%' }} />
+              </Card.Content>
+            </Card>
+          </div>
+        </div>
+      </Layout>
+    );
   }
 
   return (
@@ -132,7 +174,7 @@ export const CompanyDetailScreen: React.FC = () => {
                 <div className="contact-list">
                   {contacts.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No contacts linked to this company.</p>}
                   {contacts.map(c => (
-                    <div key={c.id} className="contact-row" onClick={() => navigate(`/customers/${c.id}`)}>
+                    <div key={c.customerId} className="contact-row" onClick={() => navigate(`/customers/${c.customerId}`)}>
                       <div className="customer-avatar" style={{ width: 36, height: 36, fontSize: '0.875rem' }}>{c.firstName[0]}{c.lastName[0]}</div>
                       <div style={{ flex: 1 }}>
                         <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{c.firstName} {c.lastName}</p>

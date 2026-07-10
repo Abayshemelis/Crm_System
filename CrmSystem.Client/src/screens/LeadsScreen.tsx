@@ -4,8 +4,10 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, UserPlus } from 'lucide-react';
 import './screens.css';
 
 interface LeadSummary {
@@ -21,17 +23,19 @@ interface LeadSummary {
 export const LeadsScreen: React.FC = () => {
     const [leads, setLeads] = useState<LeadSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const navigate = useNavigate();
     const location = useLocation();
 
     const loadLeads = useCallback(async () => {
         setIsLoading(true);
+        setLoadError(null);
         try {
             const response = await api.get<{ data: LeadSummary[] }>('/api/leads?page=1&pageSize=100');
             setLeads(response.data ?? []);
         } catch {
-            // Show empty list on error; do not redirect to login
+            setLoadError('Failed to load leads. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -44,6 +48,26 @@ export const LeadsScreen: React.FC = () => {
         (lead.email ?? '').toLowerCase().includes(search.toLowerCase())
     );
 
+    // Loading state with skeleton cards
+    if (isLoading) {
+        return (
+            <Layout>
+                <div className="dashboard-header animate-fade-in">
+                    <div className="dashboard-title">
+                        <h1>Leads</h1>
+                        <p>Loading leads...</p>
+                    </div>
+                    <Button disabled><Plus size={16} style={{ marginRight: 6 }} /> New Lead</Button>
+                </div>
+                <div className="skeleton-grid">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} variant="card" className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties} />
+                    ))}
+                </div>
+            </Layout>
+        );
+    }
+
     return (
         <Layout>
             <div className="dashboard-header animate-fade-in">
@@ -53,6 +77,12 @@ export const LeadsScreen: React.FC = () => {
                 </div>
                 <Button onClick={() => navigate('/leads/new')}><Plus size={16} style={{ marginRight: 6 }} /> New Lead</Button>
             </div>
+
+            {loadError && (
+                <div className="error-banner animate-fade-in">
+                    {loadError}
+                </div>
+            )}
 
             <div className="filters-bar animate-fade-in">
                 <div style={{ position: 'relative', flex: 1 }}>
@@ -66,22 +96,26 @@ export const LeadsScreen: React.FC = () => {
                 </div>
             </div>
 
-            {isLoading ? (
-                <div className="loading-state"><div className="spinner" /><p>Loading leads...</p></div>
-            ) : (
-                <div className="customers-grid">
-                    {filteredLeads.map(lead => (
-                        <Card key={lead.leadId} className="customer-card glass-panel animate-fade-in" style={{ cursor: 'pointer' }} onClick={() => navigate(`/leads/${lead.leadId}`)}>
-                            <Card.Content>
-                                <h3>{lead.firstName} {lead.lastName}</h3>
-                                <p>{lead.email ?? 'No email'} · {lead.phone ?? 'No phone'}</p>
-                                <p>{lead.sourceName ?? 'No source'} · {lead.leadStatusName}</p>
-                            </Card.Content>
-                        </Card>
-                    ))}
-                    {filteredLeads.length === 0 && <div className="loading-state" style={{ gridColumn: '1 / -1' }}><p>No leads found.</p></div>}
-                </div>
-            )}
+            <div className="customers-grid">
+                {filteredLeads.map(lead => (
+                    <Card key={lead.leadId} className="customer-card glass-panel animate-fade-in" style={{ cursor: 'pointer' }} onClick={() => navigate(`/leads/${lead.leadId}`)}>
+                        <Card.Content>
+                            <h3>{lead.firstName} {lead.lastName}</h3>
+                            <p>{lead.email ?? 'No email'} · {lead.phone ?? 'No phone'}</p>
+                            <p>{lead.sourceName ?? 'No source'} · {lead.leadStatusName}</p>
+                        </Card.Content>
+                    </Card>
+                ))}
+                {filteredLeads.length === 0 && !loadError && (
+                    <EmptyState
+                        title="No leads found"
+                        description="Try adjusting your search, or create a new lead to get started."
+                        icon={UserPlus}
+                        actionText="New Lead"
+                        onActionClick={() => navigate('/leads/new')}
+                    />
+                )}
+            </div>
         </Layout>
     );
 };
