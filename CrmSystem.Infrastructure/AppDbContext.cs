@@ -9,10 +9,11 @@ public class AppDbContext : DbContext
     {
     }
 
-    // ── Auth ───────────────────────────────────────────────────────────────
+    // ── Auth ────────────────────────────────────────────────────────────
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Identity> Identities => Set<Identity>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     // ── Lookup / Reference tables ──────────────────────────────────────────
     public DbSet<Source> Sources => Set<Source>();
@@ -114,7 +115,7 @@ public class AppDbContext : DbContext
             e.Property(at => at.Icon).HasMaxLength(50);
         });
 
-        // ── CrmTaskStatus (lookup) ────────────────────────────────────────
+        // ── CrmTaskStatus (lookup) ───────────────────────────────────────
         modelBuilder.Entity<CrmTaskStatus>(e =>
         {
             e.HasKey(ts => ts.CrmTaskStatusId);
@@ -131,7 +132,7 @@ public class AppDbContext : DbContext
             e.Property(nt => nt.DefaultChannel).HasMaxLength(30);
         });
 
-        // ── ProductCategory (lookup) ──────────────────────────────────────
+        // ── ProductCategory (lookup) ───────────────────────────────────────
         modelBuilder.Entity<ProductCategory>(e =>
         {
             e.HasKey(pc => pc.ProductCategoryId);
@@ -139,7 +140,7 @@ public class AppDbContext : DbContext
             e.Property(pc => pc.Name).HasMaxLength(80).IsRequired();
         });
 
-        // ── ProductStatus (lookup) ────────────────────────────────────────
+        // ── ProductStatus (lookup) ─────────────────────────────────────────
         modelBuilder.Entity<ProductStatus>(e =>
         {
             e.HasKey(ps => ps.ProductStatusId);
@@ -230,7 +231,7 @@ public class AppDbContext : DbContext
             e.HasKey(l => l.LeadId);
             e.Property(l => l.FirstName).HasMaxLength(100).IsRequired();
             e.Property(l => l.LastName).HasMaxLength(100).IsRequired();
-            e.Property(l => l.Email).HasMaxLength(255).IsRequired();
+            e.Property(l => l.Email).HasMaxLength(255);
             e.Property(l => l.Phone).HasMaxLength(50);
             e.Property(l => l.CompanyName).HasMaxLength(150);
             e.Property(l => l.JobTitle).HasMaxLength(100);
@@ -242,7 +243,7 @@ public class AppDbContext : DbContext
             e.HasOne(l => l.LeadStatus)
              .WithMany()
              .HasForeignKey(l => l.LeadStatusId)
-             .OnDelete(DeleteBehavior.Restrict);
+             .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(l => l.AssignedRep)
              .WithMany()
              .HasForeignKey(l => l.AssignedRepId)

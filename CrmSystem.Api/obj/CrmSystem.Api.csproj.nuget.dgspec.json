@@ -27,9 +27,6 @@
             "framework": "net10.0",
             "targetAlias": "net10.0",
             "projectReferences": {
-              "C:\\Users\\abays\\Desktop\\CRM_system\\CrmSystem.Domain\\CrmSystem.Domain.csproj": {
-                "projectPath": "C:\\Users\\abays\\Desktop\\CRM_system\\CrmSystem.Domain\\CrmSystem.Domain.csproj"
-              },
               "C:\\Users\\abays\\Desktop\\CRM_system\\CrmSystem.Infrastructure\\CrmSystem.Infrastructure.csproj": {
                 "projectPath": "C:\\Users\\abays\\Desktop\\CRM_system\\CrmSystem.Infrastructure\\CrmSystem.Infrastructure.csproj"
               }

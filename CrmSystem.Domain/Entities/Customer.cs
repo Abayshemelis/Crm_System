@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace CrmSystem.Domain.Entities;
 
 public class Customer
@@ -11,19 +8,13 @@ public class Customer
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public string? JobTitle { get; set; }
-
-    // Normalized source lookup (replaces old string Source field)
-    public int? SourceId { get; set; }
-    public Source? Source { get; set; }
-
-    public int? AssignedRepId { get; set; }
-    public Identity? AssignedRep { get; set; }
-
     public int? CompanyId { get; set; }
     public Company? Company { get; set; }
-
+    public int? SourceId { get; set; }
+    public Source? Source { get; set; }
+    public int AssignedRepId { get; set; }
+    public Identity? AssignedRep { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public bool IsDeleted { get; set; } = false;
-
+    public bool IsDeleted { get; set; }
     public ICollection<Tag> Tags { get; set; } = new List<Tag>();
 }

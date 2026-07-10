@@ -33,6 +33,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IOpportunityService, OpportunityService>();
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
@@ -210,16 +211,28 @@ using (var scope = app.Services.CreateScope())
     await db.SaveChangesAsync();
 
     // ── Default Admin Identity ────────────────────────────────────────────
-    var adminRole = await db.Roles.SingleAsync(r => r.Name == "Admin");
-    var adminEmail = "admin@test.com";
+    var adminRole     = await db.Roles.SingleAsync(r => r.Name == "Admin");
+    var adminEmail    = "abayshemelisshiferaw@gmail.com";
+    var adminPassword = "admin123";
+
+    // Remove stale admin accounts that no longer match the target email
+    var staleAdmins = await db.Identities
+        .Where(i => i.RoleId == adminRole.RoleId && i.Email != adminEmail)
+        .ToListAsync();
+    if (staleAdmins.Any())
+    {
+        db.Identities.RemoveRange(staleAdmins);
+        await db.SaveChangesAsync();
+    }
+
     if (!await db.Identities.AnyAsync(i => i.Email == adminEmail))
     {
         db.Identities.Add(new Identity
         {
-            Name = "Admin",
-            Email = adminEmail,
-            RoleId = adminRole.RoleId,
-            PasswordHash = passwordHasher.Hash("admin123")
+            Name         = "Admin",
+            Email        = adminEmail,
+            RoleId       = adminRole.RoleId,
+            PasswordHash = passwordHasher.Hash(adminPassword)
         });
         await db.SaveChangesAsync();
     }

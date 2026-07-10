@@ -1,11 +1,14 @@
 using System.Security.Claims;
 using CrmSystem.Api.Dtos;
+using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
 using CrmSystem.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CrmSystem.Api.Controllers;
 
@@ -16,12 +19,14 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenService _tokenService;
+    private readonly IEmailSender _emailSender;
 
-    public AuthController(AppDbContext db, IPasswordHasher passwordHasher, ITokenService tokenService)
+    public AuthController(AppDbContext db, IPasswordHasher passwordHasher, ITokenService tokenService, IEmailSender emailSender)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
+        _emailSender = emailSender;
     }
 
     [HttpPost("register")]
@@ -115,6 +120,69 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, identity.Role?.Name ?? string.Empty, newAccessToken, newRawRefreshToken));
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(new { message = "Email is required." });
+        }
+
+        var identity = await _db.Identities.SingleOrDefaultAsync(i => i.Email == request.Email);
+        if (identity is null)
+        {
+            return Ok(new { message = "If that email exists, a reset link has been sent." });
+        }
+
+        var rawToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
+
+        _db.PasswordResetTokens.RemoveRange(_db.PasswordResetTokens.Where(t => t.IdentityId == identity.IdentityId));
+        _db.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            IdentityId = identity.IdentityId,
+            TokenHash = tokenHash,
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
+        });
+
+        await _db.SaveChangesAsync();
+
+        var resetUrl = $"http://localhost:5173/reset-password?token={rawToken}";
+        await _emailSender.SendPasswordResetAsync(identity.Email, resetUrl);
+
+        return Ok(new { message = "If that email exists, a reset link has been sent." });
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return BadRequest(new { message = "Token and password are required." });
+        }
+
+        if (request.NewPassword.Length < 8)
+        {
+            return BadRequest(new { message = "Password must be at least 8 characters long." });
+        }
+
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.Token)));
+        var resetToken = await _db.PasswordResetTokens
+            .Include(t => t.Identity)
+            .SingleOrDefaultAsync(t => t.TokenHash == tokenHash);
+
+        if (resetToken is null || resetToken.ExpiresAt < DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "Invalid or expired reset token." });
+        }
+
+        resetToken.Identity!.PasswordHash = _passwordHasher.Hash(request.NewPassword);
+        _db.PasswordResetTokens.Remove(resetToken);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Password reset successfully." });
     }
 
     [Authorize]
