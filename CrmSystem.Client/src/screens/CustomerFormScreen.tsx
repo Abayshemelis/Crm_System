@@ -43,8 +43,8 @@ export const CustomerFormScreen: React.FC = () => {
     const isEdit = Boolean(id);
 
     useEffect(() => {
-        api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=100')
-            .then(res => setCompanies(res.data ?? []))
+        api.get<{ Data: Company[] }>('/api/companies?page=1&pageSize=100')
+            .then(res => setCompanies(res.Data ?? []))
             .catch(() => { /* non-critical, continue without company list */ });
 
         api.get<Source[]>('/api/sources')

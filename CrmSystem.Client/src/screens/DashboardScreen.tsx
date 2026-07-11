@@ -11,9 +11,29 @@ import './screens.css';
 interface DashboardStats {
     totalCustomers: number;
     totalCompanies: number;
+    activeCompanies: number;
+    createdCompanies: number;
     activeLeads: number;
     openDeals: number;
 }
+
+interface OpportunitySummary {
+    opportunityId: number;
+    stageName?: string;
+    actualCloseDate?: string | null;
+}
+
+interface CompanySummaryResponse {
+    totalCount?: number;
+    data?: Array<{ isDeleted?: boolean }>;
+}
+
+const countOpenDeals = (opportunities: OpportunitySummary[]) =>
+    opportunities.filter((opportunity) => {
+        const stageName = (opportunity.stageName ?? '').toLowerCase();
+        const isClosed = stageName === 'won' || stageName === 'lost' || !!opportunity.actualCloseDate;
+        return !isClosed;
+    }).length;
 
 export const DashboardScreen: React.FC = () => {
     const { user, token } = useAuth();
@@ -29,22 +49,29 @@ export const DashboardScreen: React.FC = () => {
         }
         const fetchStats = async () => {
             try {
-                const [customers, companies, leads] = await Promise.all([
-                    api.get<{ totalCount: number }>('/api/customers?page=1&pageSize=1'),
-                    api.get<{ totalCount: number }>('/api/companies?page=1&pageSize=1'),
-                    api.get<{ totalCount: number }>('/api/leads?page=1&pageSize=1')
+                const [customers, companies, leads, opportunities] = await Promise.all([
+                    api.get<{ totalCount?: number }>('/api/customers?page=1&pageSize=1'),
+                    api.get<CompanySummaryResponse>('/api/companies?page=1&pageSize=100'),
+                    api.get<{ totalCount?: number }>('/api/leads?page=1&pageSize=1'),
+                    api.get<OpportunitySummary[]>('/api/opportunities')
                 ]);
+                const createdCompanies = companies.totalCount ?? 0;
+                const activeCompanies = companies.data?.filter((company: { isDeleted?: boolean }) => !company.isDeleted).length ?? 0;
                 setStats({
                     totalCustomers: customers.totalCount ?? 0,
-                    totalCompanies: companies.totalCount ?? 0,
+                    totalCompanies: createdCompanies,
+                    activeCompanies,
+                    createdCompanies,
                     activeLeads: leads.totalCount ?? 0,
-                    openDeals: 0
+                    openDeals: countOpenDeals(opportunities ?? [])
                 });
             } catch {
                 // Use default values on error
                 setStats({
                     totalCustomers: 0,
                     totalCompanies: 0,
+                    activeCompanies: 0,
+                    createdCompanies: 0,
                     activeLeads: 0,
                     openDeals: 0
                 });
@@ -65,12 +92,29 @@ export const DashboardScreen: React.FC = () => {
             description: 'Active contacts in your CRM'
         },
         {
-            title: 'Total Companies',
+            title: 'Companies',
             value: stats?.totalCompanies ?? 0,
             icon: Building2,
             color: 'var(--success)',
             path: '/companies',
-            description: 'B2B accounts managed'
+            description: 'Created / Active accounts',
+            footer: (
+                <div className="dashboard-metric-detail">
+                    <div className="dashboard-metric-footer">
+                        <span>Created: {stats?.createdCompanies ?? 0}</span>
+                        <span>Active: {stats?.activeCompanies ?? 0}</span>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="stat-action"
+                        onClick={() => navigate('/companies')}
+                        disabled={!user}
+                    >
+                        View all <ArrowRight size={14} />
+                    </Button>
+                </div>
+            )
         },
         {
             title: 'Active Leads',
@@ -115,7 +159,7 @@ export const DashboardScreen: React.FC = () => {
                         <Card.Content>
                             <div className="stat-header">
                                 <div className="stat-icon" style={{ color: card.color }}>
-                                    <card.icon size={24} />
+                                    {React.createElement(card.icon, { size: 24 })}
                                 </div>
                                 <div className="stat-value">{isLoading ? '—' : card.value}</div>
                             </div>
@@ -123,15 +167,17 @@ export const DashboardScreen: React.FC = () => {
                                 <h3>{card.title}</h3>
                                 <p>{card.description}</p>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="stat-action"
-                                onClick={() => navigate(card.path)}
-                                disabled={!user}
-                            >
-                                View all <ArrowRight size={14} />
-                            </Button>
+                            {card.footer ? card.footer : (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="stat-action"
+                                    onClick={() => navigate(card.path)}
+                                    disabled={!user}
+                                >
+                                    View all <ArrowRight size={14} />
+                                </Button>
+                            )}
                         </Card.Content>
                     </Card>
                 ))}

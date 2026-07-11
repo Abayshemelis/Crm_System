@@ -73,6 +73,7 @@ public class AttachmentsController : ControllerBase
                 a.AttachmentId,
                 a.FileName,
                 a.FileUrl,
+                a.ContentType,
                 a.FileSizeBytes,
                 UploadedByName = a.UploadedBy != null ? a.UploadedBy.Name : "Unknown",
                 a.UploadedAt
@@ -113,6 +114,7 @@ public class AttachmentsController : ControllerBase
             attachment.AttachmentId,
             attachment.FileName,
             attachment.FileUrl,
+            attachment.ContentType,
             attachment.FileSizeBytes,
             UploadedByName = attachment.UploadedBy?.Name ?? "Unknown",
             attachment.UploadedAt

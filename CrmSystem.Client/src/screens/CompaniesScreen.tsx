@@ -9,6 +9,22 @@ import { api } from '../lib/api';
 import { Building2, Globe, MapPin, Briefcase, Plus, Building } from 'lucide-react';
 import './screens.css';
 
+interface CompanyApiResponse {
+  companyId?: number;
+  CompanyId?: number;
+  name?: string;
+  Name?: string;
+  industry?: string;
+  Industry?: string;
+  website?: string;
+  Website?: string;
+  address?: string;
+  Address?: string;
+}
+interface CompanyApiEnvelope {
+  data?: CompanyApiResponse[];
+  Data?: CompanyApiResponse[];
+}
 interface Company {
   companyId: number; name: string; industry?: string; website?: string; address?: string;
 }
@@ -23,8 +39,17 @@ export const CompaniesScreen: React.FC = () => {
   useEffect(() => {
     setIsLoading(true);
     setLoadError(null);
-    api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=100')
-      .then(d => setCompanies(d.data ?? []))
+    api.get<CompanyApiEnvelope>('/api/companies?page=1&pageSize=100')
+      .then((d) => {
+        const items = (d.data ?? d.Data ?? []).map(company => ({
+          companyId: company.companyId ?? company.CompanyId ?? 0,
+          name: company.name ?? company.Name ?? 'Unnamed company',
+          industry: company.industry ?? company.Industry,
+          website: company.website ?? company.Website,
+          address: company.address ?? company.Address,
+        }));
+        setCompanies(items);
+      })
       .catch(() => setLoadError('Failed to load companies. Please try again.'))
       .finally(() => setIsLoading(false));
   }, [location.key]);

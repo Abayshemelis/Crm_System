@@ -5,7 +5,8 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
-import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Paperclip, Upload, Trash2 } from 'lucide-react';
+import Attachments from '../components/attachments/Attachments';
+import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone } from 'lucide-react';
 import './screens.css';
 
 interface Company {
@@ -25,11 +26,9 @@ export const CompanyDetailScreen: React.FC = () => {
   const navigate = useNavigate();
   const [company, setCompany] = useState<Company | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabId>('contacts');
   const [isLoading, setIsLoading] = useState(true);
-  const [fileInput, setFileInput] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -41,7 +40,7 @@ export const CompanyDetailScreen: React.FC = () => {
       ]);
       setCompany(comp);
       setContacts(comp.contacts ?? []);
-      setAttachments(atts ?? []);
+      setAttachmentsCount(atts?.length ?? 0);
     } catch {
       navigate('/companies');
     } finally {
@@ -50,23 +49,6 @@ export const CompanyDetailScreen: React.FC = () => {
   }, [id, navigate]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  const uploadFile = async () => {
-    if (!fileInput) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', fileInput);
-    form.append('CompanyId', id!);
-    await api.upload('/api/attachments', form);
-    setFileInput(null);
-    setUploading(false);
-    fetchAll();
-  };
-
-  const deleteAttachment = async (attId: number) => {
-    await api.delete(`/api/attachments/${attId}`);
-    fetchAll();
-  };
 
   const deleteCompany = async () => {
     if (!company || !window.confirm('Delete this company? This cannot be undone.')) return;
@@ -164,7 +146,7 @@ export const CompanyDetailScreen: React.FC = () => {
               Contacts ({contacts.length})
             </button>
             <button className={`tab-btn ${activeTab === 'attachments' ? 'tab-active' : ''}`} onClick={() => setActiveTab('attachments')}>
-              Attachments ({attachments.length})
+              Attachments ({attachmentsCount})
             </button>
           </div>
 
@@ -187,34 +169,7 @@ export const CompanyDetailScreen: React.FC = () => {
               )}
 
               {activeTab === 'attachments' && (
-                <div>
-                  <div className="upload-zone">
-                    <Upload size={20} style={{ marginBottom: 8 }} />
-                    <p style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                      {fileInput ? fileInput.name : 'Select a file to upload'}
-                    </p>
-                    <label className="upload-label">
-                      Browse
-                      <input type="file" style={{ display: 'none' }} onChange={e => setFileInput(e.target.files?.[0] ?? null)} />
-                    </label>
-                    {fileInput && <Button size="sm" style={{ marginTop: 8 }} onClick={uploadFile} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</Button>}
-                  </div>
-                  <div className="attachment-list">
-                    {attachments.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No attachments yet.</p>}
-                    {attachments.map(att => (
-                      <div key={att.attachmentId} className="attachment-row">
-                        <Paperclip size={16} style={{ flexShrink: 0, color: 'var(--accent-primary)' }} />
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{att.fileName}</p>
-                          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                            {formatBytes(att.fileSizeBytes)} · {att.uploadedByName} · {new Date(att.uploadedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button className="icon-btn danger" onClick={() => deleteAttachment(att.attachmentId)}><Trash2 size={14} /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <Attachments entity="company" entityId={Number(id)} onCountChange={setAttachmentsCount} />
               )}
             </Card.Content>
           </Card>

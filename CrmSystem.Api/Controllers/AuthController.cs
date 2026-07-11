@@ -94,7 +94,7 @@ public class AuthController : ControllerBase
 
         var storedToken = await _db.RefreshTokens
             .Include(rt => rt.Identity)
-                .ThenInclude(i => i.Role)
+                .ThenInclude(i => i!.Role)
             .SingleOrDefaultAsync(rt => rt.TokenHash == incomingHash);
 
         if (storedToken is null || storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)

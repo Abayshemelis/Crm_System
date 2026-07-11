@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="CrmSystem.Api/CrmSystem.Api.csproj" />
-  <Project Path="CrmSystem.Domain/CrmSystem.Domain.csproj" />
-  <Project Path="CrmSystem.Infrastructure/CrmSystem.Infrastructure.csproj" />
-</Solution>

@@ -1,226 +1,167 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Download, Plus, Search, Tag, UserCheck, Users, X } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
-import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Skeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Mail, Phone, MapPin, Plus, Search, Tag, UserCheck, X, Users } from 'lucide-react';
+import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
 import './screens.css';
 
+interface TagItem { id: number; name: string; }
+interface Lookup { id: number; name: string; }
+interface CustomerApiResponse {
+  customerId: number; firstName: string; lastName: string; email: string; phone?: string;
+  companyId?: number; companyName?: string; sourceId?: number; sourceName?: string;
+  assignedRepId: number; assignedRepName: string; tags: { tagId: number; name: string }[];
+}
 interface Customer {
-    customerId: number;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    sourceName?: string;
-    tags?: Tag[];
-    assignedRepId?: number;
+  customerId: number; firstName: string; lastName: string; email: string; phone?: string;
+  companyId?: number; companyName?: string; sourceId?: number; sourceName?: string;
+  assignedRepId: number; assignedRepName: string; tags: { tagId: number; name: string }[];
 }
 
-interface Tag { tagId: number; name: string; colorHex?: string; }
-
-const SOURCES = ['', 'Referral', 'Website', 'Advertisement', 'ColdCall', 'TradeShow'];
+const csvCell = (value: string | undefined) => `"${(value ?? '').replace(/"/g, '""')}"`;
 
 export const CustomersScreen: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filtered, setFiltered] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState('');
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [showBulkPanel, setShowBulkPanel] = useState(false);
-  const [bulkTagId, setBulkTagId] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { isManagerOrAbove } = useAuth();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [companies, setCompanies] = useState<Lookup[]>([]);
+  const [sources, setSources] = useState<Lookup[]>([]);
+  const [tags, setTags] = useState<TagItem[]>([]);
+  const [reps, setReps] = useState<Lookup[]>([]);
+  const [search, setSearch] = useState('');
+  const [companyId, setCompanyId] = useState('');
+  const [sourceId, setSourceId] = useState('');
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [repId, setRepId] = useState('');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkTagId, setBulkTagId] = useState('');
+  const [bulkRepId, setBulkRepId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-      const [cData, tData] = await Promise.all([
-        api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
-        api.get<Tag[]>('/api/tags'),
+      const [customerData, companyData, sourceData, tagData, userData] = await Promise.all([
+        api.get<{ data: CustomerApiResponse[] }>('/api/customers?page=1&pageSize=100'),
+        api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100'),
+        api.get<{ id: number; name: string }[]>('/api/sources'),
+        api.get<TagItem[]>('/api/tags'),
+        isManagerOrAbove ? api.get<{ id: number; name: string }[]>('/api/users') : Promise.resolve([]),
       ]);
-      setCustomers(cData.data ?? []);
-      setTags(tData ?? []);
-    } catch (error: any) {
-      setLoadError('Failed to load customers. Please try again.');
+      setCustomers((customerData.data ?? []).map(customer => ({
+        customerId: customer.customerId,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone,
+        companyId: customer.companyId,
+        companyName: customer.companyName,
+        sourceId: customer.sourceId,
+        sourceName: customer.sourceName,
+        assignedRepId: customer.assignedRepId,
+        assignedRepName: customer.assignedRepName,
+        tags: (customer.tags ?? []).map(tag => ({ tagId: tag.tagId, name: tag.name })),
+      })));
+      setCompanies((companyData.data ?? []).map(c => ({ id: c.companyId, name: c.name })));
+      setSources(sourceData ?? []); setTags(tagData ?? []); setReps(userData ?? []);
+    } catch { setError('Failed to load customers. Please try again.'); }
+    finally { setLoading(false); }
+  }, [isManagerOrAbove]);
+
+  useEffect(() => { load(); }, [load, location.key]);
+
+  const filtered = useMemo(() => customers.filter(customer => {
+    const term = search.trim().toLowerCase();
+    return (!term || `${customer.firstName} ${customer.lastName} ${customer.email}`.toLowerCase().includes(term)) &&
+      (!companyId || customer.companyId === Number(companyId)) &&
+      (!sourceId || customer.sourceId === Number(sourceId)) &&
+      (!repId || customer.assignedRepId === Number(repId)) &&
+      (tagIds.length === 0 || tagIds.every(id => customer.tags.some(tag => tag.tagId === Number(id))));
+  }), [customers, search, companyId, sourceId, tagIds, repId]);
+
+  const toggleSelection = (id: number) => setSelected(current => {
+    const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+  const selectAll = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(c => c.customerId)));
+
+  const bulk = async (action: 'tag' | 'reassign') => {
+    const value = action === 'tag' ? bulkTagId : bulkRepId;
+    if (!value || selected.size === 0) return;
+    setBulkLoading(true); setMessage(null);
+
+    // optimistic update
+    const prev = customers.slice();
+    try {
+      if (action === 'tag') {
+        const tagObj = tags.find(t => String(t.id) === value);
+        if (tagObj) {
+          setCustomers(cs => cs.map(c => {
+            if (!selected.has(c.customerId)) return c;
+            if (c.tags.some(t => t.tagId === tagObj.id)) return c;
+            return { ...c, tags: [...c.tags, { tagId: tagObj.id, name: tagObj.name }] };
+          }));
+        }
+      } else {
+        const repObj = reps.find(r => String(r.id) === value);
+        if (repObj) {
+          setCustomers(cs => cs.map(c => selected.has(c.customerId) ? ({ ...c, assignedRepId: Number(repObj.id), assignedRepName: repObj.name }) : c));
+        }
+      }
+
+      await api.post('/api/customers/bulk', { customerIds: [...selected], action, ...(action === 'tag' ? { tagId: Number(value) } : { newRepId: Number(value) }) });
+      setMessage('Bulk action completed successfully.');
+      setSelected(new Set()); setBulkTagId(''); setBulkRepId('');
+    } catch (e) {
+      setCustomers(prev);
+      setMessage('Bulk action failed; changes reverted.');
     } finally {
-      setIsLoading(false);
+      setBulkLoading(false);
     }
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData, location.key]);
-
-  useEffect(() => {
-    let list = customers;
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(c =>
-        `${c.firstName} ${c.lastName}`.toLowerCase().includes(s) ||
-        c.email.toLowerCase().includes(s)
-      );
-    }
-    if (sourceFilter) list = list.filter(c => c.sourceName === sourceFilter);
-    setFiltered(list);
-  }, [customers, search, sourceFilter]);
-
-  const toggleSelect = (customerId: number) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(customerId) ? next.delete(customerId) : next.add(customerId);
-      return next;
-    });
   };
 
-  const handleBulkAddTag = async () => {
-    if (!bulkTagId || selected.size === 0) return;
-    await api.post('/api/customers/bulk', {
-      customerIds: Array.from(selected),
-      action: 'tag',
-      tagId: Number(bulkTagId),
-    });
-    setSelected(new Set());
-    setShowBulkPanel(false);
-    fetchData();
+  const exportSelected = () => {
+    const rows = filtered.filter(c => selected.has(c.customerId));
+    const csv = [['Name', 'Company', 'Email', 'Phone', 'Assigned rep', 'Source', 'Tags'].map(csvCell).join(','), ...rows.map(c =>
+      [`${c.firstName} ${c.lastName}`, c.companyName, c.email, c.phone, c.assignedRepName, c.sourceName, c.tags.map(t => t.name).join('; ')].map(csvCell).join(','))].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'customers.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
-  // Loading state with skeleton cards
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="dashboard-header animate-fade-in">
-          <div className="dashboard-title">
-            <h1>Customers</h1>
-            <p>Loading customers...</p>
-          </div>
-          <Button disabled><Plus size={16} style={{ marginRight: 6 }} /> New Customer</Button>
-        </div>
-        <div className="skeleton-grid">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} variant="card" className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties} />
-          ))}
-        </div>
-      </Layout>
-    );
-  }
+  if (loading) return <Layout><div className="dashboard-header"><div className="dashboard-title"><h1>Customers</h1><p>Loading customers…</p></div></div><div className="table-skeleton">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} variant="rect" height={46} />)}</div></Layout>;
 
-  return (
-    <Layout>
-      <div className="dashboard-header animate-fade-in">
-        <div className="dashboard-title">
-          <h1>Customers</h1>
-          <p>{filtered.length} contacts found</p>
-        </div>
-        <Button onClick={() => navigate('/customers/new')}>
-          <Plus size={16} style={{ marginRight: 6 }} /> New Customer
-        </Button>
+  return <Layout>
+    <div className="dashboard-header animate-fade-in"><div className="dashboard-title"><h1>Customers</h1><p>{filtered.length} contacts found</p></div><Button onClick={() => navigate('/customers/new')}><Plus size={16} /> New Customer</Button></div>
+    {error && <div className="error-banner">{error}</div>}
+    {message && <div className="success-banner">{message}</div>}
+    <div className="filters-bar customer-filters">
+      <div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={16} className="filter-icon" /><input className="filter-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /></div>
+      <select className="filter-select" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+      <select className="filter-select" value={sourceId} onChange={e => setSourceId(e.target.value)}><option value="">All sources</option>{sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+      <div style={{ minWidth: 220 }}>
+        <SearchableMultiSelect options={tags.map(t => ({ id: t.id, name: t.name }))} selectedIds={tagIds} onChange={setTagIds} placeholder="Filter tags…" />
       </div>
-
-      {loadError && (
-        <div className="error-banner animate-fade-in">
-          {loadError}
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="filters-bar animate-fade-in">
-        <div style={{ position: 'relative', flex: 1 }}>
-          <Search size={16} className="filter-icon" />
-          <input
-            className="filter-input"
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <select className="filter-select" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
-          {SOURCES.map(s => <option key={s} value={s}>{s || 'All Sources'}</option>)}
-        </select>
-        {selected.size > 0 && (
-          <Button variant="secondary" size="sm" onClick={() => setShowBulkPanel(true)}>
-            <Tag size={14} style={{ marginRight: 6 }} /> Bulk Action ({selected.size})
-          </Button>
-        )}
-      </div>
-
-      {/* Bulk Action Panel */}
-      {showBulkPanel && (
-        <div className="bulk-panel animate-fade-in">
-          <span>{selected.size} customers selected</span>
-          <select className="filter-select" value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}>
-            <option value="">Select tag to add...</option>
-            {tags.map(t => <option key={t.tagId} value={String(t.tagId)}>{t.name}</option>)}
-          </select>
-          <Button size="sm" onClick={handleBulkAddTag}><Tag size={14} style={{ marginRight: 6 }} /> Apply Tag</Button>
-          <Button variant="ghost" size="sm" onClick={() => { setShowBulkPanel(false); setSelected(new Set()); }}>
-            <X size={14} />
-          </Button>
-        </div>
-      )}
-
-      {/* Customer Grid */}
-      <div className="customers-grid">
-        {filtered.map((customer, i) => (
-          <Card
-            key={customer.customerId}
-            className={`customer-card glass-panel animate-fade-in ${selected.has(customer.customerId) ? 'card-selected' : ''}`}
-            style={{ animationDelay: `${i * 0.04}s` } as React.CSSProperties}
-          >
-            <Card.Content>
-              <div className="customer-header">
-                <input
-                  type="checkbox"
-                  className="customer-checkbox"
-                  checked={selected.has(customer.customerId)}
-                  onChange={() => toggleSelect(customer.customerId)}
-                  onClick={e => e.stopPropagation()}
-                />
-                <div
-                  className="customer-avatar"
-                  onClick={() => navigate(`/customers/${customer.customerId}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {customer.firstName[0]}{customer.lastName[0]}
-                </div>
-                <div className="customer-info" onClick={() => navigate(`/customers/${customer.customerId}`)} style={{ cursor: 'pointer' }}>
-                  <h3>{customer.firstName} {customer.lastName}</h3>
-                  <p>{customer.sourceName ?? 'No source'}</p>
-                </div>
-              </div>
-              <div className="customer-details">
-                <div className="detail-row"><Mail size={14} /><span>{customer.email}</span></div>
-                {customer.phone && <div className="detail-row"><Phone size={14} /><span>{customer.phone}</span></div>}
-                {customer.tags && customer.tags.length > 0 && (
-                  <div className="detail-row tag-row">
-                    <Tag size={14} />
-                    <div className="tag-list">
-                      {customer.tags.map(t => <span key={t.tagId} className="tag-badge">{t.name}</span>)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card.Content>
-          </Card>
-        ))}
-        {filtered.length === 0 && !loadError && (
-          <EmptyState
-            title="No customers found"
-            description="Try adjusting your search or filter criteria, or create a new customer."
-            icon={Users}
-            actionText="New Customer"
-            onActionClick={() => navigate('/customers/new')}
-          />
-        )}
-      </div>
-    </Layout>
-  );
+      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>}
+    </div>
+    {selected.size > 0 && <div className="bulk-panel"><span>{selected.size} selected</span>
+      <select className="filter-select" disabled={bulkLoading} value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}><option value="">Add tag…</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+      <Button size="sm" disabled={bulkLoading} onClick={() => bulk('tag')}><Tag size={14} /> Add tag</Button>
+      {isManagerOrAbove && <>
+        <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+        <Button size="sm" disabled={bulkLoading} onClick={() => bulk('reassign')}><UserCheck size={14} /> Reassign</Button>
+      </>}
+      <Button size="sm" variant="secondary" onClick={exportSelected}><Download size={14} /> Export CSV</Button>
+      <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} /></Button>
+    </div>}
+    {filtered.length === 0 && !error ? <EmptyState title="No customers found" description="Adjust your filters or create a new customer." icon={Users} actionText="New Customer" onActionClick={() => navigate('/customers/new')} /> :
+      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)}><td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
+  </Layout>;
 };

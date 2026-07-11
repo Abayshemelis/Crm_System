@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, Paperclip, Trash2, Upload, X, Plus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus } from 'lucide-react';
+import Attachments from '../components/attachments/Attachments';
 import './screens.css';
 
 interface Customer {
@@ -20,6 +21,7 @@ interface TagItem { tagId: number; name: string; }
 interface Attachment {
   attachmentId: number; fileName: string; fileUrl: string;
   fileSizeBytes: number; uploadedByName: string; uploadedAt: string;
+  contentType?: string | null;
 }
 
 type TabId = 'profile' | 'tags' | 'attachments';
@@ -29,30 +31,39 @@ export const CustomerDetailScreen: React.FC = () => {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [allTags, setAllTags] = useState<TagItem[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [fileInput, setFileInput] = useState<File | null>(null);
 
+  const fetchAttachmentCount = useCallback(async () => {
+    if (!id) return;
+    try {
+      const attachments = await api.get<Attachment[]>(`/api/attachments?customerId=${id}`);
+      setAttachmentsCount(attachments?.length ?? 0);
+    } catch {
+      setAttachmentsCount(0);
+    }
+  }, [id]);
+
   const fetchAll = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [cust, tags, atts] = await Promise.all([
+      const [cust, tags] = await Promise.all([
         api.get<Customer>(`/api/customers/${id}`),
-        api.get<TagItem[]>('/api/tags'),
-        api.get<Attachment[]>(`/api/attachments?customerId=${id}`),
+        api.get<TagItem[]>('/api/tags')
       ]);
       setCustomer(cust);
       setAllTags(tags ?? []);
-      setAttachments(atts ?? []);
+      await fetchAttachmentCount();
     } catch {
       navigate('/customers');
     } finally {
       setIsLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, fetchAttachmentCount]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -66,22 +77,7 @@ export const CustomerDetailScreen: React.FC = () => {
     fetchAll();
   };
 
-  const uploadFile = async () => {
-    if (!fileInput) return;
-    setUploading(true);
-    const form = new FormData();
-    form.append('file', fileInput);
-    form.append('CustomerId', id!);
-    await api.upload('/api/attachments', form);
-    setFileInput(null);
-    setUploading(false);
-    fetchAll();
-  };
-
-  const deleteAttachment = async (attId: number) => {
-    await api.delete(`/api/attachments/${attId}`);
-    fetchAll();
-  };
+  // Attachment upload/delete handled by Attachments component
 
   const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
@@ -182,7 +178,7 @@ export const CustomerDetailScreen: React.FC = () => {
               <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
                 {tab === 'profile' && 'Profile'}
                 {tab === 'tags' && `Tags (${customer.tags?.length ?? 0})`}
-                {tab === 'attachments' && `Attachments (${attachments.length})`}
+                {tab === 'attachments' && `Attachments (${attachmentsCount})`}
               </button>
             ))}
           </div>
@@ -209,14 +205,14 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
                       ? customer.tags.map(tag => {
-                          const t = allTags.find(x => x.name === tag.name);
-                          return (
-                            <span key={tag.tagId} className="tag-badge tag-badge-removable">
-                              {tag.name}
-                              {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
-                            </span>
-                          );
-                        })
+                        const t = allTags.find(x => x.name === tag.name);
+                        return (
+                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                            {tag.name}
+                            {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
+                          </span>
+                        );
+                      })
                       : <p style={{ color: 'var(--text-muted)' }}>No tags assigned.</p>
                     }
                   </div>
@@ -237,40 +233,7 @@ export const CustomerDetailScreen: React.FC = () => {
 
               {/* Attachments Tab */}
               {activeTab === 'attachments' && (
-                <div>
-                  <div className="upload-zone">
-                    <Upload size={20} style={{ marginBottom: 8 }} />
-                    <p style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                      {fileInput ? fileInput.name : 'Select a file to upload'}
-                    </p>
-                    <label className="upload-label">
-                      Browse
-                      <input type="file" style={{ display: 'none' }} onChange={e => setFileInput(e.target.files?.[0] ?? null)} />
-                    </label>
-                    {fileInput && (
-                      <Button size="sm" style={{ marginTop: 8 }} onClick={uploadFile} disabled={uploading}>
-                        {uploading ? 'Uploading...' : 'Upload'}
-                      </Button>
-                    )}
-                  </div>
-                  <div className="attachment-list">
-                    {attachments.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No attachments yet.</p>}
-                    {attachments.map(att => (
-                      <div key={att.attachmentId} className="attachment-row">
-                        <Paperclip size={16} style={{ flexShrink: 0, color: 'var(--accent-primary)' }} />
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{att.fileName}</p>
-                          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                            {formatBytes(att.fileSizeBytes)} · Uploaded by {att.uploadedByName} · {new Date(att.uploadedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button className="icon-btn danger" onClick={() => deleteAttachment(att.attachmentId)}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <Attachments entity="customer" entityId={Number(id)} onCountChange={setAttachmentsCount} />
               )}
             </Card.Content>
           </Card>

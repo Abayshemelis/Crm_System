@@ -12,7 +12,12 @@ using CrmSystem.Domain.Entities;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+// Use camelCase naming for JSON so the frontend (which expects camelCase)
+// receives properties like `data` and `totalCount` instead of `Data`/`TotalCount`.
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+});
 builder.Services.AddOpenApi();
 
 builder.Services.AddCors(options =>
@@ -25,8 +30,27 @@ builder.Services.AddCors(options =>
     });
 });
 
+var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (useInMemoryDatabase)
+    {
+        options.UseInMemoryDatabase("CrmSystemDb");
+    }
+    else
+    {
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            options.UseInMemoryDatabase("CrmSystemDb");
+        }
+        else
+        {
+            options.UseSqlServer(connectionString);
+        }
+    }
+});
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -48,8 +72,8 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     };
 });
 
-var jwtSigningKey = builder.Configuration["Jwt:SigningKey"]!;
-var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
+var jwtSigningKey = builder.Configuration["Jwt:SigningKey"] ?? "development-signing-key-1234567890";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CrmSystem.Api";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -85,8 +109,43 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseStaticFiles();
+// Ensure CORS middleware runs before static files so browser requests for
+// /uploads/* receive the CORS headers and can be fetched from the frontend dev server.
 app.UseCors("AllowFrontend");
+
+// Serve static files with custom response headers so uploaded PDFs can be
+// embedded in the frontend preview modal. Use OnPrepareResponse to adjust
+// headers for each static file response (precise and reliable).
+app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        var headers = ctx.Context.Response.Headers;
+
+        // Remove X-Frame-Options to allow embedding in iframes/object tags.
+        if (headers.ContainsKey("X-Frame-Options"))
+            headers.Remove("X-Frame-Options");
+
+        // If the file is a PDF, prefer inline disposition so browsers render it.
+        var contentType = ctx.Context.Response.ContentType ?? string.Empty;
+        if (contentType.StartsWith("application/pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!headers.ContainsKey("Content-Disposition"))
+            {
+                // Include a filename to help browsers; keep it simple and safe.
+                var fileName = System.IO.Path.GetFileName(ctx.File.PhysicalPath) ?? "file.pdf";
+                headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"";
+            }
+        }
+
+        // Expose the file to the frontend dev server origin (CORS for static files).
+        // This mirrors the AllowFrontend policy for requests that hit static files.
+        if (!headers.ContainsKey("Access-Control-Allow-Origin"))
+        {
+            headers["Access-Control-Allow-Origin"] = "http://localhost:5173";
+        }
+    }
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -211,8 +270,8 @@ using (var scope = app.Services.CreateScope())
     await db.SaveChangesAsync();
 
     // ── Default Admin Identity ────────────────────────────────────────────
-    var adminRole     = await db.Roles.SingleAsync(r => r.Name == "Admin");
-    var adminEmail    = "abayshemelisshiferaw@gmail.com";
+    var adminRole = await db.Roles.SingleAsync(r => r.Name == "Admin");
+    var adminEmail = "abayshemelisshiferaw@gmail.com";
     var adminPassword = "admin123";
 
     // Remove stale admin accounts that no longer match the target email
@@ -229,9 +288,9 @@ using (var scope = app.Services.CreateScope())
     {
         db.Identities.Add(new Identity
         {
-            Name         = "Admin",
-            Email        = adminEmail,
-            RoleId       = adminRole.RoleId,
+            Name = "Admin",
+            Email = adminEmail,
+            RoleId = adminRole.RoleId,
             PasswordHash = passwordHasher.Hash(adminPassword)
         });
         await db.SaveChangesAsync();

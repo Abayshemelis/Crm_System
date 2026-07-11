@@ -35,6 +35,7 @@ public class CustomersController : ControllerBase
             .Include(c => c.Company)
             .Include(c => c.AssignedRep)
             .Include(c => c.Source)
+            .Include(c => c.Tags)
             .AsQueryable();
 
         if (!_currentUser.IsManagerOrAbove)
@@ -65,6 +66,11 @@ public class CustomersController : ControllerBase
             customers = customers.Where(c => c.SourceId == query.SourceId);
         }
 
+        if (query.TagIds is { Count: > 0 })
+        {
+            customers = customers.Where(c => query.TagIds.All(tagId => c.Tags.Any(tag => tag.TagId == tagId)));
+        }
+
         var page = query.NormalizedPage;
         var pageSize = query.NormalizedPageSize;
         var totalCount = await customers.CountAsync();
@@ -88,6 +94,7 @@ public class CustomersController : ControllerBase
             .Include(c => c.Company)
             .Include(c => c.AssignedRep)
             .Include(c => c.Source)
+            .Include(c => c.Tags)
             .SingleOrDefaultAsync(c => c.CustomerId == id);
 
         if (customer is null)
@@ -162,6 +169,7 @@ public class CustomersController : ControllerBase
             .Include(c => c.Company)
             .Include(c => c.AssignedRep)
             .Include(c => c.Source)
+            .Include(c => c.Tags)
             .SingleOrDefaultAsync(c => c.CustomerId == id);
 
         if (customer is null)
@@ -236,6 +244,114 @@ public class CustomersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:int}/tags")]
+    public async Task<IActionResult> AddTag(int id, [FromBody] int tagId)
+    {
+        var customer = await _db.Customers.Include(c => c.Tags).SingleOrDefaultAsync(c => c.CustomerId == id);
+        if (customer is null) return NotFound(new { message = "Customer not found." });
+        if (!_currentUser.CanAccessOwnedRecord(customer.AssignedRepId)) return Forbid();
+
+        var tag = await _db.Tags.FindAsync(tagId);
+        if (tag is null) return NotFound(new { message = "Tag not found." });
+        if (!customer.Tags.Any(t => t.TagId == tagId))
+        {
+            customer.Tags.Add(tag);
+            await _db.SaveChangesAsync();
+        }
+        return NoContent();
+    }
+
+    [HttpGet("{id:int}/activities")]
+    public async Task<ActionResult<IReadOnlyList<CustomerActivityDto>>> GetActivities(int id)
+    {
+        if (!await CanAccessCustomerAsync(id)) return Forbid();
+        var items = await _db.Activities.AsNoTracking().Where(a => a.CustomerId == id)
+            .OrderByDescending(a => a.ActivityDate)
+            .Select(a => new CustomerActivityDto(a.ActivityId, a.ActivityType!.Name, a.Subject, a.Description, a.ActivityDate, a.DurationMinutes, a.CreatedBy!.Name))
+            .ToListAsync();
+        return Ok(items);
+    }
+
+    [HttpGet("{id:int}/opportunities")]
+    public async Task<IActionResult> GetOpportunities(int id)
+    {
+        if (!await CanAccessCustomerAsync(id)) return Forbid();
+        var items = await _db.Opportunities.AsNoTracking().Where(o => o.CustomerId == id)
+            .OrderByDescending(o => o.CreatedAt)
+            .Select(o => new { o.OpportunityId, o.Title, StageName = o.OpportunityStage!.Name, o.EstimatedValue, o.ExpectedCloseDate })
+            .ToListAsync();
+        return Ok(items);
+    }
+
+    [HttpGet("{id:int}/tasks")]
+    public async Task<ActionResult<IReadOnlyList<CustomerTaskDto>>> GetTasks(int id)
+    {
+        if (!await CanAccessCustomerAsync(id)) return Forbid();
+        var items = await _db.CrmTasks.AsNoTracking().Where(t => t.CustomerId == id)
+            .OrderBy(t => t.DueDate)
+            .Select(t => new CustomerTaskDto(t.CrmTaskId, t.Title, t.Description, t.DueDate, t.CrmTaskStatus!.Name, t.AssignedTo!.Name))
+            .ToListAsync();
+        return Ok(items);
+    }
+
+    [HttpGet("{id:int}/history")]
+    public async Task<ActionResult<IReadOnlyList<AuditLogEntryDto>>> GetHistory(int id)
+    {
+        if (!await CanAccessCustomerAsync(id)) return Forbid();
+        var items = await _db.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityType!.Name == "Customer" && a.EntityId == id)
+            .OrderByDescending(a => a.ChangedAt)
+            .Select(a => new AuditLogEntryDto(a.AuditLogId, a.AuditActionType!.Name, a.FieldName, a.OldValue, a.NewValue, a.ChangedBy!.Name, a.ChangedAt))
+            .ToListAsync();
+        return Ok(items);
+    }
+
+    [HttpDelete("{id:int}/tags/{tagId:int}")]
+    public async Task<IActionResult> RemoveTag(int id, int tagId)
+    {
+        var customer = await _db.Customers.Include(c => c.Tags).SingleOrDefaultAsync(c => c.CustomerId == id);
+        if (customer is null) return NotFound(new { message = "Customer not found." });
+        if (!_currentUser.CanAccessOwnedRecord(customer.AssignedRepId)) return Forbid();
+
+        var tag = customer.Tags.FirstOrDefault(t => t.TagId == tagId);
+        if (tag is not null)
+        {
+            customer.Tags.Remove(tag);
+            await _db.SaveChangesAsync();
+        }
+        return NoContent();
+    }
+
+    [HttpPost("bulk")]
+    public async Task<IActionResult> BulkUpdate(BulkCustomerActionRequest request)
+    {
+        var customerIds = request.CustomerIds.Distinct().ToList();
+        if (customerIds.Count == 0) return BadRequest(new { message = "Select at least one customer." });
+
+        var customers = await _db.Customers.Include(c => c.Tags)
+            .Where(c => customerIds.Contains(c.CustomerId)).ToListAsync();
+        if (customers.Count != customerIds.Count || customers.Any(c => !_currentUser.CanAccessOwnedRecord(c.AssignedRepId))) return Forbid();
+
+        if (string.Equals(request.Action, "tag", StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.TagId is null) return BadRequest(new { message = "A tag is required." });
+            var tag = await _db.Tags.FindAsync(request.TagId.Value);
+            if (tag is null) return NotFound(new { message = "Tag not found." });
+            foreach (var customer in customers.Where(c => !c.Tags.Any(t => t.TagId == tag.TagId))) customer.Tags.Add(tag);
+        }
+        else if (string.Equals(request.Action, "reassign", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_currentUser.IsManagerOrAbove) return Forbid();
+            if (request.NewRepId is null || !await _db.Identities.AnyAsync(i => i.IdentityId == request.NewRepId.Value))
+                return BadRequest(new { message = "A valid sales rep is required." });
+            foreach (var customer in customers) customer.AssignedRepId = request.NewRepId.Value;
+        }
+        else return BadRequest(new { message = "Unsupported bulk action." });
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     private async Task<int?> ResolveAssignedRepIdAsync(int? requestedRepId)
     {
         if (_currentUser.UserId is null)
@@ -257,6 +373,12 @@ public class CustomersController : ControllerBase
         return repExists ? requestedRepId : null;
     }
 
+    private async Task<bool> CanAccessCustomerAsync(int customerId)
+    {
+        var assignedRepId = await _db.Customers.Where(c => c.CustomerId == customerId).Select(c => (int?)c.AssignedRepId).SingleOrDefaultAsync();
+        return assignedRepId is not null && _currentUser.CanAccessOwnedRecord(assignedRepId);
+    }
+
     private static CustomerSummaryDto ToSummaryDto(Customer customer) =>
         new(
             customer.CustomerId,
@@ -271,7 +393,8 @@ public class CustomersController : ControllerBase
             customer.Source?.Name,
             customer.AssignedRepId,
             customer.AssignedRep?.Name ?? string.Empty,
-            customer.CreatedAt);
+            customer.CreatedAt,
+            ToTagDtos(customer));
 
     private static CustomerDetailDto ToDetailDto(Customer customer) =>
         new(
@@ -288,5 +411,12 @@ public class CustomersController : ControllerBase
             customer.AssignedRepId,
             customer.AssignedRep?.Name ?? string.Empty,
             customer.AssignedRep?.Email ?? string.Empty,
-            customer.CreatedAt);
+            customer.CreatedAt,
+            ToTagDtos(customer));
+
+    private static IReadOnlyList<CustomerTagDto> ToTagDtos(Customer customer) =>
+        customer.Tags
+            .OrderBy(tag => tag.Name)
+            .Select(tag => new CustomerTagDto(tag.TagId, tag.Name))
+            .ToArray();
 }

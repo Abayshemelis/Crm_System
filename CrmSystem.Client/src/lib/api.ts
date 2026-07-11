@@ -1,4 +1,5 @@
-const API_BASE = '';
+// Runtime-configurable API base. Set `VITE_API_BASE` in your Vite env for development (e.g. http://localhost:5000)
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE as string) ?? '';
 
 function getToken() {
   return localStorage.getItem('token') ?? '';
@@ -31,3 +32,16 @@ export const api = {
   upload: <T>(path: string, form: FormData) =>
     request<T>(path, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` }, body: form }),
 };
+
+export function resolveUrl(path: string) {
+  if (!path) return path;
+  // If already absolute, return as-is
+  if (/^https?:\/\//i.test(path)) return path;
+  // If this is a static upload path, return a relative path so the dev server
+  // proxy (or same-origin hosting) serves it. This avoids mixed-content or
+  // insecure-download blocking when the frontend is served over HTTPS.
+  if (path.startsWith('/uploads')) return path;
+  // Prefix with API base when path starts with '/'
+  if (path.startsWith('/')) return `${API_BASE}${path}`;
+  return `${API_BASE}/${path}`.replace(/([^:])\/\/+/, '$1/');
+}

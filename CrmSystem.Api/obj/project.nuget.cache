@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "F0RZ0q7rQLQ=",
+  "dgSpecHash": "wvi44C0JHWw=",
   "success": true,
   "projectFilePath": "C:\\Users\\abays\\Desktop\\CRM_system\\CrmSystem.Api\\CrmSystem.Api.csproj",
   "expectedPackageFiles": [
@@ -25,6 +25,7 @@
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.abstractions\\10.0.9\\microsoft.entityframeworkcore.abstractions.10.0.9.nupkg.sha512",
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.analyzers\\10.0.9\\microsoft.entityframeworkcore.analyzers.10.0.9.nupkg.sha512",
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.design\\10.0.9\\microsoft.entityframeworkcore.design.10.0.9.nupkg.sha512",
+    "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.inmemory\\10.0.9\\microsoft.entityframeworkcore.inmemory.10.0.9.nupkg.sha512",
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.relational\\10.0.9\\microsoft.entityframeworkcore.relational.10.0.9.nupkg.sha512",
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.sqlserver\\10.0.9\\microsoft.entityframeworkcore.sqlserver.10.0.9.nupkg.sha512",
     "C:\\Users\\abays\\.nuget\\packages\\microsoft.entityframeworkcore.tools\\10.0.9\\microsoft.entityframeworkcore.tools.10.0.9.nupkg.sha512",

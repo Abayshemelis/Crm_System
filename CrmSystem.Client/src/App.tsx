@@ -50,6 +50,45 @@ function AppRoutes() {
 function AppShell() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Initialize theme from localStorage on mount
+  const isHexColor = (value: string) => /^#([a-f\d]{6})$/i.test(value);
+  const isLightBackground = (background: string): boolean => {
+    if (!isHexColor(background)) return false;
+    const r = parseInt(background.slice(1, 3), 16);
+    const g = parseInt(background.slice(3, 5), 16);
+    const b = parseInt(background.slice(5, 7), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 190;
+  };
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('crm-theme');
+    if (savedTheme) {
+      try {
+        const theme = JSON.parse(savedTheme);
+        const root = document.documentElement;
+        root.style.setProperty('--page-background', theme.background ?? 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f172a 100%)');
+        root.style.setProperty('--accent-primary', theme.accentColor);
+
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(theme.accentColor);
+        if (result) {
+          const rgb = `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
+          root.style.setProperty('--accent-glow', `rgba(${rgb}, 0.5)`);
+        }
+
+        if (isLightBackground(theme.background)) {
+          root.style.setProperty('--text-primary', '#111827');
+          root.style.setProperty('--text-secondary', '#475569');
+          root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.9)');
+          root.style.setProperty('--glass-border', 'rgba(148, 163, 184, 0.3)');
+          root.style.setProperty('--border-color', '#cbd5e1');
+        }
+      } catch (error) {
+        console.error('Failed to load theme:', error);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const handler = ((event: Event) => {
       const customEvent = event as CustomEvent<{ message: string; type: 'success' | 'error' }>;
