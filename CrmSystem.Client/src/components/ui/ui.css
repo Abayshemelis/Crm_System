@@ -151,10 +151,20 @@
   border-color: var(--border-highlight);
 }
 
+[data-theme="light"] .card {
+  background-color: #ffffff;
+  border-color: #e2e8f0;
+}
+
 .card-header {
   padding: var(--space-6);
   border-bottom: 1px solid var(--border-color);
   background-color: rgba(255, 255, 255, 0.02);
+}
+
+[data-theme="light"] .card-header {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
 }
 
 .card-title {
@@ -193,6 +203,11 @@
   max-height: 80vh;
   overflow: hidden;
   box-shadow: 0 24px 60px -24px rgba(15, 23, 42, 0.3);
+}
+
+[data-theme="light"] .modal-content {
+  background: #ffffff;
+  border-color: #e5e7eb;
 }
 
 .modal-header {

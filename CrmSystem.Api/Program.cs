@@ -24,7 +24,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://172.25.64.1:5173", "http://192.168.78.1:5173", "http://192.168.111.1:5173", "http://192.168.123.12:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://172.25.64.1:5174", "http://192.168.78.1:5174", "http://192.168.111.1:5174", "http://192.168.123.12:5174")
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -293,6 +293,160 @@ using (var scope = app.Services.CreateScope())
             RoleId = adminRole.RoleId,
             PasswordHash = passwordHasher.Hash(adminPassword)
         });
+        await db.SaveChangesAsync();
+    }
+
+    var adminUser = await db.Identities.SingleAsync(i => i.Email == adminEmail);
+
+    if (!await db.Tags.AnyAsync())
+    {
+        db.Tags.AddRange(
+            new Tag { Name = "VIP" },
+            new Tag { Name = "Prospect" },
+            new Tag { Name = "Important" }
+        );
+        await db.SaveChangesAsync();
+    }
+
+    if (!await db.Companies.AnyAsync() && !await db.Customers.AnyAsync() && !await db.Leads.AnyAsync())
+    {
+        var defaultSource = await db.Sources.FirstAsync();
+        var defaultLeadStatus = await db.LeadStatuses.SingleAsync(ls => ls.Name == "New");
+        var vipTag = await db.Tags.SingleAsync(t => t.Name == "VIP");
+        var prospectTag = await db.Tags.SingleAsync(t => t.Name == "Prospect");
+
+        var sampleCompany = new Company
+        {
+            Name = "Acme Technologies",
+            Industry = "Software",
+            CompanySize = "51-200",
+            Website = "https://acme.example.com",
+            Address = "123 Market St, Suite 400",
+            Phone = "(555) 123-4567",
+            Email = "contact@acme.example.com",
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId
+        };
+        db.Companies.Add(sampleCompany);
+
+        var company2 = new Company
+        {
+            Name = "Global Solutions Inc",
+            Industry = "Consulting",
+            CompanySize = "201-500",
+            Website = "https://globalsolutions.example.com",
+            Address = "456 Business Ave, Floor 12",
+            Phone = "(555) 234-5678",
+            Email = "info@globalsolutions.example.com",
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId
+        };
+        db.Companies.Add(company2);
+
+        var company3 = new Company
+        {
+            Name = "TechStart Ventures",
+            Industry = "Technology",
+            CompanySize = "11-50",
+            Website = "https://techstart.example.com",
+            Address = "789 Innovation Blvd",
+            Phone = "(555) 345-6789",
+            Email = "hello@techstart.example.com",
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId
+        };
+        db.Companies.Add(company3);
+
+        await db.SaveChangesAsync();
+
+        var sampleCustomer = new Customer
+        {
+            FirstName = "Jane",
+            LastName = "Anderson",
+            Email = "jane.anderson@acme.example.com",
+            Phone = "(555) 987-6543",
+            JobTitle = "VP of Sales",
+            CompanyId = sampleCompany.CompanyId,
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        };
+        sampleCustomer.Tags.Add(vipTag);
+        db.Customers.Add(sampleCustomer);
+
+        var customer2 = new Customer
+        {
+            FirstName = "Michael",
+            LastName = "Chen",
+            Email = "michael.chen@globalsolutions.example.com",
+            Phone = "(555) 876-5432",
+            JobTitle = "CTO",
+            CompanyId = company2.CompanyId,
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        };
+        customer2.Tags.Add(prospectTag);
+        db.Customers.Add(customer2);
+
+        var customer3 = new Customer
+        {
+            FirstName = "Sarah",
+            LastName = "Williams",
+            Email = "sarah.williams@techstart.example.com",
+            Phone = "(555) 765-4321",
+            JobTitle = "CEO",
+            CompanyId = company3.CompanyId,
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        };
+        customer3.Tags.Add(vipTag);
+        db.Customers.Add(customer3);
+
+        var customer4 = new Customer
+        {
+            FirstName = "David",
+            LastName = "Johnson",
+            Email = "david.johnson@acme.example.com",
+            Phone = "(555) 654-3210",
+            JobTitle = "Engineering Manager",
+            CompanyId = sampleCompany.CompanyId,
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Customers.Add(customer4);
+
+        var customer5 = new Customer
+        {
+            FirstName = "Emily",
+            LastName = "Brown",
+            Email = "emily.brown@globalsolutions.example.com",
+            Phone = "(555) 543-2109",
+            JobTitle = "Marketing Director",
+            CompanyId = company2.CompanyId,
+            SourceId = defaultSource.SourceId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        };
+        customer5.Tags.Add(prospectTag);
+        db.Customers.Add(customer5);
+
+        db.Leads.Add(new Lead
+        {
+            FirstName = "Ethan",
+            LastName = "Morris",
+            Email = "ethan.morris@example.com",
+            Phone = "(555) 342-7684",
+            JobTitle = "Director of Operations",
+            CompanyName = "FutureWorks",
+            SourceId = defaultSource.SourceId,
+            LeadStatusId = defaultLeadStatus.LeadStatusId,
+            AssignedRepId = adminUser.IdentityId,
+            CreatedAt = DateTime.UtcNow
+        });
+
         await db.SaveChangesAsync();
     }
 }

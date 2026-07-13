@@ -4,8 +4,9 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
+import { LeadConvertModal } from '../components/ui/LeadConvertModal';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, Tag, ClipboardX } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle } from 'lucide-react';
 import './screens.css';
 
 interface LeadDetail {
@@ -26,6 +27,7 @@ export const LeadDetailScreen: React.FC = () => {
     const navigate = useNavigate();
     const [lead, setLead] = useState<LeadDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [showConvertModal, setShowConvertModal] = useState(false);
 
     const fetchLead = useCallback(async () => {
         if (!id) return;
@@ -44,6 +46,11 @@ export const LeadDetailScreen: React.FC = () => {
         if (!id || !window.confirm('Delete this lead?')) return;
         await api.delete(`/api/leads/${id}`);
         navigate('/leads');
+    };
+
+    const handleConvert = (customerId: number) => {
+        setShowConvertModal(false);
+        navigate(`/customers/${customerId}`);
     };
 
     useEffect(() => { fetchLead(); }, [fetchLead]);
@@ -100,7 +107,14 @@ export const LeadDetailScreen: React.FC = () => {
                         <p>{lead.leadStatusName} · {lead.sourceName ?? 'No source'}</p>
                     </div>
                 </div>
-                <Button onClick={() => navigate(`/leads/${id}/edit`)} size="sm">Edit</Button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    {lead.leadStatusName === 'Qualified' && (
+                        <Button onClick={() => setShowConvertModal(true)} size="sm">
+                            <CheckCircle size={16} style={{ marginRight: 6 }} /> Convert
+                        </Button>
+                    )}
+                    <Button onClick={() => navigate(`/leads/${id}/edit`)} size="sm">Edit</Button>
+                </div>
             </div>
 
             <div className="detail-layout animate-fade-in">
@@ -124,6 +138,22 @@ export const LeadDetailScreen: React.FC = () => {
                     </Card>
                 </div>
             </div>
+
+            {lead && (
+                <LeadConvertModal
+                    isOpen={showConvertModal}
+                    leadId={lead.leadId}
+                    leadData={{
+                        firstName: lead.firstName,
+                        lastName: lead.lastName,
+                        email: lead.email,
+                        phone: lead.phone,
+                        companyName: lead.companyName
+                    }}
+                    onCancel={() => setShowConvertModal(false)}
+                    onConverted={handleConvert}
+                />
+            )}
         </Layout>
     );
 };

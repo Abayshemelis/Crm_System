@@ -4,6 +4,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus } from 'lucide-react';
@@ -13,7 +14,9 @@ import './screens.css';
 interface Customer {
   customerId: number; firstName: string; lastName: string;
   email: string; phone?: string; jobTitle?: string;
-  sourceName?: string; companyId?: number; companyName?: string;
+  sourceId?: number; sourceName?: string;
+  companyId?: number; companyName?: string;
+  assignedRepId: number;
   tags?: CustomerTag[];
 }
 interface CustomerTag { tagId: number; name: string; }
@@ -22,6 +25,16 @@ interface Attachment {
   attachmentId: number; fileName: string; fileUrl: string;
   fileSizeBytes: number; uploadedByName: string; uploadedAt: string;
   contentType?: string | null;
+}
+interface Lookup { id: number; name: string }
+interface EditFormState {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  jobTitle: string;
+  companyId: string;
+  sourceId: string;
 }
 
 type TabId = 'profile' | 'tags' | 'attachments';
@@ -36,6 +49,22 @@ export const CustomerDetailScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [fileInput, setFileInput] = useState<File | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<Lookup[]>([]);
+  const [sources, setSources] = useState<Lookup[]>([]);
+  const [editForm, setEditForm] = useState<EditFormState>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    jobTitle: '',
+    companyId: '',
+    sourceId: ''
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const fetchAttachmentCount = useCallback(async () => {
     if (!id) return;
@@ -47,6 +76,15 @@ export const CustomerDetailScreen: React.FC = () => {
     }
   }, [id]);
 
+  useEffect(() => {
+    api.get<Lookup[]>('/api/sources')
+      .then(setSources)
+      .catch(() => { });
+    api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100')
+      .then(res => setCompanies((res.data ?? []).map(c => ({ id: c.companyId, name: c.name }))))
+      .catch(() => { });
+  }, []);
+
   const fetchAll = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
@@ -57,6 +95,15 @@ export const CustomerDetailScreen: React.FC = () => {
       ]);
       setCustomer(cust);
       setAllTags(tags ?? []);
+      setEditForm({
+        firstName: cust.firstName,
+        lastName: cust.lastName,
+        email: cust.email,
+        phone: cust.phone ?? '',
+        jobTitle: cust.jobTitle ?? '',
+        companyId: cust.companyId ? String(cust.companyId) : '',
+        sourceId: cust.sourceId ? String(cust.sourceId) : ''
+      });
       await fetchAttachmentCount();
     } catch {
       navigate('/customers');
@@ -75,6 +122,55 @@ export const CustomerDetailScreen: React.FC = () => {
   const removeTag = async (tagId: number) => {
     await api.delete(`/api/customers/${id}/tags/${tagId}`);
     fetchAll();
+  };
+
+  const handleEditChange = (field: keyof EditFormState, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    if (formErrors[field]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+    setSaveError(null);
+    setSuccessMessage(null);
+  };
+
+  const validateEditForm = () => {
+    const nextErrors: Record<string, string> = {};
+    if (!editForm.firstName.trim()) nextErrors.firstName = 'First name is required.';
+    if (!editForm.lastName.trim()) nextErrors.lastName = 'Last name is required.';
+    if (!editForm.email.trim()) nextErrors.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) nextErrors.email = 'Email is invalid.';
+    setFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const saveChanges = async () => {
+    if (!id) return;
+    if (!validateEditForm()) return;
+    setSaving(true); setSaveError(null); setSuccessMessage(null);
+
+    try {
+      await api.put(`/api/customers/${id}`, {
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim() || null,
+        jobTitle: editForm.jobTitle.trim() || null,
+        companyId: editForm.companyId ? Number(editForm.companyId) : null,
+        sourceId: editForm.sourceId ? Number(editForm.sourceId) : null,
+        assignedRepId: customer?.assignedRepId ?? null
+      });
+      setSuccessMessage('Customer updated successfully.');
+      setIsEditing(false);
+      fetchAll();
+    } catch (error: any) {
+      setSaveError(error?.message ?? 'Unable to save changes.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Attachment upload/delete handled by Attachments component
@@ -153,20 +249,72 @@ export const CustomerDetailScreen: React.FC = () => {
       </div>
 
       <div className="detail-layout animate-fade-in">
-        {/* Left: static info */}
+        {/* Left: inline edit info */}
         <Card className="glass-panel detail-sidebar">
           <Card.Content>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Contact Info</h3>
-            <div className="customer-details">
-              <div className="detail-row"><Mail size={15} /><span>{customer.email}</span></div>
-              {customer.phone && <div className="detail-row"><Phone size={15} /><span>{customer.phone}</span></div>}
-              {customer.companyName && <div className="detail-row"><Building2 size={15} /><span>{customer.companyName}</span></div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Contact Info</h3>
+              {!isEditing ? (
+                <Button variant="secondary" size="sm" onClick={() => { setIsEditing(true); setSuccessMessage(null); setSaveError(null); }}>
+                  Edit
+                </Button>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <Button size="sm" disabled={saving} onClick={saveChanges}>Save</Button>
+                  <Button variant="ghost" size="sm" disabled={saving} onClick={() => {
+                    setIsEditing(false); setFormErrors({}); setSaveError(null); setEditForm({
+                      firstName: customer.firstName,
+                      lastName: customer.lastName,
+                      email: customer.email,
+                      phone: customer.phone ?? '',
+                      jobTitle: customer.jobTitle ?? '',
+                      companyId: customer.companyId ? String(customer.companyId) : '',
+                      sourceId: customer.sourceId ? String(customer.sourceId) : ''
+                    });
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </div>
-            {customer.tags && customer.tags.length > 0 && (
-              <div style={{ marginTop: '1.5rem' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>TAGS</p>
-                <div className="tag-list">{customer.tags.map(tag => <span key={tag.tagId} className="tag-badge">{tag.name}</span>)}</div>
+            {saveError && <div className="error-banner" style={{ marginBottom: '1rem' }}>{saveError}</div>}
+            {successMessage && <div className="success-banner" style={{ marginBottom: '1rem' }}>{successMessage}</div>}
+            {isEditing ? (
+              <div className="profile-grid">
+                <Input label="First Name" value={editForm.firstName} onChange={e => handleEditChange('firstName', e.target.value)} error={formErrors.firstName} />
+                <Input label="Last Name" value={editForm.lastName} onChange={e => handleEditChange('lastName', e.target.value)} error={formErrors.lastName} />
+                <Input label="Email" type="email" value={editForm.email} onChange={e => handleEditChange('email', e.target.value)} error={formErrors.email} />
+                <Input label="Phone" value={editForm.phone} onChange={e => handleEditChange('phone', e.target.value)} error={formErrors.phone} />
+                <Input label="Job Title" value={editForm.jobTitle} onChange={e => handleEditChange('jobTitle', e.target.value)} error={formErrors.jobTitle} />
+                <div className="input-wrapper">
+                  <label className="input-label">Source</label>
+                  <select className="input-field" value={editForm.sourceId} onChange={e => handleEditChange('sourceId', e.target.value)}>
+                    <option value="">None</option>
+                    {sources.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}
+                  </select>
+                </div>
+                <div className="input-wrapper">
+                  <label className="input-label">Company</label>
+                  <select className="input-field" value={editForm.companyId} onChange={e => handleEditChange('companyId', e.target.value)}>
+                    <option value="">None</option>
+                    {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+                  </select>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="customer-details">
+                  <div className="detail-row"><Mail size={15} /><span>{customer.email}</span></div>
+                  {customer.phone && <div className="detail-row"><Phone size={15} /><span>{customer.phone}</span></div>}
+                  {customer.companyName && <div className="detail-row"><Building2 size={15} /><span>{customer.companyName}</span></div>}
+                </div>
+                {customer.tags && customer.tags.length > 0 && (
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>TAGS</p>
+                    <div className="tag-list">{customer.tags.map(tag => <span key={tag.tagId} className="tag-badge">{tag.name}</span>)}</div>
+                  </div>
+                )}
+              </>
             )}
           </Card.Content>
         </Card>

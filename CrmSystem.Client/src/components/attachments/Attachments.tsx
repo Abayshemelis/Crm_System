@@ -27,6 +27,23 @@ export const Attachments: React.FC<Props> = ({ entity, entityId, canEdit = true,
     const [uploading, setUploading] = useState(false);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
     const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    // Allowed file types and max size (25 MB)
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB in bytes
+    const ALLOWED_TYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+        'text/csv'
+    ];
 
     const queryParam = `${entity}Id=${entityId}`;
 
@@ -42,16 +59,51 @@ export const Attachments: React.FC<Props> = ({ entity, entityId, canEdit = true,
 
     useEffect(() => { load(); }, [entity, entityId]);
 
+    const validateFile = (selectedFile: File): string | null => {
+        // Check file size
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            return `File size exceeds 25 MB limit. Selected file is ${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB.`;
+        }
+
+        // Check file type
+        if (!ALLOWED_TYPES.includes(selectedFile.type)) {
+            return `Unsupported file type: ${selectedFile.type || 'unknown'}. Allowed types: images (JPEG, PNG, GIF, WebP), PDF, Word documents, Excel spreadsheets, text files, and CSV.`;
+        }
+
+        return null;
+    };
+
+    const handleFileSelect = (selectedFile: File | null) => {
+        setUploadError(null);
+        
+        if (!selectedFile) {
+            setFile(null);
+            return;
+        }
+
+        const error = validateFile(selectedFile);
+        if (error) {
+            setUploadError(error);
+            setFile(null);
+            return;
+        }
+
+        setFile(selectedFile);
+    };
+
     const upload = async () => {
         if (!file) return;
         setUploading(true);
+        setUploadError(null);
         try {
             const form = new FormData();
-            form.append('file', file);
+            form.append('File', file);
             form.append(`${entity[0].toUpperCase() + entity.slice(1)}Id`, String(entityId));
             await api.upload('/api/attachments', form);
             setFile(null);
             await load();
+        } catch (error: any) {
+            setUploadError(error?.message || 'Failed to upload file. Please try again.');
         } finally { setUploading(false); }
     };
 
@@ -70,9 +122,10 @@ export const Attachments: React.FC<Props> = ({ entity, entityId, canEdit = true,
                     <Upload size={20} style={{ marginBottom: 8 }} />
                     <p style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{file ? file.name : 'Select a file to upload'}</p>
                     <label className="upload-label">Browse
-                        <input type="file" style={{ display: 'none' }} onChange={e => setFile(e.target.files?.[0] ?? null)} />
+                        <input type="file" style={{ display: 'none' }} onChange={e => handleFileSelect(e.target.files?.[0] ?? null)} />
                     </label>
                     {file && <button className="btn" style={{ marginLeft: 8 }} onClick={upload} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</button>}
+                    {uploadError && <p style={{ marginTop: 8, color: 'var(--error)', fontSize: '0.75rem' }}>{uploadError}</p>}
                 </div>
             )}
 

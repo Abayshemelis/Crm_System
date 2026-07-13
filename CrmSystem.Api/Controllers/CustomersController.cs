@@ -342,7 +342,7 @@ public class CustomersController : ControllerBase
         else if (string.Equals(request.Action, "reassign", StringComparison.OrdinalIgnoreCase))
         {
             if (!_currentUser.IsManagerOrAbove) return Forbid();
-            if (request.NewRepId is null || !await _db.Identities.AnyAsync(i => i.IdentityId == request.NewRepId.Value))
+            if (request.NewRepId is null || !await IsAssignableRepAsync(request.NewRepId.Value))
                 return BadRequest(new { message = "A valid sales rep is required." });
             foreach (var customer in customers) customer.AssignedRepId = request.NewRepId.Value;
         }
@@ -369,8 +369,18 @@ public class CustomersController : ControllerBase
             return _currentUser.UserId;
         }
 
-        var repExists = await _db.Identities.AnyAsync(u => u.IdentityId == requestedRepId);
+        // Allow any valid user (including Admin) to be assigned
+        var repExists = await _db.Identities
+            .Include(u => u.Role)
+            .AnyAsync(u => u.IdentityId == requestedRepId && u.Role != null);
         return repExists ? requestedRepId : null;
+    }
+
+    private async Task<bool> IsAssignableRepAsync(int repId)
+    {
+        return await _db.Identities
+            .Include(u => u.Role)
+            .AnyAsync(u => u.IdentityId == repId && u.Role != null && u.Role.Name != "Admin");
     }
 
     private async Task<bool> CanAccessCustomerAsync(int customerId)

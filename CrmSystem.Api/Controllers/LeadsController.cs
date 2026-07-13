@@ -376,7 +376,9 @@ public class LeadsController : ControllerBase
             return (true, null);
         }
 
-        var repExists = await _db.Identities.AnyAsync(u => u.IdentityId == requestedRepId);
+        var repExists = await _db.Identities
+            .Include(u => u.Role)
+            .AnyAsync(u => u.IdentityId == requestedRepId && u.Role != null && u.Role.Name != "Admin");
         return repExists ? (true, requestedRepId) : (false, null);
     }
 

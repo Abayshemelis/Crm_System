@@ -81,6 +81,7 @@ public class CompaniesController : ControllerBase
         var company = await _db.Companies
             .AsNoTracking()
             .Include(c => c.AssignedRep)
+            .Include(c => c.Source)
             .SingleOrDefaultAsync(c => c.CompanyId == id);
 
         if (company is null)
@@ -106,8 +107,9 @@ public class CompaniesController : ControllerBase
                 c.Phone))
             .ToListAsync();
 
-        // Pipeline value will be calculated in Phase 3 when Opportunities exist.
-        return Ok(ToDetailDto(company, contacts, totalOpenPipelineValue: 0m));
+        var totalOpenPipelineValue = await CalculateCompanyTotalOpenPipelineAsync(id);
+
+        return Ok(ToDetailDto(company, contacts, totalOpenPipelineValue));
     }
 
     [HttpPost]
@@ -124,12 +126,21 @@ public class CompaniesController : ControllerBase
             return BadRequest(new { message = "Assigned rep is invalid." });
         }
 
+        if (request.SourceId is not null && !await _db.Sources.AnyAsync(s => s.SourceId == request.SourceId))
+        {
+            return BadRequest(new { message = "Source not found." });
+        }
+
         var company = new Company
         {
             Name = request.Name.Trim(),
             Industry = request.Industry?.Trim(),
+            CompanySize = request.CompanySize?.Trim(),
             Website = request.Website?.Trim(),
             Address = request.Address?.Trim(),
+            Phone = request.Phone?.Trim(),
+            Email = request.Email?.Trim(),
+            SourceId = request.SourceId,
             AssignedRepId = assignedRepId
         };
 
@@ -137,6 +148,7 @@ public class CompaniesController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _db.Entry(company).Reference(c => c.AssignedRep).LoadAsync();
+        await _db.Entry(company).Reference(c => c.Source).LoadAsync();
 
         return CreatedAtAction(
             nameof(GetCompany),
@@ -149,6 +161,7 @@ public class CompaniesController : ControllerBase
     {
         var company = await _db.Companies
             .Include(c => c.AssignedRep)
+            .Include(c => c.Source)
             .SingleOrDefaultAsync(c => c.CompanyId == id);
 
         if (company is null)
@@ -172,10 +185,19 @@ public class CompaniesController : ControllerBase
             return Forbid();
         }
 
+        if (request.SourceId is not null && !await _db.Sources.AnyAsync(s => s.SourceId == request.SourceId))
+        {
+            return BadRequest(new { message = "Source not found." });
+        }
+
         company.Name = request.Name.Trim();
         company.Industry = request.Industry?.Trim();
+        company.CompanySize = request.CompanySize?.Trim();
         company.Website = request.Website?.Trim();
         company.Address = request.Address?.Trim();
+        company.Phone = request.Phone?.Trim();
+        company.Email = request.Email?.Trim();
+        company.SourceId = request.SourceId;
         company.AssignedRepId = assignedRepId;
 
         await _db.SaveChangesAsync();
@@ -193,7 +215,9 @@ public class CompaniesController : ControllerBase
                 c.Phone))
             .ToListAsync();
 
-        return Ok(ToDetailDto(company, contacts, totalOpenPipelineValue: 0m));
+        var totalOpenPipelineValue = await CalculateCompanyTotalOpenPipelineAsync(id);
+
+        return Ok(ToDetailDto(company, contacts, totalOpenPipelineValue));
     }
 
     [HttpDelete("{id:int}")]
@@ -234,7 +258,9 @@ public class CompaniesController : ControllerBase
             return (true, null);
         }
 
-        var repExists = await _db.Identities.AnyAsync(u => u.IdentityId == requestedRepId);
+        var repExists = await _db.Identities
+            .Include(u => u.Role)
+            .AnyAsync(u => u.IdentityId == requestedRepId && u.Role != null && u.Role.Name != "Admin");
         return repExists ? (true, requestedRepId) : (false, null);
     }
 
@@ -256,11 +282,25 @@ public class CompaniesController : ControllerBase
             company.CompanyId,
             company.Name,
             company.Industry,
+            company.CompanySize,
             company.Website,
             company.Address,
+            company.Phone,
+            company.Email,
+            company.SourceId,
+            company.Source?.Name,
             company.AssignedRepId,
             company.AssignedRep?.Name,
             company.AssignedRep?.Email,
             totalOpenPipelineValue,
             contacts);
+
+    private async Task<decimal> CalculateCompanyTotalOpenPipelineAsync(int companyId)
+    {
+        return await _db.Opportunities
+            .AsNoTracking()
+            .Where(o => o.Customer != null && o.Customer.CompanyId == companyId)
+            .Where(o => o.OpportunityStage != null && !o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)
+            .SumAsync(o => (decimal?)o.EstimatedValue) ?? 0m;
+    }
 }

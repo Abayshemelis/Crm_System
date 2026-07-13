@@ -11,16 +11,40 @@ import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
 import './screens.css';
 
 interface TagItem { id: number; name: string; }
-interface Lookup { id: number; name: string; }
+interface Lookup { id: number; name: string; role?: string; }
 interface CustomerApiResponse {
-  customerId: number; firstName: string; lastName: string; email: string; phone?: string;
-  companyId?: number; companyName?: string; sourceId?: number; sourceName?: string;
-  assignedRepId: number; assignedRepName: string; tags: { tagId: number; name: string }[];
+  customerId: number; 
+  firstName: string; 
+  lastName: string; 
+  email: string; 
+  phone?: string;
+  jobTitle?: string;
+  companyId?: number; 
+  companyName?: string; 
+  sourceId?: number; 
+  sourceName?: string;
+  assignedRepId: number; 
+  assignedRepName: string; 
+  assignedRepEmail?: string;
+  createdAt: string;
+  tags: { tagId: number; name: string }[];
 }
 interface Customer {
-  customerId: number; firstName: string; lastName: string; email: string; phone?: string;
-  companyId?: number; companyName?: string; sourceId?: number; sourceName?: string;
-  assignedRepId: number; assignedRepName: string; tags: { tagId: number; name: string }[];
+  customerId: number; 
+  firstName: string; 
+  lastName: string; 
+  email: string; 
+  phone?: string;
+  jobTitle?: string;
+  companyId?: number; 
+  companyName?: string; 
+  sourceId?: number; 
+  sourceName?: string;
+  assignedRepId: number; 
+  assignedRepName: string;
+  assignedRepEmail?: string;
+  createdAt: string;
+  tags: { tagId: number; name: string }[];
 }
 
 const csvCell = (value: string | undefined) => `"${(value ?? '').replace(/"/g, '""')}"`;
@@ -44,8 +68,11 @@ export const CustomersScreen: React.FC = () => {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkTagId, setBulkTagId] = useState('');
   const [bulkRepId, setBulkRepId] = useState('');
+  const [repRoleFilter, setRepRoleFilter] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  interface UserLookup { id: number; name: string; role: string; }
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -55,7 +82,7 @@ export const CustomersScreen: React.FC = () => {
         api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100'),
         api.get<{ id: number; name: string }[]>('/api/sources'),
         api.get<TagItem[]>('/api/tags'),
-        isManagerOrAbove ? api.get<{ id: number; name: string }[]>('/api/users') : Promise.resolve([]),
+        isManagerOrAbove ? api.get<UserLookup[]>('/api/users') : Promise.resolve([] as UserLookup[]),
       ]);
       setCustomers((customerData.data ?? []).map(customer => ({
         customerId: customer.customerId,
@@ -63,18 +90,26 @@ export const CustomersScreen: React.FC = () => {
         lastName: customer.lastName,
         email: customer.email,
         phone: customer.phone,
+        jobTitle: customer.jobTitle,
         companyId: customer.companyId,
         companyName: customer.companyName,
         sourceId: customer.sourceId,
         sourceName: customer.sourceName,
         assignedRepId: customer.assignedRepId,
         assignedRepName: customer.assignedRepName,
+        assignedRepEmail: customer.assignedRepEmail,
+        createdAt: customer.createdAt,
         tags: (customer.tags ?? []).map(tag => ({ tagId: tag.tagId, name: tag.name })),
       })));
       setCompanies((companyData.data ?? []).map(c => ({ id: c.companyId, name: c.name })));
-      setSources(sourceData ?? []); setTags(tagData ?? []); setReps(userData ?? []);
-    } catch { setError('Failed to load customers. Please try again.'); }
-    finally { setLoading(false); }
+      setSources(sourceData ?? []);
+      setTags(tagData ?? []);
+      setReps((userData ?? []).map(u => ({ id: u.id, name: u.name, role: u.role })));
+    } catch {
+      setError('Failed to load customers. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, [isManagerOrAbove]);
 
   useEffect(() => { load(); }, [load, location.key]);
@@ -92,6 +127,8 @@ export const CustomersScreen: React.FC = () => {
     const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
   const selectAll = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(c => c.customerId)));
+
+  const filteredReps = reps.filter(rep => repRoleFilter === 'All' || rep.role === repRoleFilter);
 
   const bulk = async (action: 'tag' | 'reassign') => {
     const value = action === 'tag' ? bulkTagId : bulkRepId;
@@ -149,19 +186,24 @@ export const CustomersScreen: React.FC = () => {
       <div style={{ minWidth: 220 }}>
         <SearchableMultiSelect options={tags.map(t => ({ id: t.id, name: t.name }))} selectedIds={tagIds} onChange={setTagIds} placeholder="Filter tags…" />
       </div>
-      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>}
+      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>}
     </div>
     {selected.size > 0 && <div className="bulk-panel"><span>{selected.size} selected</span>
       <select className="filter-select" disabled={bulkLoading} value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}><option value="">Add tag…</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
       <Button size="sm" disabled={bulkLoading} onClick={() => bulk('tag')}><Tag size={14} /> Add tag</Button>
       {isManagerOrAbove && <>
-        <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+        <select className="filter-select" value={repRoleFilter} onChange={e => setRepRoleFilter(e.target.value)}>
+          <option value="All">All reps</option>
+          <option value="SalesRep">As user</option>
+          <option value="Manager">As manager</option>
+        </select>
+        <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{filteredReps.map(r => <option key={r.id} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>
         <Button size="sm" disabled={bulkLoading} onClick={() => bulk('reassign')}><UserCheck size={14} /> Reassign</Button>
       </>}
       <Button size="sm" variant="secondary" onClick={exportSelected}><Download size={14} /> Export CSV</Button>
       <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} /></Button>
     </div>}
     {filtered.length === 0 && !error ? <EmptyState title="No customers found" description="Adjust your filters or create a new customer." icon={Users} actionText="New Customer" onActionClick={() => navigate('/customers/new')} /> :
-      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)}><td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
+      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Job Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)}><td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName}</td><td>{customer.jobTitle ?? '—'}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
   </Layout>;
 };

@@ -10,12 +10,32 @@ function authHeaders(extra?: Record<string, string>): HeadersInit {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    ...(options?.headers as Record<string, string> || {}),
+  };
+  
+  // Only set Content-Type for JSON requests (not FormData)
+  if (!(options?.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  console.log(`API Request: ${API_BASE}${path}`, { token: token ? 'present' : 'missing', headers });
+  
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: options?.headers ?? authHeaders(),
+    headers,
   });
+  
+  console.log(`API Response: ${res.status} ${res.statusText}`);
+  
   if (!res.ok) {
     const err = await res.text();
+    console.error(`API Error: ${err}`);
     throw new Error(err || `HTTP ${res.status}`);
   }
   if (res.status === 204) return undefined as T;

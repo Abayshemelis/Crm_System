@@ -67,4 +67,19 @@ public class SourcesController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<IActionResult> DeleteSource(int id)
+    {
+        var existing = await _db.Sources.FindAsync(id);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        _db.Sources.Remove(existing);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 }

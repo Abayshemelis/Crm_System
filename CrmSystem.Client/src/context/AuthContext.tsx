@@ -14,6 +14,7 @@ interface AuthContextValue {
   logout: () => void;
   isAdmin: boolean;
   isManagerOrAbove: boolean;
+  userRole: 'Admin' | 'Manager' | 'SalesRep';
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logout,
       isAdmin: user?.role === 'Admin',
       isManagerOrAbove: user?.role === 'Admin' || user?.role === 'Manager',
+      userRole: user?.role ?? 'SalesRep',
     }}>
       {children}
     </AuthContext.Provider>

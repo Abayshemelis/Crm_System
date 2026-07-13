@@ -67,4 +67,19 @@ public class LeadStatusesController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<IActionResult> DeleteLeadStatus(int id)
+    {
+        var existing = await _db.LeadStatuses.FindAsync(id);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        _db.LeadStatuses.Remove(existing);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 }

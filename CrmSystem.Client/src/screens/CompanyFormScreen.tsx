@@ -11,10 +11,17 @@ import './screens.css';
 interface FormState {
     name: string;
     industry: string;
+    companySize: string;
+    sourceId: string;
     website: string;
     address: string;
     phone: string;
     email: string;
+}
+
+interface Lookup {
+    id: number;
+    name: string;
 }
 
 export const CompanyFormScreen: React.FC = () => {
@@ -23,17 +30,24 @@ export const CompanyFormScreen: React.FC = () => {
     const [form, setForm] = useState<FormState>({
         name: '',
         industry: '',
+        companySize: '',
+        sourceId: '',
         website: '',
         address: '',
         phone: '',
         email: ''
     });
+    const [sources, setSources] = useState<Lookup[]>([]);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const isEdit = Boolean(id);
 
     useEffect(() => {
+        api.get<Lookup[]>('/api/sources')
+            .then(setSources)
+            .catch(() => setSources([]));
+
         if (!id) return;
         setIsLoading(true);
         api.get<any>(`/api/companies/${id}`)
@@ -41,6 +55,8 @@ export const CompanyFormScreen: React.FC = () => {
                 setForm({
                     name: company.name,
                     industry: company.industry ?? '',
+                    companySize: company.companySize ?? '',
+                    sourceId: company.sourceId ? String(company.sourceId) : '',
                     website: company.website ?? '',
                     address: company.address ?? '',
                     phone: company.phone ?? '',
@@ -81,12 +97,12 @@ export const CompanyFormScreen: React.FC = () => {
         const payload = {
             name: form.name.trim(),
             industry: form.industry.trim() || null,
-            companySize: null,
+            companySize: form.companySize.trim() || null,
             website: form.website.trim() || null,
             address: form.address.trim() || null,
             phone: form.phone.trim() || null,
             email: form.email.trim() || null,
-            sourceId: null,
+            sourceId: form.sourceId ? Number(form.sourceId) : null,
             assignedRepId: null
         };
 
@@ -127,6 +143,16 @@ export const CompanyFormScreen: React.FC = () => {
                     <div className="form-grid">
                         <Input label="Name" value={form.name} onChange={e => handleChange('name', e.target.value)} error={errors.name} />
                         <Input label="Industry" value={form.industry} onChange={e => handleChange('industry', e.target.value)} error={errors.industry} />
+                        <Input label="Company Size" value={form.companySize} onChange={e => handleChange('companySize', e.target.value)} error={errors.companySize} />
+                        <div className="input-wrapper">
+                            <label className="input-label">Source</label>
+                            <select className="input-field" value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)}>
+                                <option value="">None</option>
+                                {sources.map(source => (
+                                    <option key={source.id} value={source.id}>{source.name}</option>
+                                ))}
+                            </select>
+                        </div>
                         <Input label="Website" value={form.website} onChange={e => handleChange('website', e.target.value)} error={errors.website} />
                         <Input label="Address" value={form.address} onChange={e => handleChange('address', e.target.value)} error={errors.address} />
                         <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />

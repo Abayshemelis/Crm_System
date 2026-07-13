@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace CrmSystem.Domain.Dtos.Company;
 
 // ── Read ────────────────────────────────────────────────────────────────────
@@ -14,6 +16,8 @@ public record CompanyReadDto(
     string? SourceName,
     int? AssignedRepId,
     string? AssignedRepName,
+    string? ContactPersonName,
+    int? ContactPersonCustomerId,
     DateTime CreatedAt,
     decimal TotalPipelineValue,
     IEnumerable<CompanyContactDto> Contacts
@@ -39,26 +43,30 @@ public record CompanySummaryDto(
 
 // ── Create ──────────────────────────────────────────────────────────────────
 public record CompanyCreateDto(
-    string Name,
+    [Required, StringLength(100)] string Name,
     string? Industry,
     string? CompanySize,
-    string? Website,
+    [Url] string? Website,
     string? Address,
     string? Phone,
-    string? Email,
+    [EmailAddress] string? Email,
     int? SourceId,
-    int? AssignedRepId
+    int? AssignedRepId,
+    string? ContactPersonName,
+    int? ContactPersonCustomerId
 );
 
 // ── Update ──────────────────────────────────────────────────────────────────
 public record CompanyUpdateDto(
-    string Name,
+    [Required, StringLength(100)] string Name,
     string? Industry,
     string? CompanySize,
-    string? Website,
+    [Url] string? Website,
     string? Address,
     string? Phone,
-    string? Email,
+    [EmailAddress] string? Email,
     int? SourceId,
-    int? AssignedRepId
+    int? AssignedRepId,
+    string? ContactPersonName,
+    int? ContactPersonCustomerId
 );

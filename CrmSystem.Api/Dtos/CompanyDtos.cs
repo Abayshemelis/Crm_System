@@ -5,15 +5,23 @@ namespace CrmSystem.Api.Dtos;
 public record CreateCompanyRequest(
     [Required][MaxLength(150)] string Name,
     [MaxLength(100)] string? Industry,
+    [MaxLength(50)] string? CompanySize,
     [MaxLength(255)] string? Website,
     [MaxLength(255)] string? Address,
+    [MaxLength(30)] string? Phone,
+    [EmailAddress][MaxLength(255)] string? Email,
+    int? SourceId,
     int? AssignedRepId);
 
 public record UpdateCompanyRequest(
     [Required][MaxLength(150)] string Name,
     [MaxLength(100)] string? Industry,
+    [MaxLength(50)] string? CompanySize,
     [MaxLength(255)] string? Website,
     [MaxLength(255)] string? Address,
+    [MaxLength(30)] string? Phone,
+    [EmailAddress][MaxLength(255)] string? Email,
+    int? SourceId,
     int? AssignedRepId);
 
 public record CompanySummaryDto(
@@ -36,8 +44,13 @@ public record CompanyDetailDto(
     int CompanyId,
     string Name,
     string? Industry,
+    string? CompanySize,
     string? Website,
     string? Address,
+    string? Phone,
+    string? Email,
+    int? SourceId,
+    string? SourceName,
     int? AssignedRepId,
     string? AssignedRepName,
     string? AssignedRepEmail,

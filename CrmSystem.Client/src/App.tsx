@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ManagerOnlyRoute } from './components/auth/ManagerOnlyRoute';
 import { LoginScreen } from './screens/LoginScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './screens/ResetPasswordScreen';
@@ -39,8 +40,8 @@ function AppRoutes() {
         <Route path="/leads/new" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
         <Route path="/leads/:id" element={<ProtectedRoute><LeadDetailScreen /></ProtectedRoute>} />
         <Route path="/leads/:id/edit" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><UsersScreen /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
+        <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
+        <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
@@ -77,11 +78,19 @@ function AppShell() {
         }
 
         if (isLightBackground(theme.background)) {
-          root.style.setProperty('--text-primary', '#111827');
-          root.style.setProperty('--text-secondary', '#475569');
-          root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.9)');
+          root.setAttribute('data-theme', 'light');
+          root.style.setProperty('--text-primary', '#1f2937');
+          root.style.setProperty('--text-secondary', '#6b7280');
+          root.style.setProperty('--text-muted', '#9ca3af');
+          root.style.setProperty('--sidebar-text-primary', '#1f2937');
+          root.style.setProperty('--sidebar-text-secondary', '#6b7280');
+          root.style.setProperty('--glass-bg', '#ffffff');
           root.style.setProperty('--glass-border', 'rgba(148, 163, 184, 0.3)');
-          root.style.setProperty('--border-color', '#cbd5e1');
+          root.style.setProperty('--border-color', '#e5e7eb');
+          root.style.setProperty('--bg-primary', '#ffffff');
+          root.style.setProperty('--bg-secondary', '#f9fafb');
+        } else {
+          root.removeAttribute('data-theme');
         }
       } catch (error) {
         console.error('Failed to load theme:', error);

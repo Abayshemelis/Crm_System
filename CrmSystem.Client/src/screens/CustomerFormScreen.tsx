@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
 interface FormState {
@@ -17,14 +18,17 @@ interface FormState {
     companyId: string;
     companyName: string;
     sourceId: string;
+    assignedRepId: string;
 }
 
 interface Company { companyId: number; name: string; }
 interface Source { id: number; name: string; }
+interface UserLookup { id: number; name: string; role: string; }
 
 export const CustomerFormScreen: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { user, isManagerOrAbove } = useAuth();
     const [form, setForm] = useState<FormState>({
         firstName: '',
         lastName: '',
@@ -33,13 +37,15 @@ export const CustomerFormScreen: React.FC = () => {
         jobTitle: '',
         companyId: '',
         companyName: '',
-        sourceId: ''
+        sourceId: '',
+        assignedRepId: ''
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [sources, setSources] = useState<Source[]>([]);
     const [companies, setCompanies] = useState<Company[]>([]);
+    const [reps, setReps] = useState<UserLookup[]>([]);
     const isEdit = Boolean(id);
 
     useEffect(() => {
@@ -50,7 +56,13 @@ export const CustomerFormScreen: React.FC = () => {
         api.get<Source[]>('/api/sources')
             .then(data => setSources(data))
             .catch(() => { });
-    }, [navigate]);
+
+        if (isManagerOrAbove) {
+            api.get<UserLookup[]>('/api/users')
+                .then(data => setReps(data ?? []))
+                .catch(() => setReps([]));
+        }
+    }, [navigate, isManagerOrAbove]);
 
     useEffect(() => {
         if (!id) return;
@@ -66,6 +78,7 @@ export const CustomerFormScreen: React.FC = () => {
                     companyId: customer.companyId ? String(customer.companyId) : '',
                     companyName: customer.companyName ?? '',
                     sourceId: customer.sourceId ? String(customer.sourceId) : '',
+                    assignedRepId: customer.assignedRepId ? String(customer.assignedRepId) : '',
                 });
             })
             .catch(() => navigate('/customers'))
@@ -95,6 +108,11 @@ export const CustomerFormScreen: React.FC = () => {
             tempErrors.email = 'Email address is invalid';
         }
 
+        // Only require assigned rep if user is manager AND there are reps available
+        if (isManagerOrAbove && reps.length > 0 && !form.assignedRepId) {
+            tempErrors.assignedRepId = 'Please select an assigned rep.';
+        }
+
         setErrors(tempErrors);
         return Object.keys(tempErrors).length === 0;
     };
@@ -103,7 +121,7 @@ export const CustomerFormScreen: React.FC = () => {
         setApiError(null);
         if (!validate()) return;
 
-        const payload = {
+        const payload: any = {
             firstName: form.firstName.trim(),
             lastName: form.lastName.trim(),
             email: form.email.trim(),
@@ -111,8 +129,17 @@ export const CustomerFormScreen: React.FC = () => {
             jobTitle: form.jobTitle.trim() || null,
             companyId: form.companyId ? Number(form.companyId) : null,
             sourceId: form.sourceId ? Number(form.sourceId) : null,
-            assignedRepId: null
         };
+
+        // Always send assignedRepId - use current user if not selected
+        if (isManagerOrAbove && form.assignedRepId) {
+            payload.assignedRepId = Number(form.assignedRepId);
+        } else {
+            // Default to current user
+            payload.assignedRepId = user?.userId;
+        }
+
+        console.log('Submitting customer form:', { isEdit, payload, user, userId: user?.userId });
 
         try {
             if (isEdit) {
@@ -120,9 +147,10 @@ export const CustomerFormScreen: React.FC = () => {
             } else {
                 await api.post('/api/customers', payload);
             }
+            console.log('Customer saved successfully');
             navigate('/customers');
         } catch (error: any) {
-            console.error(error);
+            console.error('Error saving customer:', error);
             setApiError(error.message || 'An error occurred while saving the customer record.');
         }
     };
@@ -149,35 +177,35 @@ export const CustomerFormScreen: React.FC = () => {
                         </div>
                     )}
                     <div className="form-grid">
-                        <Input 
-                            label="First Name" 
-                            value={form.firstName} 
-                            onChange={e => handleChange('firstName', e.target.value)} 
+                        <Input
+                            label="First Name"
+                            value={form.firstName}
+                            onChange={e => handleChange('firstName', e.target.value)}
                             error={errors.firstName}
                         />
-                        <Input 
-                            label="Last Name" 
-                            value={form.lastName} 
-                            onChange={e => handleChange('lastName', e.target.value)} 
+                        <Input
+                            label="Last Name"
+                            value={form.lastName}
+                            onChange={e => handleChange('lastName', e.target.value)}
                             error={errors.lastName}
                         />
-                        <Input 
-                            label="Email" 
-                            type="email" 
-                            value={form.email} 
-                            onChange={e => handleChange('email', e.target.value)} 
+                        <Input
+                            label="Email"
+                            type="email"
+                            value={form.email}
+                            onChange={e => handleChange('email', e.target.value)}
                             error={errors.email}
                         />
-                        <Input 
-                            label="Phone" 
-                            value={form.phone} 
-                            onChange={e => handleChange('phone', e.target.value)} 
+                        <Input
+                            label="Phone"
+                            value={form.phone}
+                            onChange={e => handleChange('phone', e.target.value)}
                             error={errors.phone}
                         />
-                        <Input 
-                            label="Job Title" 
-                            value={form.jobTitle} 
-                            onChange={e => handleChange('jobTitle', e.target.value)} 
+                        <Input
+                            label="Job Title"
+                            value={form.jobTitle}
+                            onChange={e => handleChange('jobTitle', e.target.value)}
                             error={errors.jobTitle}
                         />
                         <div className="input-wrapper">
@@ -198,6 +226,18 @@ export const CustomerFormScreen: React.FC = () => {
                                 ))}
                             </select>
                         </div>
+                        {isManagerOrAbove && (
+                            <div className="input-wrapper">
+                                <label className="input-label">Assigned Rep</label>
+                                <select value={form.assignedRepId} onChange={e => handleChange('assignedRepId', e.target.value)} className="input-field">
+                                    <option value="">Select rep</option>
+                                    {reps.map(rep => (
+                                        <option key={rep.id} value={rep.id}>{rep.name}{rep.role ? ` (${rep.role})` : ''}</option>
+                                    ))}
+                                </select>
+                                {errors.assignedRepId && <div className="input-error">{errors.assignedRepId}</div>}
+                            </div>
+                        )}
                     </div>
                     <div style={{ marginTop: '1rem' }}>
                         <Button onClick={handleSubmit}>{isEdit ? 'Save changes' : 'Create customer'}</Button>

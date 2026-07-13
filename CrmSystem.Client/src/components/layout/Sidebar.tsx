@@ -55,7 +55,7 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       <div className="sidebar-footer">
-        {user && (
+        {user && isManagerOrAbove && (
           <NavLink to="/settings" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <Settings className="link-icon" />
             <span>Settings</span>

@@ -16,17 +16,48 @@ interface CompanyApiResponse {
   Name?: string;
   industry?: string;
   Industry?: string;
+  companySize?: string;
+  CompanySize?: string;
   website?: string;
   Website?: string;
   address?: string;
   Address?: string;
+  phone?: string;
+  Phone?: string;
+  email?: string;
+  Email?: string;
+  sourceId?: number;
+  SourceId?: number;
+  sourceName?: string;
+  SourceName?: string;
+  assignedRepId?: number;
+  AssignedRepId?: number;
+  assignedRepName?: string;
+  AssignedRepName?: string;
+  contactCount?: number;
+  ContactCount?: number;
+  createdAt?: string;
+  CreatedAt?: string;
 }
 interface CompanyApiEnvelope {
   data?: CompanyApiResponse[];
   Data?: CompanyApiResponse[];
 }
 interface Company {
-  companyId: number; name: string; industry?: string; website?: string; address?: string;
+  companyId: number; 
+  name: string; 
+  industry?: string; 
+  companySize?: string;
+  website?: string; 
+  address?: string;
+  phone?: string;
+  email?: string;
+  sourceId?: number;
+  sourceName?: string;
+  assignedRepId?: number;
+  assignedRepName?: string;
+  contactCount?: number;
+  createdAt?: string;
 }
 
 export const CompaniesScreen: React.FC = () => {
@@ -45,8 +76,17 @@ export const CompaniesScreen: React.FC = () => {
           companyId: company.companyId ?? company.CompanyId ?? 0,
           name: company.name ?? company.Name ?? 'Unnamed company',
           industry: company.industry ?? company.Industry,
+          companySize: company.companySize ?? company.CompanySize,
           website: company.website ?? company.Website,
           address: company.address ?? company.Address,
+          phone: company.phone ?? company.Phone,
+          email: company.email ?? company.Email,
+          sourceId: company.sourceId ?? company.SourceId,
+          sourceName: company.sourceName ?? company.SourceName,
+          assignedRepId: company.assignedRepId ?? company.AssignedRepId,
+          assignedRepName: company.assignedRepName ?? company.AssignedRepName,
+          contactCount: company.contactCount ?? company.ContactCount,
+          createdAt: company.createdAt ?? company.CreatedAt,
         }));
         setCompanies(items);
       })
@@ -104,11 +144,16 @@ export const CompaniesScreen: React.FC = () => {
                 <div className="customer-info">
                   <h3>{c.name}</h3>
                   <p>{c.industry ?? 'Unknown industry'}</p>
+                  {c.companySize && <span className="badge" style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'var(--accent-primary)', color: 'white' }}>{c.companySize}</span>}
                 </div>
               </div>
               <div className="customer-details">
                 {c.website && <div className="detail-row"><Globe size={14} /><span>{c.website}</span></div>}
                 {c.address && <div className="detail-row"><MapPin size={14} /><span>{c.address}</span></div>}
+                {c.phone && <div className="detail-row"><Briefcase size={14} /><span>{c.phone}</span></div>}
+                {c.email && <div className="detail-row"><Building2 size={14} /><span>{c.email}</span></div>}
+                {c.contactCount !== undefined && <div className="detail-row"><Building size={14} /><span>{c.contactCount} contacts</span></div>}
+                {c.sourceName && <div className="detail-row"><span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Source: {c.sourceName}</span></div>}
               </div>
             </Card.Content>
           </Card>
