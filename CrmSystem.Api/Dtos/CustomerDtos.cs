@@ -70,7 +70,8 @@ public record BulkCustomerActionRequest(
     [Required] IEnumerable<int> CustomerIds,
     [Required] string Action,
     int? TagId,
-    int? NewRepId);
+    int? NewRepId,
+    int? NewCompanyId);
 
 public record CustomerActivityDto(
     int ActivityId,

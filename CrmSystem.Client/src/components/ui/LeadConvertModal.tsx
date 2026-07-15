@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
+import { DatePicker } from './DatePicker';
 import { ConfirmDialog } from './ConfirmDialog';
 import { api } from '../../lib/api';
 import './ui.css';
@@ -39,6 +40,9 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
   const [createCompany, setCreateCompany] = useState(false);
   const [companyName, setCompanyName] = useState(leadData.companyName || '');
   const [createInitialOpportunity, setCreateInitialOpportunity] = useState(false);
+  const [opportunityTitle, setOpportunityTitle] = useState('');
+  const [opportunityEstimatedValue, setOpportunityEstimatedValue] = useState('');
+  const [opportunityExpectedCloseDate, setOpportunityExpectedCloseDate] = useState('');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +55,12 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
       setEmail(leadData.email || '');
       setPhone(leadData.phone || '');
       setCompanyName(leadData.companyName || '');
+      setCompanyId('');
+      setCreateCompany(false);
+      setCreateInitialOpportunity(false);
+      setOpportunityTitle('');
+      setOpportunityEstimatedValue('');
+      setOpportunityExpectedCloseDate('');
       setError(null);
       setErrors({});
       
@@ -73,6 +83,18 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
       newErrors.companyName = 'Company name is required when creating a company.';
     }
     
+    if (createInitialOpportunity) {
+      if (!opportunityTitle.trim()) {
+        newErrors.opportunityTitle = 'Opportunity title is required.';
+      }
+      if (!opportunityEstimatedValue.trim()) {
+        newErrors.opportunityEstimatedValue = 'Estimated value is required.';
+      }
+      if (!opportunityExpectedCloseDate.trim()) {
+        newErrors.opportunityExpectedCloseDate = 'Expected close date is required.';
+      }
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -92,7 +114,10 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
         companyId: createCompany ? null : (companyId ? Number(companyId) : null),
         createCompany: createCompany,
         companyName: createCompany ? companyName.trim() : null,
-        createInitialOpportunity: false // Phase 3 feature
+        createInitialOpportunity: createInitialOpportunity,
+        opportunityTitle: createInitialOpportunity ? opportunityTitle.trim() : null,
+        opportunityEstimatedValue: createInitialOpportunity ? Number(opportunityEstimatedValue) : null,
+        opportunityExpectedCloseDate: createInitialOpportunity ? opportunityExpectedCloseDate || null : null
       };
       
       const response = await api.post<{ customerId: number; companyId?: number }>(
@@ -205,13 +230,40 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
                 type="checkbox"
                 checked={createInitialOpportunity}
                 onChange={e => setCreateInitialOpportunity(e.target.checked)}
-                disabled
               />
               <span style={{ fontSize: '0.875rem' }}>
-                Create an initial opportunity (Available in Phase 3)
+                Create an initial opportunity
               </span>
             </label>
           </div>
+          
+          {createInitialOpportunity && (
+            <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.05)', borderRadius: 'var(--radius-md)' }}>
+              <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: 500 }}>Opportunity Details</h4>
+              <Input
+                label="Title"
+                value={opportunityTitle}
+                onChange={e => setOpportunityTitle(e.target.value)}
+                error={errors.opportunityTitle}
+                placeholder="e.g., BrightPath Logistics — Initial Deal"
+              />
+              <Input
+                label="Estimated Value ($)"
+                type="number"
+                value={opportunityEstimatedValue}
+                onChange={e => setOpportunityEstimatedValue(e.target.value)}
+                error={errors.opportunityEstimatedValue}
+                placeholder="15000"
+                style={{ marginTop: '0.75rem' }}
+              />
+              <DatePicker
+                label="Expected Close Date"
+                value={opportunityExpectedCloseDate}
+                onChange={e => setOpportunityExpectedCloseDate(e)}
+                error={errors.opportunityExpectedCloseDate}
+              />
+            </div>
+          )}
         </div>
         
         <div className="modal-footer">

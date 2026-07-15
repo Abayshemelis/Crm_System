@@ -22,4 +22,6 @@ public class AuditLog
     public Identity? ChangedBy { get; set; }
 
     public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+
+    public bool IsDeleted { get; set; } = false;
 }

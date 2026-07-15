@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Users, Building2, UserCircle, Settings, LogIn } from 'lucide-react';
+import { Users, Building2, UserCircle, Settings, LogIn, Kanban } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
 
@@ -35,6 +35,11 @@ export const Sidebar: React.FC = () => {
             <NavLink to="/leads" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <Users className="link-icon" />
               <span>Leads</span>
+            </NavLink>
+
+            <NavLink to="/pipeline" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <Kanban className="link-icon" />
+              <span>Pipeline</span>
             </NavLink>
 
             {isManagerOrAbove && (

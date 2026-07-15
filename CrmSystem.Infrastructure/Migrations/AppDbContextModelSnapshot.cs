@@ -199,6 +199,9 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
                     b.Property<string>("NewValue")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -361,7 +364,7 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CustomerId"));
 
-                    b.Property<int?>("AssignedRepId")
+                    b.Property<int>("AssignedRepId")
                         .HasColumnType("int");
 
                     b.Property<int?>("CompanyId")
@@ -500,7 +503,6 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
@@ -521,7 +523,7 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int>("LeadStatusId")
+                    b.Property<int?>("LeadStatusId")
                         .HasColumnType("int");
 
                     b.Property<string>("Notes")
@@ -759,6 +761,32 @@ namespace CrmSystem.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("OpportunityStages");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.Property<int>("TokenId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TokenId"));
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("IdentityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("TokenId");
+
+                    b.HasIndex("IdentityId");
+
+                    b.ToTable("PasswordResetTokens");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Product", b =>
@@ -1167,7 +1195,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasOne("CrmSystem.Domain.Entities.Identity", "AssignedRep")
                         .WithMany()
                         .HasForeignKey("AssignedRepId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .IsRequired();
 
                     b.HasOne("CrmSystem.Domain.Entities.Company", "Company")
                         .WithMany()
@@ -1212,8 +1241,7 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasOne("CrmSystem.Domain.Entities.LeadStatus", "LeadStatus")
                         .WithMany()
                         .HasForeignKey("LeadStatusId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("CrmSystem.Domain.Entities.Source", "Source")
                         .WithMany()
@@ -1306,6 +1334,17 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Opportunity");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.PasswordResetToken", b =>
+                {
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "Identity")
+                        .WithMany()
+                        .HasForeignKey("IdentityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Identity");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Product", b =>

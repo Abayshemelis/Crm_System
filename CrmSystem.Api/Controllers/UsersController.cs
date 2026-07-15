@@ -92,7 +92,7 @@ public class UsersController : ControllerBase
         // Only Admin can create Manager users
         if (role.Name == "Manager" && currentRole != "Admin")
         {
-            return Forbid(new { message = "Only Admin can create Manager users." });
+            return Forbid();
         }
 
         // Prevent creating Admin users
@@ -144,7 +144,7 @@ public class UsersController : ControllerBase
         // Only Admin can assign Manager role
         if (role.Name == "Manager" && currentRole != "Admin")
         {
-            return Forbid(new { message = "Only Admin can assign Manager role." });
+            return Forbid();
         }
 
         // Prevent assigning Admin role

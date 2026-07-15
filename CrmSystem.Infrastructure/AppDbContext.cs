@@ -453,6 +453,7 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(al => al.ChangedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(al => !al.IsDeleted);
         });
     }
 }

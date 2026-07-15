@@ -48,6 +48,8 @@ export const api = {
     request<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE', headers: authHeaders() }),
   upload: <T>(path: string, form: FormData) =>
     request<T>(path, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` }, body: form }),

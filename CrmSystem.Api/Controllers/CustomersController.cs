@@ -2,6 +2,7 @@ using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
+using CrmSystem.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,13 @@ public class CustomersController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
+    private readonly IAuditService _auditService;
 
-    public CustomersController(AppDbContext db, ICurrentUserService currentUser)
+    public CustomersController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
     {
         _db = db;
         _currentUser = currentUser;
+        _auditService = auditService;
     }
 
     [HttpGet]
@@ -199,11 +202,27 @@ public class CustomersController : ControllerBase
             return BadRequest(new { message = "Company not found." });
         }
 
+        // Prevent assigning customer to a different company if they already belong to one
+        if (request.CompanyId != null && customer.CompanyId != null && request.CompanyId != customer.CompanyId)
+        {
+            return BadRequest(new { message = "Customer already belongs to a company. Please remove them from their current company first." });
+        }
+
         if (request.SourceId is not null &&
             !await _db.Sources.AnyAsync(s => s.SourceId == request.SourceId))
         {
             return BadRequest(new { message = "Source not found." });
         }
+
+        // Capture old values for audit logging
+        var oldAssignedRepId = customer.AssignedRepId;
+        var oldFirstName = customer.FirstName;
+        var oldLastName = customer.LastName;
+        var oldEmail = customer.Email;
+        var oldPhone = customer.Phone;
+        var oldJobTitle = customer.JobTitle;
+        var oldCompanyId = customer.CompanyId;
+        var oldSourceId = customer.SourceId;
 
         customer.FirstName = request.FirstName.Trim();
         customer.LastName = request.LastName.Trim();
@@ -215,6 +234,110 @@ public class CustomersController : ControllerBase
         customer.AssignedRepId = assignedRepId.Value;
 
         await _db.SaveChangesAsync();
+
+        // Log all field changes
+        if (_currentUser.UserId is not null)
+        {
+            var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+            if (entityType is not null)
+            {
+                // Log assignment change if AssignedRepId changed
+                if (oldAssignedRepId != customer.AssignedRepId)
+                {
+                    await _auditService.LogAssignmentAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        oldRepId: oldAssignedRepId,
+                        newRepId: customer.AssignedRepId,
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                // Log other field changes
+                if (oldFirstName != customer.FirstName)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "FirstName",
+                        oldValue: oldFirstName,
+                        newValue: customer.FirstName,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldLastName != customer.LastName)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "LastName",
+                        oldValue: oldLastName,
+                        newValue: customer.LastName,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldEmail != customer.Email)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "Email",
+                        oldValue: oldEmail,
+                        newValue: customer.Email,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldPhone != customer.Phone)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "Phone",
+                        oldValue: oldPhone ?? string.Empty,
+                        newValue: customer.Phone ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldJobTitle != customer.JobTitle)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "JobTitle",
+                        oldValue: oldJobTitle ?? string.Empty,
+                        newValue: customer.JobTitle ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldCompanyId != customer.CompanyId)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "CompanyId",
+                        oldValue: oldCompanyId?.ToString() ?? string.Empty,
+                        newValue: customer.CompanyId?.ToString() ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldSourceId.HasValue != customer.SourceId.HasValue || (oldSourceId.HasValue && customer.SourceId.HasValue && oldSourceId.Value != customer.SourceId.Value))
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "SourceId",
+                        oldValue: oldSourceId?.ToString() ?? "null",
+                        newValue: customer.SourceId?.ToString() ?? "null",
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+            }
+        }
 
         await _db.Entry(customer).Reference(c => c.Company).LoadAsync();
         await _db.Entry(customer).Reference(c => c.AssignedRep).LoadAsync();
@@ -241,7 +364,79 @@ public class CustomersController : ControllerBase
         customer.IsDeleted = true;
         await _db.SaveChangesAsync();
 
+        // Log deletion audit
+        if (_currentUser.UserId is not null)
+        {
+            var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+            if (entityType is not null)
+            {
+                await _auditService.LogDeletionAsync(entityType.EntityTypeId, customer.CustomerId, _currentUser.UserId.Value);
+            }
+        }
+
         return NoContent();
+    }
+
+    [HttpGet("{id:int}/audit")]
+    public async Task<ActionResult> GetAuditLogs(int id)
+    {
+        var customer = await _db.Customers.SingleOrDefaultAsync(c => c.CustomerId == id);
+        if (customer is null)
+        {
+            return NotFound(new { message = "Customer not found." });
+        }
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+        if (entityType is null)
+        {
+            return Ok(new object[0]);
+        }
+
+        var auditLogs = await _db.AuditLogs
+            .Include(a => a.ChangedBy)
+            .Where(a => a.EntityTypeId == entityType.EntityTypeId && a.EntityId == id)
+            .OrderByDescending(a => a.ChangedAt)
+            .Select(a => new
+            {
+                a.AuditLogId,
+                AuditActionType = a.AuditActionType != null ? a.AuditActionType.Name : null,
+                a.FieldName,
+                a.OldValue,
+                a.NewValue,
+                ChangedByName = a.ChangedBy != null ? a.ChangedBy.Name : null,
+                a.ChangedAt
+            })
+            .ToListAsync();
+
+        return Ok(auditLogs);
+    }
+
+    [HttpDelete("{id:int}/audit")]
+    public async Task<IActionResult> ClearHistory(int id)
+    {
+        var customer = await _db.Customers.SingleOrDefaultAsync(c => c.CustomerId == id);
+        if (customer is null)
+        {
+            return NotFound(new { message = "Customer not found." });
+        }
+
+        if (!_currentUser.CanAccessOwnedRecord(customer.AssignedRepId))
+        {
+            return Forbid();
+        }
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+        if (entityType is null)
+        {
+            return Ok(new { message = "History cleared." });
+        }
+
+        if (_currentUser.UserId is not null)
+        {
+            await _auditService.ClearHistoryAsync(entityType.EntityTypeId, customer.CustomerId, _currentUser.UserId.Value);
+        }
+
+        return Ok(new { message = "History cleared." });
     }
 
     [HttpPost("{id:int}/tags")]
@@ -345,6 +540,97 @@ public class CustomersController : ControllerBase
             if (request.NewRepId is null || !await IsAssignableRepAsync(request.NewRepId.Value))
                 return BadRequest(new { message = "A valid sales rep is required." });
             foreach (var customer in customers) customer.AssignedRepId = request.NewRepId.Value;
+        }
+        else if (string.Equals(request.Action, "assign_company", StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.NewCompanyId is null) return BadRequest(new { message = "A company is required." });
+            var company = await _db.Companies.FindAsync(request.NewCompanyId.Value);
+            if (company is null) return NotFound(new { message = "Company not found." });
+            
+            // Check if any customers already belong to a different company
+            var customersWithDifferentCompany = customers.Where(c => c.CompanyId != null && c.CompanyId != request.NewCompanyId.Value).ToList();
+            if (customersWithDifferentCompany.Any())
+            {
+                var customerNames = string.Join(", ", customersWithDifferentCompany.Select(c => $"{c.FirstName} {c.LastName}"));
+                return BadRequest(new { message = $"The following customers already belong to another company: {customerNames}. Please remove them from their current company first." });
+            }
+            
+            var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+            var companyEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Company");
+            
+            if (customerEntityType is not null && companyEntityType is not null && _currentUser.UserId is not null)
+            {
+                foreach (var customer in customers)
+                {
+                    var oldCompanyId = customer.CompanyId;
+                    customer.CompanyId = request.NewCompanyId.Value;
+                    
+                    // Log to customer's audit history
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: customerEntityType.EntityTypeId,
+                        entityId: customer.CustomerId,
+                        fieldName: "CompanyId",
+                        oldValue: oldCompanyId?.ToString() ?? string.Empty,
+                        newValue: request.NewCompanyId.Value.ToString(),
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                    
+                    // Log to company's audit history
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: companyEntityType.EntityTypeId,
+                        entityId: request.NewCompanyId.Value,
+                        fieldName: "CustomerAdded",
+                        oldValue: string.Empty,
+                        newValue: $"{customer.FirstName} {customer.LastName} (ID: {customer.CustomerId})",
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+            }
+            else
+            {
+                foreach (var customer in customers) customer.CompanyId = request.NewCompanyId.Value;
+            }
+        }
+        else if (string.Equals(request.Action, "remove_company", StringComparison.OrdinalIgnoreCase))
+        {
+            var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+            var companyEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Company");
+            
+            if (customerEntityType is not null && companyEntityType is not null && _currentUser.UserId is not null)
+            {
+                foreach (var customer in customers)
+                {
+                    if (customer.CompanyId != null)
+                    {
+                        var oldCompanyId = customer.CompanyId;
+                        customer.CompanyId = null;
+                        
+                        // Log to customer's audit history
+                        await _auditService.LogFieldChangeAsync(
+                            entityTypeId: customerEntityType.EntityTypeId,
+                            entityId: customer.CustomerId,
+                            fieldName: "CompanyId",
+                            oldValue: oldCompanyId.ToString(),
+                            newValue: string.Empty,
+                            actionTypeName: "Update",
+                            changedById: _currentUser.UserId.Value);
+                        
+                        // Log to company's audit history
+                        await _auditService.LogFieldChangeAsync(
+                            entityTypeId: companyEntityType.EntityTypeId,
+                            entityId: oldCompanyId.Value,
+                            fieldName: "CustomerRemoved",
+                            oldValue: $"{customer.FirstName} {customer.LastName} (ID: {customer.CustomerId})",
+                            newValue: string.Empty,
+                            actionTypeName: "Update",
+                            changedById: _currentUser.UserId.Value);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var customer in customers) customer.CompanyId = null;
+            }
         }
         else return BadRequest(new { message = "Unsupported bulk action." });
 

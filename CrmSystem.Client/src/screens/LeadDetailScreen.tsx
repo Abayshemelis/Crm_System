@@ -5,8 +5,9 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { LeadConvertModal } from '../components/ui/LeadConvertModal';
+import { AuditHistory } from '../components/audit/AuditHistory';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle, History } from 'lucide-react';
 import './screens.css';
 
 interface LeadDetail {
@@ -19,8 +20,11 @@ interface LeadDetail {
     jobTitle?: string;
     sourceName?: string;
     leadStatusName: string;
+    leadStatusId?: number;
     notes?: string;
 }
+
+type TabId = 'details' | 'audit';
 
 export const LeadDetailScreen: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -28,6 +32,11 @@ export const LeadDetailScreen: React.FC = () => {
     const [lead, setLead] = useState<LeadDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showConvertModal, setShowConvertModal] = useState(false);
+    const [activeTab, setActiveTab] = useState<TabId>('details');
+    const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
+    const [isEditingStatus, setIsEditingStatus] = useState(false);
+    const [editingStatusId, setEditingStatusId] = useState<string>('');
+    const [statusUpdateError, setStatusUpdateError] = useState<string | null>(null);
 
     const fetchLead = useCallback(async () => {
         if (!id) return;
@@ -53,7 +62,35 @@ export const LeadDetailScreen: React.FC = () => {
         navigate(`/customers/${customerId}`);
     };
 
+    const handleStatusUpdate = async () => {
+        if (!id || !lead) return;
+        setStatusUpdateError(null);
+        try {
+            await api.put(`/api/leads/${id}`, {
+                firstName: lead.firstName,
+                lastName: lead.lastName,
+                email: lead.email,
+                phone: lead.phone,
+                companyName: lead.companyName,
+                jobTitle: lead.jobTitle,
+                sourceId: null,
+                leadStatusId: editingStatusId ? Number(editingStatusId) : lead.leadStatusId,
+                notes: lead.notes
+            });
+            await fetchLead();
+            setIsEditingStatus(false);
+        } catch (error: any) {
+            setStatusUpdateError(error.message || 'Failed to update status');
+        }
+    };
+
     useEffect(() => { fetchLead(); }, [fetchLead]);
+
+    useEffect(() => {
+        api.get<{ id: number; name: string }[]>('/api/leadstatuses')
+            .then(data => setStatuses(data))
+            .catch(() => setStatuses([]));
+    }, []);
 
     // Loading state with skeleton
     if (isLoading || !lead) {
@@ -104,7 +141,34 @@ export const LeadDetailScreen: React.FC = () => {
                 <div className="detail-header-info">
                     <div>
                         <h1>{lead.firstName} {lead.lastName}</h1>
-                        <p>{lead.leadStatusName} · {lead.sourceName ?? 'No source'}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {isEditingStatus ? (
+                                <>
+                                    <select
+                                        className="filter-input"
+                                        value={editingStatusId}
+                                        onChange={e => setEditingStatusId(e.target.value)}
+                                        style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem', minWidth: '120px' }}
+                                    >
+                                        {statuses.map(status => (
+                                            <option key={status.id} value={status.id}>{status.name}</option>
+                                        ))}
+                                    </select>
+                                    <Button size="sm" onClick={handleStatusUpdate} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Save</Button>
+                                    <Button variant="ghost" size="sm" onClick={() => { setIsEditingStatus(false); setStatusUpdateError(null); }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Cancel</Button>
+                                </>
+                            ) : (
+                                <>
+                                    <span>{lead.leadStatusName}</span>
+                                    {lead.leadStatusName !== 'Converted' && (
+                                        <Button variant="ghost" size="sm" onClick={() => { setIsEditingStatus(true); setEditingStatusId(String(lead.leadStatusId || '')); setStatusUpdateError(null); }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Change</Button>
+                                    )}
+                                </>
+                            )}
+                            <span>·</span>
+                            <span>{lead.sourceName ?? 'No source'}</span>
+                        </div>
+                        {statusUpdateError && <p style={{ color: 'var(--accent-red, #ef4444)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{statusUpdateError}</p>}
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -130,10 +194,55 @@ export const LeadDetailScreen: React.FC = () => {
                 </Card>
 
                 <div className="detail-main">
+                    <div className="tabs-bar">
+                        {(['details', 'audit'] as TabId[]).map(tab => (
+                            <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
+                                {tab === 'details' && <span>Details</span>}
+                                {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
+                            </button>
+                        ))}
+                    </div>
+
                     <Card className="glass-panel">
                         <Card.Content>
-                            <h3>Notes</h3>
-                            <p>{lead.notes ?? 'No notes yet.'}</p>
+                            {activeTab === 'details' ? (
+                                <>
+                                    <h3>Contact Information</h3>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Email</p>
+                                            <p>{lead.email ?? 'No email'}</p>
+                                        </div>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Phone</p>
+                                            <p>{lead.phone ?? 'No phone'}</p>
+                                        </div>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Company</p>
+                                            <p>{lead.companyName ?? 'No company'}</p>
+                                        </div>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Job Title</p>
+                                            <p>{lead.jobTitle ?? 'No job title'}</p>
+                                        </div>
+                                    </div>
+                                    <h3>Additional Information</h3>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Status</p>
+                                            <p>{lead.leadStatusName}</p>
+                                        </div>
+                                        <div>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Source</p>
+                                            <p>{lead.sourceName ?? 'No source'}</p>
+                                        </div>
+                                    </div>
+                                    <h3>Notes</h3>
+                                    <p>{lead.notes ?? 'No notes yet.'}</p>
+                                </>
+                            ) : (
+                                <AuditHistory entityType="lead" entityId={Number(id)} />
+                            )}
                         </Card.Content>
                     </Card>
                 </div>

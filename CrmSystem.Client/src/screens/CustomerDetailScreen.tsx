@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { AuditHistory } from '../components/audit/AuditHistory';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus, History } from 'lucide-react';
 import Attachments from '../components/attachments/Attachments';
 import './screens.css';
 
@@ -37,7 +37,7 @@ interface EditFormState {
   sourceId: string;
 }
 
-type TabId = 'profile' | 'tags' | 'attachments';
+type TabId = 'profile' | 'tags' | 'attachments' | 'audit';
 
 export const CustomerDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,8 +47,6 @@ export const CustomerDetailScreen: React.FC = () => {
   const [attachmentsCount, setAttachmentsCount] = useState(0);
   const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [isLoading, setIsLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [fileInput, setFileInput] = useState<File | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -65,6 +63,7 @@ export const CustomerDetailScreen: React.FC = () => {
     sourceId: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
 
   const fetchAttachmentCount = useCallback(async () => {
     if (!id) return;
@@ -166,6 +165,8 @@ export const CustomerDetailScreen: React.FC = () => {
       setSuccessMessage('Customer updated successfully.');
       setIsEditing(false);
       fetchAll();
+      // Trigger audit history refresh
+      setAuditRefreshTrigger(t => t + 1);
     } catch (error: any) {
       setSaveError(error?.message ?? 'Unable to save changes.');
     } finally {
@@ -322,11 +323,12 @@ export const CustomerDetailScreen: React.FC = () => {
         {/* Right: tabs */}
         <div className="detail-main">
           <div className="tabs-bar">
-            {(['profile', 'tags', 'attachments'] as TabId[]).map(tab => (
+            {(['profile', 'tags', 'attachments', 'audit'] as TabId[]).map(tab => (
               <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
-                {tab === 'profile' && 'Profile'}
-                {tab === 'tags' && `Tags (${customer.tags?.length ?? 0})`}
-                {tab === 'attachments' && `Attachments (${attachmentsCount})`}
+                {tab === 'profile' && <span>Profile</span>}
+                {tab === 'tags' && <span>Tags ({customer.tags?.length ?? 0})</span>}
+                {tab === 'attachments' && <span>Attachments ({attachmentsCount})</span>}
+                {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
               </button>
             ))}
           </div>
@@ -342,7 +344,7 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="profile-field"><label>Phone</label><p>{customer.phone ?? '—'}</p></div>
                   <div className="profile-field"><label>Job Title</label><p>{customer.jobTitle ?? '—'}</p></div>
                   <div className="profile-field"><label>Source</label><p>{customer.sourceName ?? '—'}</p></div>
-                  <div className="profile-field" style={{ gridColumn: '1 / -1' }}><label>Company</label><p>{customer.companyName ?? 'Individual (B2C)'}</p></div>
+                  <div className="profile-field" style={{ gridColumn: '1 / -1' }}><label>Company</label><p>{customer.companyName ?? 'Individual (B2B)'}</p></div>
                 </div>
               )}
 
@@ -353,14 +355,14 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
                       ? customer.tags.map(tag => {
-                        const t = allTags.find(x => x.name === tag.name);
-                        return (
-                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
-                            {tag.name}
-                            {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
-                          </span>
-                        );
-                      })
+                          const t = allTags.find(x => x.name === tag.name);
+                          return (
+                            <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                              {tag.name}
+                              {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
+                            </span>
+                          );
+                        })
                       : <p style={{ color: 'var(--text-muted)' }}>No tags assigned.</p>
                     }
                   </div>
@@ -382,6 +384,11 @@ export const CustomerDetailScreen: React.FC = () => {
               {/* Attachments Tab */}
               {activeTab === 'attachments' && (
                 <Attachments entity="customer" entityId={Number(id)} onCountChange={setAttachmentsCount} />
+              )}
+
+              {/* Audit History Tab - using reusable component with refresh trigger */}
+              {activeTab === 'audit' && (
+                <AuditHistory entityType="customer" entityId={Number(id)} refreshTrigger={auditRefreshTrigger} />
               )}
             </Card.Content>
           </Card>

@@ -45,17 +45,17 @@ public class DashboardController : ControllerBase
             // SalesRep sees only their own data
             customersQuery = customersQuery.Where(c => c.AssignedRepId == userId);
             leadsQuery = leadsQuery.Where(l => l.AssignedRepId == userId);
-            opportunitiesQuery = opportunitiesQuery.Where(o => o.AssignedRepId == userId);
+            opportunitiesQuery = opportunitiesQuery.Where(o => o.OwnerId == userId);
         }
         // Manager and Admin see all data (for now - could add team filtering later)
 
         var totalCustomers = await customersQuery.CountAsync();
         var totalLeads = await leadsQuery.CountAsync();
         
-        var opportunities = await opportunitiesQuery.ToListAsync();
+        var opportunities = await opportunitiesQuery.Include(o => o.OpportunityStage).ToListAsync();
         var openDeals = opportunities.Count(o => 
         {
-            var stageName = o.Stage?.Name?.ToLower() ?? "";
+            var stageName = o.OpportunityStage?.Name?.ToLower() ?? "";
             var isClosed = stageName == "won" || stageName == "lost" || o.ActualCloseDate.HasValue;
             return !isClosed;
         });

@@ -36,7 +36,9 @@ public record ConvertLeadRequest(
     bool CreateCompany = false,
     [MaxLength(150)] string? CompanyName = null,
     bool CreateInitialOpportunity = false,
-    [MaxLength(150)] string? OpportunityTitle = null);
+    [MaxLength(150)] string? OpportunityTitle = null,
+    decimal? OpportunityEstimatedValue = null,
+    DateTime? OpportunityExpectedCloseDate = null);
 
 public record LeadSummaryDto(
     int LeadId,
@@ -76,6 +78,7 @@ public record ConvertLeadResponse(
     int LeadId,
     int CustomerId,
     int? CompanyId,
+    int? OpportunityId,
     string Message);
 
 public class LeadListQuery : PaginationQuery

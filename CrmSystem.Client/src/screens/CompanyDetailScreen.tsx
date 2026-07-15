@@ -5,9 +5,10 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { AuditHistory } from '../components/audit/AuditHistory';
 import { api } from '../lib/api';
 import Attachments from '../components/attachments/Attachments';
-import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Tag, Link } from 'lucide-react';
+import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Tag, Link, X, History } from 'lucide-react';
 import './screens.css';
 
 interface CompanyDetail {
@@ -59,7 +60,7 @@ interface EditFormState {
   sourceId: string;
 }
 
-type TabId = 'contacts' | 'attachments';
+type TabId = 'contacts' | 'attachments' | 'audit';
 
 export const CompanyDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -113,6 +114,20 @@ export const CompanyDetailScreen: React.FC = () => {
       setIsLoading(false);
     }
   }, [id, navigate]);
+
+  const handleRemoveCustomer = async (customerId: number, name: string) => {
+    if (!window.confirm(`Remove ${name} from this company's contacts?`)) return;
+    try {
+      await api.post('/api/customers/bulk', {
+        customerIds: [customerId],
+        action: 'remove_company'
+      });
+      fetchCompany();
+    } catch (error: any) {
+      console.error('Error removing customer:', error);
+      alert(error.message || 'Failed to remove customer.');
+    }
+  };
 
   const fetchAttachmentsCount = useCallback(async () => {
     if (!id) return;
@@ -348,6 +363,9 @@ export const CompanyDetailScreen: React.FC = () => {
             <button className={`tab-btn ${activeTab === 'attachments' ? 'tab-active' : ''}`} onClick={() => setActiveTab('attachments')}>
               Attachments ({attachmentsCount})
             </button>
+            <button className={`tab-btn ${activeTab === 'audit' ? 'tab-active' : ''}`} onClick={() => setActiveTab('audit')}>
+              <History size={14} style={{ marginRight: 4 }} /> Audit History
+            </button>
           </div>
 
           <Card className="glass-panel">
@@ -356,13 +374,27 @@ export const CompanyDetailScreen: React.FC = () => {
                 <div className="contact-list">
                   {company.contacts.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No contacts linked to this company.</p>}
                   {company.contacts.map(c => (
-                    <div key={c.customerId} className="contact-row" onClick={() => navigate(`/customers/${c.customerId}`)}>
+                    <div key={c.customerId} className="contact-row" onClick={() => navigate(`/customers/${c.customerId}`)} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center' }}>
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          style={{ color: 'var(--accent-red, #ef4444)', fontSize: '0.75rem', padding: '4px 8px', height: 'auto' }} 
+                          onClick={() => handleRemoveCustomer(c.customerId, `${c.firstName} ${c.lastName}`)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
                       <div className="customer-avatar" style={{ width: 36, height: 36, fontSize: '0.875rem' }}>{c.firstName[0]}{c.lastName[0]}</div>
                       <div style={{ flex: 1 }}>
                         <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{c.firstName} {c.lastName}</p>
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{c.email}</p>
                       </div>
-                      {c.phone && <div className="detail-row" style={{ margin: 0 }}><Phone size={13} /><span style={{ fontSize: '0.8rem' }}>{c.phone}</span></div>}
+                      {c.phone && (
+                        <div style={{ display: 'flex', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                          <div className="detail-row" style={{ margin: 0 }}><Phone size={13} /><span style={{ fontSize: '0.8rem' }}>{c.phone}</span></div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -370,6 +402,10 @@ export const CompanyDetailScreen: React.FC = () => {
 
               {activeTab === 'attachments' && (
                 <Attachments entity="company" entityId={Number(id)} onCountChange={setAttachmentsCount} />
+              )}
+
+              {activeTab === 'audit' && (
+                <AuditHistory entityType="company" entityId={Number(id)} />
               )}
             </Card.Content>
           </Card>

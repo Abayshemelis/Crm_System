@@ -2,6 +2,7 @@ using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
+using CrmSystem.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,13 @@ public class LeadsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
+    private readonly IAuditService _auditService;
 
-    public LeadsController(AppDbContext db, ICurrentUserService currentUser)
+    public LeadsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
     {
         _db = db;
         _currentUser = currentUser;
+        _auditService = auditService;
     }
 
     [HttpGet]
@@ -200,6 +203,18 @@ public class LeadsController : ControllerBase
             return BadRequest(new { message = "Source not found." });
         }
 
+        // Capture old values for audit logging
+        var oldAssignedRepId = lead.AssignedRepId;
+        var oldFirstName = lead.FirstName;
+        var oldLastName = lead.LastName;
+        var oldEmail = lead.Email;
+        var oldPhone = lead.Phone;
+        var oldJobTitle = lead.JobTitle;
+        var oldCompanyName = lead.CompanyName;
+        var oldSourceId = lead.SourceId;
+        var oldLeadStatusId = lead.LeadStatusId;
+        var oldNotes = lead.Notes;
+
         lead.FirstName = request.FirstName.Trim();
         lead.LastName = request.LastName.Trim();
         lead.Email = request.Email?.Trim();
@@ -213,20 +228,205 @@ public class LeadsController : ControllerBase
 
         await _db.SaveChangesAsync();
 
+        // Log all field changes
+        if (_currentUser.UserId is not null)
+        {
+            var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+            if (entityType is not null)
+            {
+                // Log assignment change if AssignedRepId changed
+                if (oldAssignedRepId != lead.AssignedRepId)
+                {
+                    await _auditService.LogAssignmentAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        oldRepId: oldAssignedRepId,
+                        newRepId: lead.AssignedRepId,
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                // Log other field changes
+                if (oldFirstName != lead.FirstName)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "FirstName",
+                        oldValue: oldFirstName,
+                        newValue: lead.FirstName,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldLastName != lead.LastName)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "LastName",
+                        oldValue: oldLastName,
+                        newValue: lead.LastName,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldEmail != lead.Email)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "Email",
+                        oldValue: oldEmail ?? string.Empty,
+                        newValue: lead.Email ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldPhone != lead.Phone)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "Phone",
+                        oldValue: oldPhone ?? string.Empty,
+                        newValue: lead.Phone ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldJobTitle != lead.JobTitle)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "JobTitle",
+                        oldValue: oldJobTitle ?? string.Empty,
+                        newValue: lead.JobTitle ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldCompanyName != lead.CompanyName)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "CompanyName",
+                        oldValue: oldCompanyName ?? string.Empty,
+                        newValue: lead.CompanyName ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldSourceId.HasValue != lead.SourceId.HasValue || (oldSourceId.HasValue && lead.SourceId.HasValue && oldSourceId.Value != lead.SourceId.Value))
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "SourceId",
+                        oldValue: oldSourceId?.ToString() ?? "null",
+                        newValue: lead.SourceId?.ToString() ?? "null",
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldLeadStatusId != lead.LeadStatusId)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "LeadStatusId",
+                        oldValue: oldLeadStatusId?.ToString() ?? string.Empty,
+                        newValue: lead.LeadStatusId?.ToString() ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                if (oldNotes != lead.Notes)
+                {
+                    await _auditService.LogFieldChangeAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: lead.LeadId,
+                        fieldName: "Notes",
+                        oldValue: oldNotes ?? string.Empty,
+                        newValue: lead.Notes ?? string.Empty,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+            }
+        }
+
         await _db.Entry(lead).Reference(l => l.Source).LoadAsync();
         await _db.Entry(lead).Reference(l => l.LeadStatus).LoadAsync();
 
         return Ok(ToDetailDto(lead));
     }
 
+    [HttpGet("{id:int}/audit")]
+    public async Task<ActionResult> GetAuditLogs(int id)
+    {
+        var lead = await _db.Leads.SingleOrDefaultAsync(l => l.LeadId == id);
+        if (lead is null)
+        {
+            return NotFound(new { message = "Lead not found." });
+        }
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+        if (entityType is null)
+        {
+            return Ok(new object[0]);
+        }
+
+        var auditLogs = await _db.AuditLogs
+            .Include(a => a.ChangedBy)
+            .Where(a => a.EntityTypeId == entityType.EntityTypeId && a.EntityId == id)
+            .OrderByDescending(a => a.ChangedAt)
+            .Select(a => new
+            {
+                a.AuditLogId,
+                AuditActionType = a.AuditActionType != null ? a.AuditActionType.Name : null,
+                a.FieldName,
+                a.OldValue,
+                a.NewValue,
+                ChangedByName = a.ChangedBy != null ? a.ChangedBy.Name : null,
+                a.ChangedAt
+            })
+            .ToListAsync();
+
+        return Ok(auditLogs);
+    }
+
+    [HttpDelete("{id:int}/audit")]
+    public async Task<IActionResult> ClearHistory(int id)
+    {
+        var lead = await _db.Leads.SingleOrDefaultAsync(l => l.LeadId == id);
+        if (lead is null)
+        {
+            return NotFound(new { message = "Lead not found." });
+        }
+
+        if (!_currentUser.CanAccessOwnedRecord(lead.AssignedRepId))
+        {
+            return Forbid();
+        }
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+        if (entityType is null)
+        {
+            return Ok(new { message = "History cleared." });
+        }
+
+        if (_currentUser.UserId is not null)
+        {
+            await _auditService.ClearHistoryAsync(entityType.EntityTypeId, lead.LeadId, _currentUser.UserId.Value);
+        }
+
+        return Ok(new { message = "History cleared." });
+    }
+
     [HttpPost("{id:int}/convert")]
     public async Task<ActionResult<ConvertLeadResponse>> ConvertLead(int id, ConvertLeadRequest request)
     {
-        if (request.CreateInitialOpportunity)
-        {
-            return BadRequest(new { message = "Initial opportunity creation will be available in Phase 3." });
-        }
-
         var lead = await _db.Leads
             .Include(l => l.LeadStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
@@ -316,6 +516,48 @@ public class LeadsController : ControllerBase
         _db.Customers.Add(customer);
         await _db.SaveChangesAsync();
 
+        // Optionally create initial opportunity
+        int? opportunityId = null;
+        if (request.CreateInitialOpportunity)
+        {
+            var opportunityTitle = (request.OpportunityTitle ?? $"{firstName} {lastName} - Initial Opportunity").Trim();
+            var newStage = await _db.OpportunityStages.FirstOrDefaultAsync(os => os.Name == "New");
+            if (newStage is null)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(new { message = "Opportunity stage 'New' not found." });
+            }
+
+            var opportunity = new Opportunity
+            {
+                CustomerId = customer.CustomerId,
+                Title = opportunityTitle,
+                Description = $"Created from lead conversion (Lead ID: {lead.LeadId})",
+                OpportunityStageId = newStage.OpportunityStageId,
+                EstimatedValue = request.OpportunityEstimatedValue ?? 0,
+                ExpectedCloseDate = request.OpportunityExpectedCloseDate,
+                OwnerId = lead.AssignedRepId ?? _currentUser.UserId.Value,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.Opportunities.Add(opportunity);
+            await _db.SaveChangesAsync();
+            opportunityId = opportunity.OpportunityId;
+
+            // Create initial StageHistory row (OldStageId = null, NewStageId = "New")
+            var stageHistory = new StageHistory
+            {
+                OpportunityId = opportunity.OpportunityId,
+                OldStageId = null,
+                NewStageId = newStage.OpportunityStageId,
+                ChangedAt = DateTime.UtcNow,
+                ChangedById = _currentUser.UserId.Value
+            };
+
+            _db.StageHistories.Add(stageHistory);
+            await _db.SaveChangesAsync();
+        }
+
         // Set status to "Converted" (id=5)
         var convertedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(ls => ls.Name == "Converted");
         lead.LeadStatusId = convertedStatus?.LeadStatusId;
@@ -328,6 +570,7 @@ public class LeadsController : ControllerBase
             lead.LeadId,
             customer.CustomerId,
             companyId,
+            opportunityId,
             "Lead converted to customer successfully."));
     }
 
@@ -355,6 +598,16 @@ public class LeadsController : ControllerBase
 
         lead.IsDeleted = true;
         await _db.SaveChangesAsync();
+
+        // Log deletion audit
+        if (_currentUser.UserId is not null)
+        {
+            var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+            if (entityType is not null)
+            {
+                await _auditService.LogDeletionAsync(entityType.EntityTypeId, lead.LeadId, _currentUser.UserId.Value);
+            }
+        }
 
         return NoContent();
     }

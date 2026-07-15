@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using CrmSystem.Domain.Entities;
+using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,7 @@ builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IOpportunityService, OpportunityService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IAuditService, AuditService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
@@ -102,6 +104,14 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+// Apply pending migrations on startup
+if (!useInMemoryDatabase)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -193,7 +203,7 @@ using (var scope = app.Services.CreateScope())
     var stageSeeds = new (string Name, int Order, bool IsWon, bool IsLost)[] {
         ("New", 1, false, false), ("Qualified", 2, false, false),
         ("Proposal", 3, false, false), ("Negotiation", 4, false, false),
-        ("Won", 5, true, false), ("Lost", 6, false, true)
+        ("Closing", 5, false, false), ("Won", 6, true, false), ("Lost", 7, false, true)
     };
     foreach (var (name, order, isWon, isLost) in stageSeeds)
     {

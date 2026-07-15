@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, Plus, Search, Tag, UserCheck, Users, X } from 'lucide-react';
+import { Download, Building, Plus, Search, Tag, UserCheck, Users, X } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -68,6 +68,7 @@ export const CustomersScreen: React.FC = () => {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkTagId, setBulkTagId] = useState('');
   const [bulkRepId, setBulkRepId] = useState('');
+  const [bulkCompanyId, setBulkCompanyId] = useState('');
   const [repRoleFilter, setRepRoleFilter] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,8 +131,8 @@ export const CustomersScreen: React.FC = () => {
 
   const filteredReps = reps.filter(rep => repRoleFilter === 'All' || rep.role === repRoleFilter);
 
-  const bulk = async (action: 'tag' | 'reassign') => {
-    const value = action === 'tag' ? bulkTagId : bulkRepId;
+  const bulk = async (action: 'tag' | 'reassign' | 'assign_company') => {
+    const value = action === 'tag' ? bulkTagId : action === 'reassign' ? bulkRepId : bulkCompanyId;
     if (!value || selected.size === 0) return;
     setBulkLoading(true); setMessage(null);
 
@@ -147,16 +148,27 @@ export const CustomersScreen: React.FC = () => {
             return { ...c, tags: [...c.tags, { tagId: tagObj.id, name: tagObj.name }] };
           }));
         }
-      } else {
+      } else if (action === 'reassign') {
         const repObj = reps.find(r => String(r.id) === value);
         if (repObj) {
           setCustomers(cs => cs.map(c => selected.has(c.customerId) ? ({ ...c, assignedRepId: Number(repObj.id), assignedRepName: repObj.name }) : c));
         }
+      } else if (action === 'assign_company') {
+        const companyObj = companies.find(c => String(c.id) === value);
+        if (companyObj) {
+          setCustomers(cs => cs.map(c => selected.has(c.customerId) ? ({ ...c, companyId: Number(companyObj.id), companyName: companyObj.name }) : c));
+        }
       }
 
-      await api.post('/api/customers/bulk', { customerIds: [...selected], action, ...(action === 'tag' ? { tagId: Number(value) } : { newRepId: Number(value) }) });
+      await api.post('/api/customers/bulk', {
+        customerIds: [...selected],
+        action,
+        ...(action === 'tag' ? { tagId: Number(value) } : {}),
+        ...(action === 'reassign' ? { newRepId: Number(value) } : {}),
+        ...(action === 'assign_company' ? { newCompanyId: Number(value) } : {})
+      });
       setMessage('Bulk action completed successfully.');
-      setSelected(new Set()); setBulkTagId(''); setBulkRepId('');
+      setSelected(new Set()); setBulkTagId(''); setBulkRepId(''); setBulkCompanyId('');
     } catch (e) {
       setCustomers(prev);
       setMessage('Bulk action failed; changes reverted.');
@@ -199,6 +211,11 @@ export const CustomersScreen: React.FC = () => {
         </select>
         <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{filteredReps.map(r => <option key={r.id} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>
         <Button size="sm" disabled={bulkLoading} onClick={() => bulk('reassign')}><UserCheck size={14} /> Reassign</Button>
+        <select className="filter-select" disabled={bulkLoading} value={bulkCompanyId} onChange={e => setBulkCompanyId(e.target.value)}>
+          <option value="">Assign to company…</option>
+          {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <Button size="sm" disabled={bulkLoading} onClick={() => bulk('assign_company')}><Building size={14} /> Assign Company</Button>
       </>}
       <Button size="sm" variant="secondary" onClick={exportSelected}><Download size={14} /> Export CSV</Button>
       <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} /></Button>
