@@ -98,6 +98,60 @@
   color: var(--accent-primary);
 }
 
+.sidebar-expandable {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: var(--sidebar-text-secondary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.sidebar-expandable:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--sidebar-text-primary);
+}
+
+.sidebar-expandable.expanded {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-primary);
+}
+
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.sidebar-menu-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 16px;
+  margin-top: 4px;
+}
+
+.submenu-link {
+  padding: 10px 16px;
+  font-size: 0.875rem;
+}
+
+.submenu-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .sidebar-footer {
   padding: 24px 12px;
   border-top: 1px solid var(--border-color);

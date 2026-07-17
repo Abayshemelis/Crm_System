@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CrmSystem.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f9aeaa639548e9198ed42d264f38a2909580c1c0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a7a1b948d39ebb971db74e932c8aaff4fa9019a0")]
 [assembly: System.Reflection.AssemblyProductAttribute("CrmSystem.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CrmSystem.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

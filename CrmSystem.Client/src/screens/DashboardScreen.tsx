@@ -4,7 +4,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Users, Building2, TrendingUp, Calendar, ArrowRight, LogIn, Shield, Target, DollarSign } from 'lucide-react';
+import { Users, Building2, TrendingUp, Calendar, ArrowRight, LogIn, Shield, Target, DollarSign, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './screens.css';
 
@@ -41,6 +41,9 @@ interface UserStats {
 
 interface OpportunitySummary {
     opportunityId: number;
+    title?: string;
+    customerName?: string;
+    estimatedValue?: number;
     stageName?: string;
     actualCloseDate?: string | null;
 }
@@ -50,12 +53,21 @@ interface CompanySummaryResponse {
     data?: Array<{ isDeleted?: boolean }>;
 }
 
+const isOpenDeal = (opportunity: OpportunitySummary) => {
+    const stageName = (opportunity.stageName ?? '').toLowerCase();
+    const isClosed = stageName === 'won' || stageName === 'lost' || !!opportunity.actualCloseDate;
+    return !isClosed;
+};
+
 const countOpenDeals = (opportunities: OpportunitySummary[]) =>
-    opportunities.filter((opportunity) => {
-        const stageName = (opportunity.stageName ?? '').toLowerCase();
-        const isClosed = stageName === 'won' || stageName === 'lost' || !!opportunity.actualCloseDate;
-        return !isClosed;
-    }).length;
+    opportunities.filter(isOpenDeal).length;
+
+const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+    }).format(value);
 
 export const DashboardScreen: React.FC = () => {
     const { user, token, isAdmin, userRole } = useAuth();
@@ -64,6 +76,8 @@ export const DashboardScreen: React.FC = () => {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [userStats, setUserStats] = useState<UserStats | null>(null);
     const [filteredStats, setFilteredStats] = useState<FilteredDashboardStats | null>(null);
+    const [openDealsData, setOpenDealsData] = useState<OpportunitySummary[]>([]);
+    const [isDealsModalOpen, setIsDealsModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -93,13 +107,15 @@ export const DashboardScreen: React.FC = () => {
                     ]);
                     const createdCompanies = companies.totalCount ?? 0;
                     const activeCompanies = companies.data?.filter((company: { isDeleted?: boolean }) => !company.isDeleted).length ?? 0;
+                    const openDealOpportunities = (opportunities ?? []).filter(isOpenDeal);
+                    setOpenDealsData(openDealOpportunities);
                     setStats({
                         totalCustomers: customers.totalCount ?? 0,
                         totalCompanies: createdCompanies,
                         activeCompanies,
                         createdCompanies,
                         activeLeads: leads.totalCount ?? 0,
-                        openDeals: countOpenDeals(opportunities ?? [])
+                        openDeals: openDealOpportunities.length
                     });
                 }
 
@@ -113,6 +129,7 @@ export const DashboardScreen: React.FC = () => {
                     }
                 }
             } catch {
+                setOpenDealsData([]);
                 setStats({
                     totalCustomers: 0,
                     totalCompanies: 0,
@@ -281,6 +298,15 @@ export const DashboardScreen: React.FC = () => {
 
     const statCards = getStatCards();
 
+    const handleStatCardAction = (card: StatCard) => {
+        if (card.title === 'Open Deals') {
+            setIsDealsModalOpen(true);
+            return;
+        }
+
+        navigate(card.path);
+    };
+
     return (
         <Layout>
             <div className="dashboard-header animate-fade-in">
@@ -302,6 +328,7 @@ export const DashboardScreen: React.FC = () => {
                         key={card.title}
                         className="stat-card glass-panel animate-fade-in"
                         style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
+                        onClick={() => handleStatCardAction(card)}
                     >
                         <Card.Content>
                             <div className="stat-header">
@@ -319,7 +346,10 @@ export const DashboardScreen: React.FC = () => {
                                     variant="ghost"
                                     size="sm"
                                     className="stat-action"
-                                    onClick={() => navigate(card.path)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStatCardAction(card);
+                                    }}
                                     disabled={!user}
                                 >
                                     View all <ArrowRight size={14} />
@@ -329,6 +359,45 @@ export const DashboardScreen: React.FC = () => {
                     </Card>
                 ))}
             </div>
+
+            {isDealsModalOpen && (
+                <div className="modal-overlay" onClick={() => setIsDealsModalOpen(false)}>
+                    <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '720px' }}>
+                        <div className="modal-header">
+                            <h3>Open Deals</h3>
+                            <button className="icon-btn" onClick={() => setIsDealsModalOpen(false)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            {openDealsData.length === 0 ? (
+                                <p>No open deals are available right now.</p>
+                            ) : (
+                                <div className="deal-list">
+                                    <p className="modal-subtitle">Showing {openDealsData.length} open deal{openDealsData.length === 1 ? '' : 's'}.</p>
+                                    {openDealsData.map((deal) => (
+                                        <div key={deal.opportunityId} className="deal-row">
+                                            <div className="deal-title-row">
+                                                <strong>{deal.title || `Deal #${deal.opportunityId}`}</strong>
+                                                <span className="deal-stage">{deal.stageName || 'Open'}</span>
+                                            </div>
+                                            <div className="deal-meta">
+                                                <span>{deal.customerName || 'No customer assigned'}</span>
+                                                <span>{formatCurrency(deal.estimatedValue ?? 0)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <Button variant="ghost" size="sm" onClick={() => setIsDealsModalOpen(false)}>
+                                Close
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </Layout>
     );

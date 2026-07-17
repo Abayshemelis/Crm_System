@@ -1,0 +1,119 @@
+/* ===== SelectDown — absolute-positioned dropdown, always opens downward ===== */
+
+.sd-container {
+  position: relative;
+  width: 100%;
+}
+
+/* ── Trigger: matches .input-field exactly ── */
+.sd-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-highlight);
+  border-radius: var(--radius-md);
+  outline: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  height: 38px;
+}
+
+.sd-trigger:hover {
+  border-color: var(--accent-primary);
+}
+
+.sd-trigger--open {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.sd-trigger-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.sd-placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Chevron ── */
+.sd-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.sd-chevron--open {
+  transform: rotate(180deg);
+}
+
+/* ── Dropdown list — absolute positioned to always render downward below the trigger ── */
+.sd-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  overflow-y: auto;
+  max-height: 200px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 4px 0;
+  margin: 0;
+  list-style: none;
+}
+
+/* ── Options ── */
+.sd-option {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+}
+
+.sd-option:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.sd-option--selected {
+  background: rgba(99, 102, 241, 0.14);
+  color: var(--text-primary);
+}
+
+.sd-option--selected:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+/* ── Compact variant ── */
+.sd-container.sd-compact .sd-trigger {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
+  border-radius: var(--radius-sm);
+  height: 30px;
+}
+
+.sd-container.sd-compact .sd-option {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.78rem;
+}

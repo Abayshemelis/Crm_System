@@ -25,7 +25,7 @@ public class OpportunityLineItemsController : ControllerBase
     }
 
     [HttpGet("{opportunityId}")]
-    public async Task<ActionResult<IReadOnlyList<OpportunityLineItem>>> GetByOpportunity(int opportunityId)
+    public async Task<ActionResult<IReadOnlyList<OpportunityLineItemDto>>> GetByOpportunity(int opportunityId)
     {
         var opportunity = await _db.Opportunities.FindAsync(opportunityId);
         if (opportunity == null)
@@ -39,6 +39,27 @@ public class OpportunityLineItemsController : ControllerBase
             .ThenInclude(p => p.ProductCategory)
             .Where(li => li.OpportunityId == opportunityId)
             .OrderBy(li => li.LineItemId)
+            .Select(li => new OpportunityLineItemDto
+            {
+                LineItemId = li.LineItemId,
+                OpportunityId = li.OpportunityId,
+                ProductId = li.ProductId,
+                Product = li.Product != null ? new ProductDto
+                {
+                    ProductId = li.Product.ProductId,
+                    Name = li.Product.Name,
+                    SKU = li.Product.SKU,
+                    Price = li.Product.Price,
+                    ProductCategory = li.Product.ProductCategory != null ? new ProductCategoryDto
+                    {
+                        Name = li.Product.ProductCategory.Name
+                    } : null
+                } : null,
+                Quantity = li.Quantity,
+                UnitPrice = li.UnitPrice,
+                DiscountPercent = li.DiscountPercent,
+                TotalPrice = li.TotalPrice
+            })
             .ToListAsync();
 
         return Ok(lineItems);
@@ -82,12 +103,35 @@ public class OpportunityLineItemsController : ControllerBase
         await RecalculateEstimatedValueAsync(request.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
+        await _db.Entry(lineItem.Product).Reference(p => p.ProductCategory).LoadAsync();
 
-        return CreatedAtAction(nameof(GetByOpportunity), new { opportunityId = lineItem.OpportunityId }, lineItem);
+        var dto = new OpportunityLineItemDto
+        {
+            LineItemId = lineItem.LineItemId,
+            OpportunityId = lineItem.OpportunityId,
+            ProductId = lineItem.ProductId,
+            Product = lineItem.Product != null ? new ProductDto
+            {
+                ProductId = lineItem.Product.ProductId,
+                Name = lineItem.Product.Name,
+                SKU = lineItem.Product.SKU,
+                Price = lineItem.Product.Price,
+                ProductCategory = lineItem.Product.ProductCategory != null ? new ProductCategoryDto
+                {
+                    Name = lineItem.Product.ProductCategory.Name
+                } : null
+            } : null,
+            Quantity = lineItem.Quantity,
+            UnitPrice = lineItem.UnitPrice,
+            DiscountPercent = lineItem.DiscountPercent,
+            TotalPrice = lineItem.TotalPrice
+        };
+
+        return CreatedAtAction(nameof(GetByOpportunity), new { opportunityId = lineItem.OpportunityId }, dto);
     }
 
     [HttpPut("{id}")]
-    public async Task<ActionResult<OpportunityLineItem>> Update(int id, [FromBody] UpdateLineItemRequest request)
+    public async Task<ActionResult<OpportunityLineItemDto>> Update(int id, [FromBody] UpdateLineItemRequest request)
     {
         var lineItem = await _db.OpportunityLineItems
             .Include(li => li.Opportunity)
@@ -120,8 +164,31 @@ public class OpportunityLineItemsController : ControllerBase
         await RecalculateEstimatedValueAsync(lineItem.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
+        await _db.Entry(lineItem.Product).Reference(p => p.ProductCategory).LoadAsync();
 
-        return Ok(lineItem);
+        var dto = new OpportunityLineItemDto
+        {
+            LineItemId = lineItem.LineItemId,
+            OpportunityId = lineItem.OpportunityId,
+            ProductId = lineItem.ProductId,
+            Product = lineItem.Product != null ? new ProductDto
+            {
+                ProductId = lineItem.Product.ProductId,
+                Name = lineItem.Product.Name,
+                SKU = lineItem.Product.SKU,
+                Price = lineItem.Product.Price,
+                ProductCategory = lineItem.Product.ProductCategory != null ? new ProductCategoryDto
+                {
+                    Name = lineItem.Product.ProductCategory.Name
+                } : null
+            } : null,
+            Quantity = lineItem.Quantity,
+            UnitPrice = lineItem.UnitPrice,
+            DiscountPercent = lineItem.DiscountPercent,
+            TotalPrice = lineItem.TotalPrice
+        };
+
+        return Ok(dto);
     }
 
     [HttpDelete("{id}")]
@@ -181,4 +248,30 @@ public class UpdateLineItemRequest
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal DiscountPercent { get; set; }
+}
+
+public class OpportunityLineItemDto
+{
+    public int LineItemId { get; set; }
+    public int OpportunityId { get; set; }
+    public int ProductId { get; set; }
+    public ProductDto? Product { get; set; }
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal DiscountPercent { get; set; }
+    public decimal TotalPrice { get; set; }
+}
+
+public class ProductDto
+{
+    public int ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? SKU { get; set; }
+    public decimal Price { get; set; }
+    public ProductCategoryDto? ProductCategory { get; set; }
+}
+
+public class ProductCategoryDto
+{
+    public string Name { get; set; } = string.Empty;
 }

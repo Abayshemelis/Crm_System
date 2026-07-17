@@ -1,0 +1,113 @@
+/* ===== SearchableSelect — styled searchable autocomplete dropdown ===== */
+
+.ss-container {
+  position: relative;
+  width: 100%;
+}
+
+.ss-input-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* Styled text input matching standard input-field */
+.ss-input {
+  width: 100%;
+  padding-right: 2.25rem !important; /* Space for the chevron */
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+.ss-input--open {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+/* Chevron icon overlaying the input */
+.ss-chevron {
+  position: absolute;
+  right: 0.75rem;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.ss-chevron:hover {
+  opacity: 1;
+}
+
+.ss-chevron--open {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+/* Dropdown list - always absolute positioned to expand downward */
+.ss-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  overflow-y: auto;
+  max-height: 220px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 4px 0;
+  margin: 0;
+  list-style: none;
+  box-sizing: border-box;
+}
+
+.animate-ss-open {
+  animation: ss-fade 0.1s ease;
+}
+
+@keyframes ss-fade {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Options */
+.ss-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s, color 0.1s;
+}
+
+.ss-option:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.ss-option--selected {
+  background: rgba(99, 102, 241, 0.14);
+  color: var(--text-primary);
+}
+
+.ss-option--selected:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.ss-no-results {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  cursor: default;
+}

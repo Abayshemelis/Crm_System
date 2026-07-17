@@ -12,9 +12,6 @@ using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Use camelCase naming for JSON so the frontend (which expects camelCase)
-// receives properties like `data` and `totalCount` instead of `Data`/`TotalCount`.
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
@@ -260,6 +257,26 @@ using (var scope = app.Services.CreateScope())
             db.ProductStatuses.Add(new ProductStatus { Name = name, IsSelectable = sel });
     }
     await db.SaveChangesAsync();
+
+    // ── Products ───────────────────────────────────────────────────────
+    var activeStatus = await db.ProductStatuses.SingleAsync(x => x.Name == "Active");
+    var softwareCategory = await db.ProductCategories.SingleAsync(x => x.Name == "Software");
+    var hardwareCategory = await db.ProductCategories.SingleAsync(x => x.Name == "Hardware");
+    var servicesCategory = await db.ProductCategories.SingleAsync(x => x.Name == "Services");
+
+    if (!await db.Products.AnyAsync())
+    {
+        db.Products.AddRange(
+            new Product { Name = "Basic Software License", SKU = "SW-001", Description = "Standard software license", ProductCategoryId = softwareCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 1000, Cost = 200, StockQuantity = 100 },
+            new Product { Name = "Premium Software License", SKU = "SW-002", Description = "Premium software license with advanced features", ProductCategoryId = softwareCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 2500, Cost = 500, StockQuantity = 50 },
+            new Product { Name = "Enterprise Software License", SKU = "SW-003", Description = "Enterprise software license with unlimited users", ProductCategoryId = softwareCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 10000, Cost = 2000, StockQuantity = 20 },
+            new Product { Name = "Laptop Computer", SKU = "HW-001", Description = "Standard business laptop", ProductCategoryId = hardwareCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 1500, Cost = 1000, StockQuantity = 30 },
+            new Product { Name = "Desktop Computer", SKU = "HW-002", Description = "Business desktop computer", ProductCategoryId = hardwareCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 1200, Cost = 800, StockQuantity = 25 },
+            new Product { Name = "Technical Support Package", SKU = "SVC-001", Description = "Annual technical support package", ProductCategoryId = servicesCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 500, Cost = 100, StockQuantity = 100 },
+            new Product { Name = "Consulting Services", SKU = "SVC-002", Description = "Hourly consulting services", ProductCategoryId = servicesCategory.ProductCategoryId, ProductStatusId = activeStatus.ProductStatusId, Price = 150, Cost = 50, StockQuantity = 100 }
+        );
+        await db.SaveChangesAsync();
+    }
 
     // ── EntityTypes ───────────────────────────────────────────────────────
     var entityTypeSeeds = new[] { ("Customer", "Customers"), ("Company", "Companies"), ("Lead", "Leads"), ("Opportunity", "Opportunities"), ("Product", "Products"), ("Activity", "Activities"), ("CrmTask", "CrmTasks") };

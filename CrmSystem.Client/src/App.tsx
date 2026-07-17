@@ -19,6 +19,10 @@ import { UsersScreen } from './screens/UsersScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { PipelineScreen } from './screens/PipelineScreen';
+import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
+import { ProductsScreen } from './screens/ProductsScreen';
+import { LeadSourcesScreen } from './screens/LeadSourcesScreen';
+import { LeadStatusesScreen } from './screens/LeadStatusesScreen';
 import { Toast } from './components/ui/Toast';
 
 function AppRoutes() {
@@ -41,7 +45,11 @@ function AppRoutes() {
         <Route path="/leads/new" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
         <Route path="/leads/:id" element={<ProtectedRoute><LeadDetailScreen /></ProtectedRoute>} />
         <Route path="/leads/:id/edit" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
+        <Route path="/leads/sources" element={<ProtectedRoute><LeadSourcesScreen /></ProtectedRoute>} />
+        <Route path="/leads/statuses" element={<ProtectedRoute><LeadStatusesScreen /></ProtectedRoute>} />
         <Route path="/pipeline" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
+        <Route path="/pipeline/products" element={<ProtectedRoute><ProductsScreen /></ProtectedRoute>} />
+        <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
         <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />
         <Route path="/" element={<Navigate to="/login" replace />} />

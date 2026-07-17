@@ -3,6 +3,8 @@ import { Card } from './Card';
 import { Button } from './Button';
 import { Input } from './Input';
 import { DatePicker } from './DatePicker';
+import { SelectDown } from './SelectDown';
+import { SearchableSelect } from './SearchableSelect';
 import { api } from '../../lib/api';
 import { X, Plus, Trash2, Check, XCircle } from 'lucide-react';
 import '../../screens/screens.css';
@@ -10,26 +12,46 @@ import '../../screens/screens.css';
 interface Opportunity {
     opportunityId: number;
     customerId: number;
-    customerName: string;
+    customerName?: string;
     title: string;
     opportunityStageId: number;
-    stageName: string;
+    stageName?: string;
     estimatedValue: number;
     expectedCloseDate?: string;
+    actualCloseDate?: string;
     ownerId: number;
-    ownerName: string;
+    ownerName?: string;
     description?: string;
     createdAt: string;
     updatedAt?: string;
+}
+
+interface Customer {
+    customerId: number;
+    name: string;
+}
+
+interface Stage {
+    opportunityStageId: number;
+    name: string;
+    isWon: boolean;
+    isLost: boolean;
+}
+
+interface User {
+    userId: number;
+    name: string;
 }
 
 interface OpportunityLineItem {
     lineItemId: number;
     opportunityId: number;
     productId: number;
-    productName: string;
-    productSku?: string;
-    productCategory?: string;
+    product?: {
+        name: string;
+        sku?: string;
+        productCategory?: { name: string };
+    };
     quantity: number;
     unitPrice: number;
     discountPercent: number;
@@ -40,11 +62,9 @@ interface Product {
     productId: number;
     name: string;
     sku?: string;
-    productCategory?: string;
+    productCategory?: { name: string };
+    productStatus?: { isSelectable: boolean };
     price: number;
-    productStatusId: number;
-    productStatusName: string;
-    isSelectable: boolean;
 }
 
 interface OpportunityDetailPanelProps {
@@ -61,8 +81,10 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [lineItems, setLineItems] = useState<OpportunityLineItem[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [stages, setStages] = useState<Stage[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isEditing, setIsEditing] = useState(false);
     const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>({});
     const [newLineItem, setNewLineItem] = useState({
         productId: 0,
@@ -70,18 +92,25 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
         unitPrice: 0,
         discountPercent: 0
     });
+    const [activeTab, setActiveTab] = useState<'details' | 'lineItems'>('details');
 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [oppData, lineItemsData, productsData] = await Promise.all([
+            const [oppData, lineItemsData, productsData, customersData, stagesData, usersData] = await Promise.all([
                 api.get<Opportunity>(`/api/opportunities/${opportunityId}`),
                 api.get<OpportunityLineItem[]>(`/api/opportunitylineitems/${opportunityId}`),
-                api.get<Product[]>('/api/products')
+                api.get<Product[]>('/api/products'),
+                api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
+                api.get<Stage[]>('/api/opportunitystages'),
+                api.get<User[]>('/api/users')
             ]);
             setOpportunity(oppData);
             setLineItems(lineItemsData);
-            setProducts(productsData.filter(p => p.isSelectable));
+            setProducts(productsData.filter(p => p.productStatus?.isSelectable));
+            setCustomers(customersData.data || []);
+            setStages(stagesData);
+            setUsers(usersData);
             setEditedOpportunity(oppData);
         } catch (error) {
             console.error('Failed to load opportunity details:', error);
@@ -94,12 +123,15 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
         loadData();
     }, [opportunityId]);
 
+    const handleFieldChange = (field: keyof Opportunity, value: any) => {
+        setEditedOpportunity(prev => ({ ...prev, [field]: value }));
+    };
+
     const handleSave = async () => {
         if (!opportunity) return;
         try {
             await api.put(`/api/opportunities/${opportunityId}`, editedOpportunity);
             await loadData();
-            setIsEditing(false);
             onUpdate();
             const event = new CustomEvent('app:toast', {
                 detail: { message: 'Opportunity updated successfully', type: 'success' as const }
@@ -175,6 +207,48 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
         }
     };
 
+    const handleMarkAsWon = async () => {
+        if (!opportunity) return;
+        const wonStage = stages.find(s => s.isWon);
+        if (!wonStage) return;
+        try {
+            await api.patch(`/api/opportunities/${opportunityId}/stage`, { stageId: wonStage.opportunityStageId });
+            await loadData();
+            onUpdate();
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Opportunity marked as Won', type: 'success' as const }
+            });
+            window.dispatchEvent(event);
+        } catch (error) {
+            console.error('Failed to mark as won:', error);
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Failed to mark as won', type: 'error' as const }
+            });
+            window.dispatchEvent(event);
+        }
+    };
+
+    const handleMarkAsLost = async () => {
+        if (!opportunity) return;
+        const lostStage = stages.find(s => s.isLost);
+        if (!lostStage) return;
+        try {
+            await api.patch(`/api/opportunities/${opportunityId}/stage`, { stageId: lostStage.opportunityStageId });
+            await loadData();
+            onUpdate();
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Opportunity marked as Lost', type: 'success' as const }
+            });
+            window.dispatchEvent(event);
+        } catch (error) {
+            console.error('Failed to mark as lost:', error);
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Failed to mark as lost', type: 'error' as const }
+            });
+            window.dispatchEvent(event);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="detail-panel-overlay">
@@ -197,170 +271,218 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
 
     return (
         <div className="detail-panel-overlay" onClick={onClose}>
-            <div className="detail-panel glass-panel" onClick={e => e.stopPropagation()}>
-                <div className="detail-panel-header">
-                    <h2>{opportunity.title}</h2>
-                    <Button variant="ghost" onClick={onClose}>
-                        <X size={20} />
-                    </Button>
+            <div className="card-detail-panel glass-panel" onClick={e => e.stopPropagation()}>
+                <div className="card-detail-panel-header">
+                    <div className="card-detail-panel-header-left">
+                        <div className="card-detail-title-section">
+                            <h2 className="card-detail-title">{opportunity.title}</h2>
+                            <p className="card-detail-subtitle">{opportunity.customerName || 'No customer'}</p>
+                        </div>
+                    </div>
+                    <div className="card-detail-panel-header-right">
+                        <div className="card-detail-value-section">
+                            <span className="card-detail-value">${opportunity.estimatedValue.toLocaleString()}</span>
+                            <span className="card-detail-tag">{opportunity.stageName || 'No Stage'}</span>
+                        </div>
+                        <div className="card-detail-actions">
+                            <div className="card-view-actions">
+                                <Button onClick={handleSave} className="card-save-btn">
+                                    Save
+                                </Button>
+                                <Button variant="ghost" onClick={handleMarkAsWon} className="card-mark-won-btn">
+                                    <Check size={16} style={{ marginRight: 6 }} /> Mark Won
+                                </Button>
+                                <Button variant="ghost" onClick={handleMarkAsLost} className="card-mark-lost-btn">
+                                    <XCircle size={16} style={{ marginRight: 6 }} /> Mark Lost
+                                </Button>
+                                <Button variant="ghost" onClick={onClose} className="card-close-btn">
+                                    <X size={20} />
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="detail-panel-content">
-                    <Card className="glass-panel">
-                        <Card.Content>
-                            {isEditing ? (
-                                <div className="form-grid">
-                                    <div className="form-field">
-                                        <label>Title</label>
-                                        <Input
-                                            value={editedOpportunity.title || ''}
-                                            onChange={e => setEditedOpportunity(prev => ({ ...prev, title: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="form-field">
-                                        <label>Customer</label>
-                                        <Input value={opportunity.customerName} disabled />
-                                    </div>
-                                    <div className="form-field">
-                                        <label>Stage</label>
-                                        <Input value={opportunity.stageName} disabled />
-                                    </div>
-                                    <div className="form-field">
-                                        <label>Expected Close Date</label>
-                                        <DatePicker
-                                            value={editedOpportunity.expectedCloseDate?.split('T')[0] || ''}
-                                            onChange={e => setEditedOpportunity(prev => ({ ...prev, expectedCloseDate: e }))}
-                                        />
-                                    </div>
-                                    <div className="form-field">
-                                        <label>Description</label>
-                                        <textarea
-                                            value={editedOpportunity.description || ''}
-                                            onChange={e => setEditedOpportunity(prev => ({ ...prev, description: e.target.value }))}
-                                            className="form-textarea"
-                                            rows={3}
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="profile-grid">
-                                    <div className="profile-field">
-                                        <label>Customer</label>
-                                        <p>{opportunity.customerName}</p>
-                                    </div>
-                                    <div className="profile-field">
-                                        <label>Stage</label>
-                                        <p>{opportunity.stageName}</p>
-                                    </div>
-                                    <div className="profile-field">
-                                        <label>Owner</label>
-                                        <p>{opportunity.ownerName}</p>
-                                    </div>
-                                    <div className="profile-field">
-                                        <label>Expected Close Date</label>
-                                        <p>{opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString() : 'Not set'}</p>
-                                    </div>
-                                    <div className="profile-field" style={{ gridColumn: '1 / -1' }}>
-                                        <label>Description</label>
-                                        <p>{opportunity.description || 'No description'}</p>
-                                    </div>
-                                </div>
-                            )}
-                        </Card.Content>
-                    </Card>
-
-                    <div className="detail-panel-actions">
-                        {isEditing ? (
-                            <>
-                                <Button onClick={handleSave}>
-                                    <Check size={16} style={{ marginRight: 6 }} /> Save
-                                </Button>
-                                <Button variant="ghost" onClick={() => setIsEditing(false)}>
-                                    <XCircle size={16} style={{ marginRight: 6 }} /> Cancel
-                                </Button>
-                            </>
-                        ) : (
-                            <Button onClick={() => setIsEditing(true)}>
-                                Edit Details
-                            </Button>
-                        )}
+                <div className="card-detail-panel-content">
+                    <div className="card-detail-tabs">
+                        <button 
+                            className={`card-tab-btn ${activeTab === 'details' ? 'card-tab-active' : ''}`}
+                            onClick={() => setActiveTab('details')}
+                        >
+                            Details
+                        </button>
+                        <button 
+                            className={`card-tab-btn ${activeTab === 'lineItems' ? 'card-tab-active' : ''}`}
+                            onClick={() => setActiveTab('lineItems')}
+                        >
+                            Line Items ({lineItems.length})
+                        </button>
                     </div>
 
-                    <Card className="glass-panel">
-                        <Card.Content>
-                            <div className="line-items-header">
-                                <h3>Line Items</h3>
-                                <div className="line-items-total">
-                                    <span>Total: ${calculatedTotal.toLocaleString()}</span>
-                                </div>
-                            </div>
-
-                            <div className="line-items-table">
-                                {lineItems.map(item => (
-                                    <div key={item.lineItemId} className="line-item-row">
-                                        <div className="line-item-product">
-                                            <strong>{item.productName}</strong>
-                                            {item.productSku && <span className="line-item-sku">SKU: {item.productSku}</span>}
-                                            {item.productCategory && <span className="line-item-category">{item.productCategory}</span>}
+                    <div className="card-detail-layout">
+                        {activeTab === 'details' && (
+                            <Card className="glass-panel card-detail-section">
+                                <Card.Content>
+                                    <div className="card-detail-section-header">
+                                        <h3 className="card-detail-section-title">Details</h3>
+                                    </div>
+                                    <div className="card-form-grid">
+                                        <div className="card-form-field-full">
+                                            <label className="card-form-label">Title</label>
+                                            <Input
+                                                value={editedOpportunity.title || ''}
+                                                onChange={e => handleFieldChange('title', e.target.value)}
+                                            />
                                         </div>
-                                        <div className="line-item-quantity">{item.quantity}</div>
-                                        <div className="line-item-price">${item.unitPrice.toLocaleString()}</div>
-                                        <div className="line-item-discount">{item.discountPercent}%</div>
-                                        <div className="line-item-total">${item.totalPrice.toLocaleString()}</div>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleDeleteLineItem(item.lineItemId)}
-                                        >
-                                            <Trash2 size={16} />
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Customer</label>
+                                            <SearchableSelect
+                                                value={editedOpportunity.customerId || opportunity.customerId}
+                                                options={customers.map(c => ({ value: c.customerId, label: c.name }))}
+                                                onChange={val => handleFieldChange('customerId', Number(val))}
+                                                placeholder="Search customer..."
+                                            />
+                                        </div>
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Stage</label>
+                                            <SelectDown
+                                                value={editedOpportunity.opportunityStageId || opportunity.opportunityStageId}
+                                                options={stages.map(s => ({ value: s.opportunityStageId, label: s.name }))}
+                                                onChange={val => handleFieldChange('opportunityStageId', Number(val))}
+                                            />
+                                        </div>
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Owner</label>
+                                            <SelectDown
+                                                value={editedOpportunity.ownerId || opportunity.ownerId}
+                                                options={users.map(u => ({ value: u.userId, label: u.name }))}
+                                                onChange={val => handleFieldChange('ownerId', Number(val))}
+                                            />
+                                        </div>
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Estimated Value</label>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={editedOpportunity.estimatedValue || opportunity.estimatedValue}
+                                                onChange={e => handleFieldChange('estimatedValue', Number(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Expected Close Date</label>
+                                            <DatePicker
+                                                value={editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0] || ''}
+                                                onChange={e => handleFieldChange('expectedCloseDate', e)}
+                                            />
+                                        </div>
+                                        <div className="card-form-field-full">
+                                            <label className="card-form-label">Description</label>
+                                            <textarea
+                                                value={editedOpportunity.description || ''}
+                                                onChange={e => handleFieldChange('description', e.target.value)}
+                                                className="card-form-textarea"
+                                                rows={3}
+                                            />
+                                        </div>
+                                        <div className="card-form-field">
+                                            <label className="card-form-label">Created Date</label>
+                                            <p className="card-detail-field-value">{new Date(opportunity.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                    </div>
+                                </Card.Content>
+                            </Card>
+                        )}
+
+                        {activeTab === 'lineItems' && (
+                            <Card className="glass-panel card-detail-section">
+                                <Card.Content>
+                                    <div className="card-detail-section-header">
+                                        <h3 className="card-detail-section-title">Products</h3>
+                                        <div className="card-detail-section-total">
+                                            Total: ${calculatedTotal.toLocaleString()}
+                                        </div>
+                                    </div>
+
+                                    <div className="card-line-items-table">
+                                        <div className="card-line-items-header">
+                                            <div>Product</div>
+                                            <div>Qty</div>
+                                            <div>Unit Price</div>
+                                            <div>Discount</div>
+                                            <div>Total</div>
+                                            <div></div>
+                                        </div>
+
+                                        {lineItems.map((item, index) => (
+                                            <div key={item.lineItemId} className="card-line-item-row">
+                                                <div className="card-line-item-product">
+                                                    <div className="card-line-item-name">{item.product?.name}</div>
+                                                    {item.product?.sku && <div className="card-line-item-sku">SKU: {item.product.sku}</div>}
+                                                    {item.product?.productCategory && <div className="card-line-item-category">{item.product.productCategory.name}</div>}
+                                                </div>
+                                                <div className="card-line-item-qty">{item.quantity}</div>
+                                                <div className="card-line-item-price">${item.unitPrice.toLocaleString()}</div>
+                                                <div className="card-line-item-discount">{item.discountPercent}%</div>
+                                                <div className="card-line-item-total">${item.totalPrice.toLocaleString()}</div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteLineItem(item.lineItemId)}
+                                                    className="card-line-item-delete"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="card-line-item-add-compact">
+                                        <SelectDown
+                                            value={newLineItem.productId}
+                                            options={[
+                                                { value: 0, label: 'Select Product' },
+                                                ...products.map(p => ({ value: p.productId, label: p.name }))
+                                            ]}
+                                            onChange={val => handleProductChange(Number(val))}
+                                            compact
+                                            className="card-line-item-select-wrapper"
+                                        />
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            value={newLineItem.quantity}
+                                            onChange={e => setNewLineItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                                            placeholder="Qty"
+                                            className="card-line-item-input-compact"
+                                        />
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            value={newLineItem.unitPrice}
+                                            onChange={e => setNewLineItem(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
+                                            placeholder="Price"
+                                            className="card-line-item-input-compact"
+                                        />
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.1"
+                                            value={newLineItem.discountPercent}
+                                            onChange={e => setNewLineItem(prev => ({ ...prev, discountPercent: Number(e.target.value) }))}
+                                            placeholder="%"
+                                            className="card-line-item-input-compact"
+                                        />
+                                        <Button onClick={handleAddLineItem} className="card-line-item-add-btn-compact">
+                                            <Plus size={14} />
                                         </Button>
                                     </div>
-                                ))}
-                            </div>
-
-                            <div className="add-line-item">
-                                <select
-                                    value={newLineItem.productId}
-                                    onChange={e => handleProductChange(Number(e.target.value))}
-                                    className="form-select"
-                                >
-                                    <option value={0}>Select Product</option>
-                                    {products.map(product => (
-                                        <option key={product.productId} value={product.productId}>
-                                            {product.name} - ${product.price.toLocaleString()}
-                                        </option>
-                                    ))}
-                                </select>
-                                <Input
-                                    type="number"
-                                    min="1"
-                                    value={newLineItem.quantity}
-                                    onChange={e => setNewLineItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-                                    placeholder="Qty"
-                                />
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={newLineItem.unitPrice}
-                                    onChange={e => setNewLineItem(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
-                                    placeholder="Price"
-                                />
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    step="0.1"
-                                    value={newLineItem.discountPercent}
-                                    onChange={e => setNewLineItem(prev => ({ ...prev, discountPercent: Number(e.target.value) }))}
-                                    placeholder="Discount %"
-                                />
-                                <Button onClick={handleAddLineItem}>
-                                    <Plus size={16} style={{ marginRight: 6 }} /> Add
-                                </Button>
-                            </div>
-                        </Card.Content>
-                    </Card>
+                                </Card.Content>
+                            </Card>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
