@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,6 +20,15 @@ namespace CrmSystem.Infrastructure.Services
 
         public async Task<OpportunityReadDto> CreateAsync(OpportunityCreateDto dto)
         {
+            // Validate that CustomerId exists and is active
+            var customer = await _context.Customers.FindAsync(dto.CustomerId);
+            if (customer == null)
+            {
+                throw new InvalidOperationException(
+                    "Selected customer does not exist. Please select an existing customer or convert a lead first.");
+            }
+
+            // Create opportunity with validated CustomerId
             var opportunity = new Opportunity
             {
                 CustomerId          = dto.CustomerId,
@@ -33,26 +43,29 @@ namespace CrmSystem.Infrastructure.Services
             _context.Opportunities.Add(opportunity);
             await _context.SaveChangesAsync();
 
-            // Re-fetch with navigation so StageName is populated
-            var created = await QueryWithStage().FirstAsync(o => o.OpportunityId == opportunity.OpportunityId);
+            // Re-fetch with navigation so display fields are populated
+            var created = await QueryWithDetails().FirstAsync(o => o.OpportunityId == opportunity.OpportunityId);
             return MapToReadDto(created);
         }
 
         public async Task<OpportunityReadDto?> GetByIdAsync(int id)
         {
-            var opp = await QueryWithStage().FirstOrDefaultAsync(o => o.OpportunityId == id);
+            var opp = await QueryWithDetails().FirstOrDefaultAsync(o => o.OpportunityId == id);
             return opp == null ? null : MapToReadDto(opp);
         }
 
         public async Task<IReadOnlyList<OpportunityReadDto>> GetAllAsync()
         {
-            var list = await QueryWithStage().ToListAsync();
+            var list = await QueryWithDetails().ToListAsync();
             return list.Select(MapToReadDto).ToList();
         }
 
         public async Task<bool> UpdateAsync(int id, OpportunityUpdateDto dto)
         {
-            var opp = await _context.Opportunities.FindAsync(id);
+            var opp = await _context.Opportunities
+                .Include(o => o.Customer)
+                .FirstOrDefaultAsync(o => o.OpportunityId == id);
+
             if (opp == null) return false;
 
             if (dto.Title != null)                    opp.Title               = dto.Title;
@@ -79,13 +92,21 @@ namespace CrmSystem.Infrastructure.Services
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
-        private IQueryable<Opportunity> QueryWithStage() =>
-            _context.Opportunities.Include(o => o.OpportunityStage);
+        private IQueryable<Opportunity> QueryWithDetails() =>
+            _context.Opportunities
+                .Include(o => o.OpportunityStage)
+                .Include(o => o.Customer)
+                .Include(o => o.Owner);
 
         private static OpportunityReadDto MapToReadDto(Opportunity opp) => new()
         {
             OpportunityId      = opp.OpportunityId,
             CustomerId         = opp.CustomerId,
+            CustomerFirstName  = opp.Customer?.FirstName ?? string.Empty,
+            CustomerLastName   = opp.Customer?.LastName ?? string.Empty,
+            CustomerEmail      = opp.Customer?.Email ?? string.Empty,
+            CustomerPhone      = opp.Customer?.Phone,
+            CustomerJobTitle   = opp.Customer?.JobTitle,
             Title              = opp.Title,
             Description        = opp.Description,
             OpportunityStageId = opp.OpportunityStageId,
@@ -94,6 +115,7 @@ namespace CrmSystem.Infrastructure.Services
             ExpectedCloseDate  = opp.ExpectedCloseDate,
             ActualCloseDate    = opp.ActualCloseDate,
             OwnerId            = opp.OwnerId,
+            OwnerName          = opp.Owner?.Name ?? string.Empty,
             CreatedAt          = opp.CreatedAt
         };
     }

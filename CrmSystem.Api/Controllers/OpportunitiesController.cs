@@ -45,6 +45,12 @@ public class OpportunitiesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<OpportunityReadDto>> Create([FromBody] OpportunityCreateDto dto)
     {
+        // Set default owner to current user if not specified
+        if (dto.OwnerId == 0 && _currentUser.UserId.HasValue)
+        {
+            dto.OwnerId = _currentUser.UserId.Value;
+        }
+
         var created = await _service.CreateAsync(dto);
         return CreatedAtAction(nameof(Get), new { id = created.OpportunityId }, created);
     }
@@ -52,26 +58,29 @@ public class OpportunitiesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] OpportunityUpdateDto dto)
     {
-        var opp = await _db.Opportunities.FindAsync(id);
+        var opp = await _db.Opportunities
+            .Include(o => o.Customer)
+            .FirstOrDefaultAsync(o => o.OpportunityId == id);
+
         if (opp == null) return NotFound();
 
-        // Capture old OwnerId for audit logging
+        // Capture old values for audit logging BEFORE the update
         var oldOwnerId = opp.OwnerId;
 
         var success = await _service.UpdateAsync(id, dto);
         if (!success) return NotFound();
 
-        // Log owner reassignment if OwnerId changed
-        if (oldOwnerId != opp.OwnerId && _currentUser.UserId is not null)
+        // Log owner reassignment if OwnerId changed (re-fetch to get new value)
+        if (oldOwnerId != dto.OwnerId && _currentUser.UserId is not null)
         {
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
             if (entityType is not null)
             {
                 await _auditService.LogAssignmentAsync(
                     entityTypeId: entityType.EntityTypeId,
-                    entityId: opp.OpportunityId,
+                    entityId: id,
                     oldRepId: oldOwnerId,
-                    newRepId: opp.OwnerId,
+                    newRepId: dto.OwnerId,
                     changedById: _currentUser.UserId.Value);
             }
         }

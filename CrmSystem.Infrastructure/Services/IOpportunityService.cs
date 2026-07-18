@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using CrmSystem.Domain.Dtos.Opportunity;
-using CrmSystem.Domain.Entities;
 
 namespace CrmSystem.Infrastructure.Services
 {
