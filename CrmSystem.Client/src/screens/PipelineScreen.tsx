@@ -33,12 +33,21 @@ interface OpportunityStage {
     isLost: boolean;
 }
 
+interface User {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+}
+
 export const PipelineScreen: React.FC = () => {
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [stages, setStages] = useState<OpportunityStage[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
-    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [dateFilter, setDateFilter] = useState<string>('all');
     const [draggedOpportunity, setDraggedOpportunity] = useState<Opportunity | null>(null);
     const [selectedOpportunity, setSelectedOpportunity] = useState<number | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -47,12 +56,14 @@ export const PipelineScreen: React.FC = () => {
     const loadOpportunities = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [oppData, stageData] = await Promise.all([
+            const [oppData, stageData, userData] = await Promise.all([
                 api.get<Opportunity[]>('/api/opportunities'),
-                api.get<OpportunityStage[]>('/api/opportunitystages')
+                api.get<OpportunityStage[]>('/api/opportunitystages'),
+                api.get<User[]>('/api/users')
             ]);
             setOpportunities(oppData);
             setStages(stageData.sort((a, b) => a.sortOrder - b.sortOrder));
+            setUsers(userData ?? []);
         } catch (error) {
             console.error('Failed to load pipeline data:', error);
         } finally {
@@ -125,7 +136,50 @@ export const PipelineScreen: React.FC = () => {
     };
 
     const getOpportunitiesByStage = (stageId: number) => {
-        return opportunities.filter(opp => opp.opportunityStageId === stageId);
+        let filtered = opportunities.filter(opp => opp.opportunityStageId === stageId);
+
+        // Filter by owner
+        if (selectedOwnerId) {
+            filtered = filtered.filter(opp => opp.ownerId === Number(selectedOwnerId));
+        }
+
+        // Filter by date
+        if (dateFilter !== 'all') {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const currentQuarter = Math.floor(currentMonth / 3);
+
+            filtered = filtered.filter(opp => {
+                if (!opp.expectedCloseDate) return false;
+
+                const closeDate = new Date(opp.expectedCloseDate);
+                const closeYear = closeDate.getFullYear();
+                const closeMonth = closeDate.getMonth();
+                const closeQuarter = Math.floor(closeMonth / 3);
+
+                switch (dateFilter) {
+                    case 'overdue':
+                        return closeDate < now;
+                    case 'thisMonth':
+                        return closeYear === currentYear && closeMonth === currentMonth;
+                    case 'thisQuarter':
+                        return closeYear === currentYear && closeQuarter === currentQuarter;
+                    case 'nextMonth':
+                        const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+                        const nextMonthYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+                        return closeYear === nextMonthYear && closeMonth === nextMonth;
+                    case 'nextQuarter':
+                        const nextQuarter = currentQuarter === 3 ? 0 : currentQuarter + 1;
+                        const nextQuarterYear = currentQuarter === 3 ? currentYear + 1 : currentYear;
+                        return closeYear === nextQuarterYear && closeQuarter === nextQuarter;
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        return filtered;
     };
 
     const getStageTotal = (stageId: number) => {
@@ -163,21 +217,25 @@ export const PipelineScreen: React.FC = () => {
                         style={{ minWidth: '150px' }}
                     >
                         <option value="">All Owners</option>
-                        {/* TODO: Load and display owners */}
+                        {users.filter(u => u.isActive).map(u => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
                     </select>
                 </div>
-                <div style={{ marginLeft: '1rem', display: 'flex', gap: '0.5rem' }}>
-                    <DatePicker
-                        value={dateRange.start}
-                        onChange={e => setDateRange(prev => ({ ...prev, start: e }))}
-                        placeholder="Start date"
-                    />
-                    <span style={{ alignSelf: 'center' }}>to</span>
-                    <DatePicker
-                        value={dateRange.end}
-                        onChange={e => setDateRange(prev => ({ ...prev, end: e }))}
-                        placeholder="End date"
-                    />
+                <div style={{ marginLeft: '1rem' }}>
+                    <select
+                        className="filter-input"
+                        value={dateFilter}
+                        onChange={e => setDateFilter(e.target.value)}
+                        style={{ minWidth: '150px' }}
+                    >
+                        <option value="all">All Dates</option>
+                        <option value="overdue">Overdue</option>
+                        <option value="thisMonth">This Month</option>
+                        <option value="thisQuarter">This Quarter</option>
+                        <option value="nextMonth">Next Month</option>
+                        <option value="nextQuarter">Next Quarter</option>
+                    </select>
                 </div>
             </div>
 

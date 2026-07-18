@@ -37,13 +37,13 @@ export const ProductsScreen: React.FC = () => {
     const loadData = async () => {
       try {
         const [productsData, categoriesData, statusesData] = await Promise.all([
-          api.get<{ id: number; name: string; sku: string; description: string | null; productCategoryId: number; productCategoryName: string; productStatusId: number; productStatusName: string; price: number; cost: number | null; stockQuantity: number }[]>('/api/products'),
-          api.get<{ id: number; name: string }[]>('/api/productcategories'),
-          api.get<{ id: number; name: string; isSelectable: boolean }[]>('/api/productstatuses')
+          api.get<any[]>('/api/products'),
+          api.get<any[]>('/api/productcategories'),
+          api.get<any[]>('/api/productstatuses')
         ]);
-        setProducts(productsData ?? []);
-        setProductCategories(categoriesData ?? []);
-        setProductStatuses(statusesData ?? []);
+        setProducts((productsData ?? []).map(p => ({ ...p, id: p.id ?? p.productId })));
+        setProductCategories((categoriesData ?? []).map(c => ({ ...c, id: c.id ?? c.productCategoryId })));
+        setProductStatuses((statusesData ?? []).map(s => ({ ...s, id: s.id ?? s.productStatusId })));
       } catch (error) {
         console.error('Failed to load products data:', error);
       }
@@ -82,8 +82,8 @@ export const ProductsScreen: React.FC = () => {
         cost: newProductCost ? Number(newProductCost) : null,
         stockQuantity: Number(newProductStockQuantity)
       });
-      const updated = await api.get<{ id: number; name: string; sku: string; description: string | null; productCategoryId: number; productCategoryName: string; productStatusId: number; productStatusName: string; price: number; cost: number | null; stockQuantity: number }[]>('/api/products');
-      setProducts(updated ?? []);
+      const updated = await api.get<any[]>('/api/products');
+      setProducts((updated ?? []).map(p => ({ ...p, id: p.id ?? p.productId })));
       setNewProductName('');
       setNewProductSku('');
       setNewProductDescription('');
@@ -151,8 +151,8 @@ export const ProductsScreen: React.FC = () => {
         cost: editingProductCost ? Number(editingProductCost) : null,
         stockQuantity: Number(editingProductStockQuantity)
       });
-      const updated = await api.get<{ id: number; name: string; sku: string; description: string | null; productCategoryId: number; productCategoryName: string; productStatusId: number; productStatusName: string; price: number; cost: number | null; stockQuantity: number }[]>('/api/products');
-      setProducts(updated ?? []);
+      const updated = await api.get<any[]>('/api/products');
+      setProducts((updated ?? []).map(p => ({ ...p, id: p.id ?? p.productId })));
       setEditingProductId(null);
       setEditingProductName('');
       setEditingProductSku('');

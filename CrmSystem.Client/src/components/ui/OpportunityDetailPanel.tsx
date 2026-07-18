@@ -5,7 +5,8 @@ import { Input } from './Input';
 import { DatePicker } from './DatePicker';
 import { SelectDown } from './SelectDown';
 import { api } from '../../lib/api';
-import { X, Plus, Trash2, Check, XCircle } from 'lucide-react';
+import { X, Plus, Trash2, Check, XCircle, History } from 'lucide-react';
+import { AuditHistory } from '../audit/AuditHistory';
 import '../../screens/screens.css';
 
 interface Opportunity {
@@ -92,7 +93,8 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
         unitPrice: 0,
         discountPercent: 0
     });
-    const [activeTab, setActiveTab] = useState<'details' | 'lineItems'>('details');
+    const [activeTab, setActiveTab] = useState<'details' | 'lineItems' | 'audit'>('details');
+    const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -139,6 +141,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
             });
             await loadData();
             onUpdate();
+            setAuditRefreshTrigger(t => t + 1);
             const event = new CustomEvent('app:toast', {
                 detail: { message: 'Opportunity updated successfully', type: 'success' as const }
             });
@@ -221,6 +224,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
             await api.patch(`/api/opportunities/${opportunityId}/stage`, { stageId: wonStage.opportunityStageId });
             await loadData();
             onUpdate();
+            setAuditRefreshTrigger(t => t + 1);
             const event = new CustomEvent('app:toast', {
                 detail: { message: 'Opportunity marked as Won', type: 'success' as const }
             });
@@ -242,6 +246,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
             await api.patch(`/api/opportunities/${opportunityId}/stage`, { stageId: lostStage.opportunityStageId });
             await loadData();
             onUpdate();
+            setAuditRefreshTrigger(t => t + 1);
             const event = new CustomEvent('app:toast', {
                 detail: { message: 'Opportunity marked as Lost', type: 'success' as const }
             });
@@ -325,6 +330,12 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                             onClick={() => setActiveTab('lineItems')}
                         >
                             Line Items ({lineItems.length})
+                        </button>
+                        <button 
+                            className={`card-tab-btn ${activeTab === 'audit' ? 'card-tab-active' : ''}`}
+                            onClick={() => setActiveTab('audit')}
+                        >
+                            <History size={14} style={{ marginRight: 4 }} /> Audit History
                         </button>
                     </div>
 
@@ -500,6 +511,14 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                             <Plus size={14} />
                                         </Button>
                                     </div>
+                                </Card.Content>
+                            </Card>
+                        )}
+
+                        {activeTab === 'audit' && (
+                            <Card className="glass-panel card-detail-section">
+                                <Card.Content>
+                                    <AuditHistory entityType="opportunity" entityId={opportunityId} refreshTrigger={auditRefreshTrigger} />
                                 </Card.Content>
                             </Card>
                         )}

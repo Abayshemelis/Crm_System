@@ -47,6 +47,11 @@ const FIELD_LABELS: Record<string, string> = {
   Title: 'Title',
   Description: 'Description',
   CompanyName: 'Company',
+  // Opportunity-specific
+  OpportunityStageId: 'Stage',
+  ExpectedCloseDate: 'Expected Close Date',
+  ActualCloseDate: 'Actual Close Date',
+  OwnerId: 'Owner',
 };
 
 interface ActionCfg {

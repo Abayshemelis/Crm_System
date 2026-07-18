@@ -65,23 +65,59 @@ public class OpportunitiesController : ControllerBase
         if (opp == null) return NotFound();
 
         // Capture old values for audit logging BEFORE the update
-        var oldOwnerId = opp.OwnerId;
+        var oldOwnerId           = opp.OwnerId;
+        var oldTitle             = opp.Title;
+        var oldDescription       = opp.Description;
+        var oldStageId           = opp.OpportunityStageId;
+        var oldEstimatedValue    = opp.EstimatedValue;
+        var oldExpectedCloseDate = opp.ExpectedCloseDate;
 
         var success = await _service.UpdateAsync(id, dto);
         if (!success) return NotFound();
 
-        // Log owner reassignment if OwnerId changed (re-fetch to get new value)
-        if (oldOwnerId != dto.OwnerId && _currentUser.UserId is not null)
+        if (_currentUser.UserId is not null)
         {
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
             if (entityType is not null)
             {
-                await _auditService.LogAssignmentAsync(
-                    entityTypeId: entityType.EntityTypeId,
-                    entityId: id,
-                    oldRepId: oldOwnerId,
-                    newRepId: dto.OwnerId,
-                    changedById: _currentUser.UserId.Value);
+                // Build list of changed fields
+                var changes = new List<(string Field, string? OldValue, string? NewValue)>();
+
+                if (dto.Title != null && dto.Title != oldTitle)
+                    changes.Add(("Title", oldTitle, dto.Title));
+
+                if (dto.Description != null && dto.Description != oldDescription)
+                    changes.Add(("Description", oldDescription, dto.Description));
+
+                if (dto.OpportunityStageId.HasValue && dto.OpportunityStageId.Value != oldStageId)
+                    changes.Add(("OpportunityStageId", oldStageId.ToString(), dto.OpportunityStageId.Value.ToString()));
+
+                if (dto.EstimatedValue.HasValue && dto.EstimatedValue.Value != oldEstimatedValue)
+                    changes.Add(("EstimatedValue", oldEstimatedValue.ToString("F2"), dto.EstimatedValue.Value.ToString("F2")));
+
+                if (dto.ExpectedCloseDate.HasValue && dto.ExpectedCloseDate.Value != oldExpectedCloseDate)
+                    changes.Add(("ExpectedCloseDate", oldExpectedCloseDate?.ToString("o"), dto.ExpectedCloseDate.Value.ToString("o")));
+
+                if (changes.Count > 0)
+                {
+                    await _auditService.LogFieldChangesAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: id,
+                        changes: changes,
+                        actionTypeName: "Update",
+                        changedById: _currentUser.UserId.Value);
+                }
+
+                // Log owner reassignment separately
+                if (dto.OwnerId.HasValue && dto.OwnerId.Value != oldOwnerId)
+                {
+                    await _auditService.LogAssignmentAsync(
+                        entityTypeId: entityType.EntityTypeId,
+                        entityId: id,
+                        oldRepId: oldOwnerId,
+                        newRepId: dto.OwnerId.Value,
+                        changedById: _currentUser.UserId.Value);
+                }
             }
         }
 
@@ -195,6 +231,17 @@ public class OpportunitiesController : ControllerBase
         }
 
         var oldStageId = opp.OpportunityStageId;
+        var oldActualCloseDate = opp.ActualCloseDate;
+
+        // Set ActualCloseDate automatically
+        if (newStage.IsWon || newStage.IsLost)
+        {
+            opp.ActualCloseDate = DateTime.UtcNow;
+        }
+        else
+        {
+            opp.ActualCloseDate = null;
+        }
 
         // Update opportunity stage
         opp.OpportunityStageId = request.StageId;
@@ -211,6 +258,29 @@ public class OpportunitiesController : ControllerBase
         };
 
         _db.StageHistories.Add(stageHistory);
+
+        // Audit Logging
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
+        if (entityType is not null)
+        {
+            var changes = new List<(string Field, string? OldValue, string? NewValue)>
+            {
+                ("OpportunityStageId", oldStageId.ToString(), newStage.OpportunityStageId.ToString())
+            };
+            
+            if (oldActualCloseDate != opp.ActualCloseDate)
+            {
+                changes.Add(("ActualCloseDate", oldActualCloseDate?.ToString("o"), opp.ActualCloseDate?.ToString("o")));
+            }
+
+            await _auditService.LogFieldChangesAsync(
+                entityTypeId: entityType.EntityTypeId,
+                entityId: id,
+                changes: changes,
+                actionTypeName: "Update",
+                changedById: _currentUser.UserId.Value);
+        }
+
         await _db.SaveChangesAsync();
 
         return NoContent();
