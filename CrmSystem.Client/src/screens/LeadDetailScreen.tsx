@@ -150,7 +150,7 @@ export const LeadDetailScreen: React.FC = () => {
                                         onChange={e => setEditingStatusId(e.target.value)}
                                         style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem', minWidth: '120px' }}
                                     >
-                                        {statuses.map(status => (
+                                        {statuses.filter(status => status.name !== 'Converted').map(status => (
                                             <option key={status.id} value={status.id}>{status.name}</option>
                                         ))}
                                     </select>

@@ -13,7 +13,8 @@ import './screens.css';
 interface Opportunity {
     opportunityId: number;
     customerId: number;
-    customerName: string;
+    customerFirstName: string;
+    customerLastName: string;
     title: string;
     opportunityStageId: number;
     stageName: string;
@@ -217,7 +218,7 @@ export const PipelineScreen: React.FC = () => {
                                         >
                                             <Card.Content>
                                                 <h4>{opp.title}</h4>
-                                                <p>{opp.customerName}</p>
+                                                <p>{opp.customerFirstName} {opp.customerLastName}</p>
                                                 <p className="opportunity-value">${opp.estimatedValue.toLocaleString()}</p>
                                                 <p className="opportunity-owner">{opp.ownerName}</p>
                                             </Card.Content>

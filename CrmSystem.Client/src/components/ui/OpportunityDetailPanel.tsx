@@ -4,7 +4,6 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { DatePicker } from './DatePicker';
 import { SelectDown } from './SelectDown';
-import { SearchableSelect } from './SearchableSelect';
 import { api } from '../../lib/api';
 import { X, Plus, Trash2, Check, XCircle } from 'lucide-react';
 import '../../screens/screens.css';
@@ -12,7 +11,11 @@ import '../../screens/screens.css';
 interface Opportunity {
     opportunityId: number;
     customerId: number;
-    customerName?: string;
+    customerFirstName: string;
+    customerLastName: string;
+    customerEmail: string;
+    customerPhone?: string;
+    customerJobTitle?: string;
     title: string;
     opportunityStageId: number;
     stageName?: string;
@@ -26,11 +29,6 @@ interface Opportunity {
     updatedAt?: string;
 }
 
-interface Customer {
-    customerId: number;
-    name: string;
-}
-
 interface Stage {
     opportunityStageId: number;
     name: string;
@@ -39,8 +37,11 @@ interface Stage {
 }
 
 interface User {
-    userId: number;
+    id: number;
     name: string;
+    email: string;
+    role: string;
+    isActive: boolean;
 }
 
 interface OpportunityLineItem {
@@ -81,7 +82,6 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [lineItems, setLineItems] = useState<OpportunityLineItem[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    const [customers, setCustomers] = useState<Customer[]>([]);
     const [stages, setStages] = useState<Stage[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -97,18 +97,16 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [oppData, lineItemsData, productsData, customersData, stagesData, usersData] = await Promise.all([
+            const [oppData, lineItemsData, productsData, stagesData, usersData] = await Promise.all([
                 api.get<Opportunity>(`/api/opportunities/${opportunityId}`),
                 api.get<OpportunityLineItem[]>(`/api/opportunitylineitems/${opportunityId}`),
                 api.get<Product[]>('/api/products'),
-                api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
                 api.get<Stage[]>('/api/opportunitystages'),
                 api.get<User[]>('/api/users')
             ]);
             setOpportunity(oppData);
             setLineItems(lineItemsData);
             setProducts(productsData.filter(p => p.productStatus?.isSelectable));
-            setCustomers(customersData.data || []);
             setStages(stagesData);
             setUsers(usersData);
             setEditedOpportunity(oppData);
@@ -130,7 +128,15 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     const handleSave = async () => {
         if (!opportunity) return;
         try {
-            await api.put(`/api/opportunities/${opportunityId}`, editedOpportunity);
+            await api.put(`/api/opportunities/${opportunityId}`, {
+                title: editedOpportunity.title,
+                description: editedOpportunity.description,
+                opportunityStageId: editedOpportunity.opportunityStageId,
+                estimatedValue: editedOpportunity.estimatedValue,
+                expectedCloseDate: editedOpportunity.expectedCloseDate,
+                actualCloseDate: editedOpportunity.actualCloseDate,
+                ownerId: editedOpportunity.ownerId,
+            });
             await loadData();
             onUpdate();
             const event = new CustomEvent('app:toast', {
@@ -276,7 +282,10 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                     <div className="card-detail-panel-header-left">
                         <div className="card-detail-title-section">
                             <h2 className="card-detail-title">{opportunity.title}</h2>
-                            <p className="card-detail-subtitle">{opportunity.customerName || 'No customer'}</p>
+                            <p className="card-detail-subtitle">
+                                {opportunity.customerFirstName} {opportunity.customerLastName}
+                                {opportunity.customerEmail ? ` · ${opportunity.customerEmail}` : ''}
+                            </p>
                         </div>
                     </div>
                     <div className="card-detail-panel-header-right">
@@ -324,7 +333,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                             <Card className="glass-panel card-detail-section">
                                 <Card.Content>
                                     <div className="card-detail-section-header">
-                                        <h3 className="card-detail-section-title">Details</h3>
+                                        <h3 className="card-detail-section-title">Opportunity Details</h3>
                                     </div>
                                     <div className="card-form-grid">
                                         <div className="card-form-field-full">
@@ -334,15 +343,27 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                                 onChange={e => handleFieldChange('title', e.target.value)}
                                             />
                                         </div>
+
+                                        <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+                                            <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                                                Customer Information
+                                            </h4>
+                                        </div>
+
                                         <div className="card-form-field">
                                             <label className="card-form-label">Customer</label>
-                                            <SearchableSelect
-                                                value={editedOpportunity.customerId || opportunity.customerId}
-                                                options={customers.map(c => ({ value: c.customerId, label: c.name }))}
-                                                onChange={val => handleFieldChange('customerId', Number(val))}
-                                                placeholder="Search customer..."
-                                            />
+                                            <p className="card-detail-field-value">
+                                                {opportunity.customerFirstName} {opportunity.customerLastName}
+                                                {opportunity.customerEmail ? ` · ${opportunity.customerEmail}` : ''}
+                                            </p>
                                         </div>
+
+                                        <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+                                            <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                                                Opportunity Info
+                                            </h4>
+                                        </div>
+
                                         <div className="card-form-field">
                                             <label className="card-form-label">Stage</label>
                                             <SelectDown
@@ -355,7 +376,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                             <label className="card-form-label">Owner</label>
                                             <SelectDown
                                                 value={editedOpportunity.ownerId || opportunity.ownerId}
-                                                options={users.map(u => ({ value: u.userId, label: u.name }))}
+                                                options={users.filter(u => u.isActive).map(u => ({ value: u.id, label: u.name }))}
                                                 onChange={val => handleFieldChange('ownerId', Number(val))}
                                             />
                                         </div>
@@ -365,7 +386,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                                 type="number"
                                                 min="0"
                                                 step="0.01"
-                                                value={editedOpportunity.estimatedValue || opportunity.estimatedValue}
+                                                value={editedOpportunity.estimatedValue ?? opportunity.estimatedValue}
                                                 onChange={e => handleFieldChange('estimatedValue', Number(e.target.value))}
                                             />
                                         </div>

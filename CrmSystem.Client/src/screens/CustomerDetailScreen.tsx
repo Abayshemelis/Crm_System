@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AuditHistory } from '../components/audit/AuditHistory';
+import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus, History } from 'lucide-react';
 import Attachments from '../components/attachments/Attachments';
@@ -64,6 +65,7 @@ export const CustomerDetailScreen: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
+  const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
 
   const fetchAttachmentCount = useCallback(async () => {
     if (!id) return;
@@ -240,6 +242,7 @@ export const CustomerDetailScreen: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button onClick={() => setIsOpportunityModalOpen(true)} size="sm">New Opportunity</Button>
           <Button onClick={() => navigate(`/customers/${customer.customerId}/edit`)} size="sm">Edit</Button>
           <Button variant="danger" size="sm" onClick={async () => {
             if (!window.confirm('Delete this customer?')) return;
@@ -394,6 +397,16 @@ export const CustomerDetailScreen: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      <OpportunityCreateModal
+        isOpen={isOpportunityModalOpen}
+        onCancel={() => setIsOpportunityModalOpen(false)}
+        onCreated={() => {
+          setIsOpportunityModalOpen(false);
+          // Optionally navigate to pipeline or refresh customer data
+        }}
+        preselectedCustomerId={customer.customerId}
+      />
     </Layout>
   );
 };

@@ -42,7 +42,8 @@ interface UserStats {
 interface OpportunitySummary {
     opportunityId: number;
     title?: string;
-    customerName?: string;
+    customerFirstName?: string;
+    customerLastName?: string;
     estimatedValue?: number;
     stageName?: string;
     actualCloseDate?: string | null;
@@ -382,7 +383,7 @@ export const DashboardScreen: React.FC = () => {
                                                 <span className="deal-stage">{deal.stageName || 'Open'}</span>
                                             </div>
                                             <div className="deal-meta">
-                                                <span>{deal.customerName || 'No customer assigned'}</span>
+                                                <span>{deal.customerFirstName && deal.customerLastName ? `${deal.customerFirstName} ${deal.customerLastName}` : 'No customer assigned'}</span>
                                                 <span>{formatCurrency(deal.estimatedValue ?? 0)}</span>
                                             </div>
                                         </div>

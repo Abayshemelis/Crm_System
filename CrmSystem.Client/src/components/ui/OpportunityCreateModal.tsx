@@ -2,16 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { DatePicker } from './DatePicker';
+import { CustomerSearchSelect } from './CustomerSearchSelect';
 import { api } from '../../lib/api';
 import { X } from 'lucide-react';
 import '../../screens/screens.css';
-
-interface Customer {
-  customerId: number;
-  firstName: string;
-  lastName: string;
-  companyName?: string;
-}
 
 interface OpportunityStage {
   opportunityStageId: number;
@@ -31,22 +25,23 @@ interface OpportunityCreateModalProps {
   isOpen: boolean;
   onCancel: () => void;
   onCreated: () => void;
+  preselectedCustomerId?: number;
 }
 
 export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
   isOpen,
   onCancel,
-  onCreated
+  onCreated,
+  preselectedCustomerId
 }) => {
-  const [customerId, setCustomerId] = useState<string>('');
+  const [customerId, setCustomerId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stageId, setStageId] = useState<string>('');
   const [estimatedValue, setEstimatedValue] = useState('');
   const [expectedCloseDate, setExpectedCloseDate] = useState('');
   const [ownerId, setOwnerId] = useState<string>('');
-  
-  const [customers, setCustomers] = useState<Customer[]>([]);
+
   const [stages, setStages] = useState<OpportunityStage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,7 +51,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       // Reset form
-      setCustomerId('');
+      setCustomerId(preselectedCustomerId || null);
       setTitle('');
       setDescription('');
       setStageId('');
@@ -65,52 +60,50 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
       setOwnerId('');
       setError(null);
       setErrors({});
-      
-      // Load dropdown data
+
+      // Load dropdown data (stages, users)
       Promise.all([
-        api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=100'),
         api.get<OpportunityStage[]>('/api/opportunitystages'),
         api.get<User[]>('/api/users')
-      ]).then(([custResponse, stageData, userData]) => {
-        setCustomers(custResponse.data ?? []);
-        setStages((stageData ?? []).sort((a, b) => a.sortOrder - b.sortOrder));
+      ]).then(([stageData, userData]) => {
+        const sorted = (stageData ?? []).sort((a, b) => a.sortOrder - b.sortOrder);
+        setStages(sorted);
         setUsers(userData ?? []);
-        
+
         // Set default stage to first stage (usually "New")
-        if (stageData && stageData.length > 0) {
-          const firstStage = stageData.sort((a, b) => a.sortOrder - b.sortOrder)[0];
-          setStageId(String(firstStage.opportunityStageId));
+        if (sorted.length > 0) {
+          setStageId(String(sorted[0].opportunityStageId));
         }
       }).catch(err => {
         console.error('Failed to load dropdown data:', err);
         setError('Failed to load required data. Please try again.');
       });
     }
-  }, [isOpen]);
+  }, [isOpen, preselectedCustomerId]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-    
-    if (!customerId) newErrors.customerId = 'Customer is required.';
+
+    if (!customerId) newErrors.customerId = 'Please select an existing customer.';
     if (!title.trim()) newErrors.title = 'Title is required.';
     if (!stageId) newErrors.stageId = 'Stage is required.';
     if (!estimatedValue.trim()) newErrors.estimatedValue = 'Estimated value is required.';
     else if (Number(estimatedValue) < 0) newErrors.estimatedValue = 'Estimated value must be positive.';
     if (!ownerId) newErrors.ownerId = 'Owner is required.';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleCreate = async () => {
     if (!validate()) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const payload = {
-        customerId: Number(customerId),
+        customerId: customerId,
         title: title.trim(),
         description: description.trim() || null,
         opportunityStageId: Number(stageId),
@@ -118,7 +111,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
         expectedCloseDate: expectedCloseDate || null,
         ownerId: Number(ownerId)
       };
-      
+
       await api.post('/api/opportunities', payload);
       onCreated();
     } catch (err: any) {
@@ -135,33 +128,49 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
       <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
         <div className="modal-header">
           <h3>Create New Opportunity</h3>
+          <button className="icon-btn" onClick={onCancel}>
+            <X size={18} />
+          </button>
         </div>
-        
+
         <div className="modal-body">
           {error && (
             <div className="error-banner" style={{ marginBottom: '1rem' }}>
               {error}
             </div>
           )}
-          
+
           <div className="form-grid">
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="input-label">Customer *</label>
-              <select
-                className="input-field"
-                value={customerId}
-                onChange={e => setCustomerId(e.target.value)}
-              >
-                <option value="">Select a customer</option>
-                {customers.map(c => (
-                  <option key={c.customerId} value={c.customerId}>
-                    {c.firstName} {c.lastName} {c.companyName ? `(${c.companyName})` : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.customerId && <div className="field-error">{errors.customerId}</div>}
+            {/* ── Customer section ── */}
+            <div style={{ gridColumn: '1 / -1', marginBottom: '0.25rem' }}>
+              <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                Customer Information
+              </h4>
             </div>
-            
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <CustomerSearchSelect
+                label="Customer *"
+                value={customerId}
+                onChange={setCustomerId}
+                error={errors.customerId}
+                disabled={!!preselectedCustomerId}
+                placeholder="Search for an existing customer..."
+              />
+              {preselectedCustomerId && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Customer is pre-selected from the detail page and cannot be changed.
+                </p>
+              )}
+            </div>
+
+            {/* ── Opportunity section ── */}
+            <div style={{ gridColumn: '1 / -1', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+              <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                Opportunity Details
+              </h4>
+            </div>
+
             <div style={{ gridColumn: '1 / -1' }}>
               <Input
                 label="Title *"
@@ -171,7 +180,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
                 placeholder="e.g., Q4 Software License Deal"
               />
             </div>
-            
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label className="input-label">Description</label>
               <textarea
@@ -182,7 +191,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
                 style={{ minHeight: '80px' }}
               />
             </div>
-            
+
             <div>
               <label className="input-label">Stage *</label>
               <select
@@ -199,7 +208,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
               </select>
               {errors.stageId && <div className="field-error">{errors.stageId}</div>}
             </div>
-            
+
             <div>
               <Input
                 label="Estimated Value ($) *"
@@ -212,7 +221,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
                 placeholder="0.00"
               />
             </div>
-            
+
             <div>
               <DatePicker
                 label="Expected Close Date"
@@ -220,7 +229,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
                 onChange={e => setExpectedCloseDate(e)}
               />
             </div>
-            
+
             <div>
               <label className="input-label">Owner *</label>
               <select
@@ -239,7 +248,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
             </div>
           </div>
         </div>
-        
+
         <div className="modal-footer">
           <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancel
