@@ -20,12 +20,17 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { PipelineScreen } from './screens/PipelineScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
+import { TasksScreen } from './screens/TasksScreen';
+import { OpportunityDetailScreen } from './screens/OpportunityDetailScreen';
 import { Toast } from './components/ui/Toast';
+import LandingPage from './screens/LandingPage';
+import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
 
 function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginScreen />} />
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/reset-password" element={<ResetPasswordScreen />} />
@@ -38,6 +43,7 @@ function AppRoutes() {
         <Route path="/companies/new" element={<ProtectedRoute><CompanyFormScreen /></ProtectedRoute>} />
         <Route path="/companies/:id" element={<ProtectedRoute><CompanyDetailScreen /></ProtectedRoute>} />
         <Route path="/companies/:id/edit" element={<ProtectedRoute><CompanyFormScreen /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute><ProductsScreen /></ProtectedRoute>} />
         <Route path="/leads" element={<ProtectedRoute><LeadsScreen /></ProtectedRoute>} />
         <Route path="/leads/new" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
         <Route path="/leads/:id" element={<ProtectedRoute><LeadDetailScreen /></ProtectedRoute>} />
@@ -45,11 +51,13 @@ function AppRoutes() {
         <Route path="/leads/sources" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
         <Route path="/leads/statuses" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
         <Route path="/pipeline" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
-        <Route path="/pipeline/products" element={<ProtectedRoute><ProductsScreen /></ProtectedRoute>} />
-        <Route path="/pipeline/stages" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
+        <Route path="/opportunities" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
+        <Route path="/pipeline/products" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
+        <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
+        <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
+        <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
         <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

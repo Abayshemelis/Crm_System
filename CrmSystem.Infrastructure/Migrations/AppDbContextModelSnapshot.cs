@@ -287,6 +287,9 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CrmTaskId"));
 
+                    b.Property<int?>("ActivityId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("AssignedToId")
                         .HasColumnType("int");
 
@@ -318,6 +321,8 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.HasKey("CrmTaskId");
+
+                    b.HasIndex("ActivityId");
 
                     b.HasIndex("AssignedToId");
 
@@ -1152,6 +1157,11 @@ namespace CrmSystem.Infrastructure.Migrations
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.CrmTask", b =>
                 {
+                    b.HasOne("CrmSystem.Domain.Entities.Activity", "Activity")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("CrmSystem.Domain.Entities.Identity", "AssignedTo")
                         .WithMany()
                         .HasForeignKey("AssignedToId")
@@ -1178,6 +1188,8 @@ namespace CrmSystem.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("OpportunityId")
                         .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Activity");
 
                     b.Navigation("AssignedTo");
 
@@ -1423,6 +1435,11 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Activity", b =>
+                {
+                    b.Navigation("Tasks");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Opportunity", b =>

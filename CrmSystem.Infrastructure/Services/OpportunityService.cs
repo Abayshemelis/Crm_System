@@ -54,9 +54,63 @@ namespace CrmSystem.Infrastructure.Services
             return opp == null ? null : MapToReadDto(opp);
         }
 
-        public async Task<IReadOnlyList<OpportunityReadDto>> GetAllAsync()
+        public async Task<IReadOnlyList<OpportunityReadDto>> GetAllAsync(
+            int? customerId = null,
+            int? companyId = null,
+            int? ownerId = null,
+            int? opportunityStageId = null,
+            DateTime? expectedCloseDateFrom = null,
+            DateTime? expectedCloseDateTo = null,
+            DateTime? createdDateFrom = null,
+            DateTime? createdDateTo = null,
+            decimal? minValue = null,
+            decimal? maxValue = null,
+            DateTime? lastActivityFrom = null,
+            DateTime? lastActivityTo = null,
+            int? sourceId = null)
         {
-            var list = await QueryWithDetails().ToListAsync();
+            var query = QueryWithDetails();
+
+            if (customerId.HasValue)
+                query = query.Where(o => o.CustomerId == customerId.Value);
+
+            if (companyId.HasValue)
+                query = query.Where(o => o.Customer.CompanyId == companyId.Value);
+
+            if (ownerId.HasValue)
+                query = query.Where(o => o.OwnerId == ownerId.Value);
+
+            if (opportunityStageId.HasValue)
+                query = query.Where(o => o.OpportunityStageId == opportunityStageId.Value);
+
+            if (expectedCloseDateFrom.HasValue)
+                query = query.Where(o => o.ExpectedCloseDate >= expectedCloseDateFrom.Value);
+
+            if (expectedCloseDateTo.HasValue)
+                query = query.Where(o => o.ExpectedCloseDate <= expectedCloseDateTo.Value);
+
+            if (createdDateFrom.HasValue)
+                query = query.Where(o => o.CreatedAt >= createdDateFrom.Value);
+
+            if (createdDateTo.HasValue)
+                query = query.Where(o => o.CreatedAt <= createdDateTo.Value);
+
+            if (minValue.HasValue)
+                query = query.Where(o => o.EstimatedValue >= minValue.Value);
+
+            if (maxValue.HasValue)
+                query = query.Where(o => o.EstimatedValue <= maxValue.Value);
+
+            if (lastActivityFrom.HasValue)
+                query = query.Where(o => o.UpdatedAt >= lastActivityFrom.Value);
+
+            if (lastActivityTo.HasValue)
+                query = query.Where(o => o.UpdatedAt <= lastActivityTo.Value);
+
+            if (sourceId.HasValue)
+                query = query.Where(o => o.Customer.SourceId == sourceId.Value);
+
+            var list = await query.ToListAsync();
             return list.Select(MapToReadDto).ToList();
         }
 

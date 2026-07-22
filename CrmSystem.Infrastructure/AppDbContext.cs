@@ -334,6 +334,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(a => a.CreatedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(a => a.Tasks)
+             .WithOne(t => t.Activity)
+             .HasForeignKey(t => t.ActivityId)
+             .OnDelete(DeleteBehavior.SetNull);
         });
 
         // ── CrmTask ───────────────────────────────────────────────────────
@@ -354,6 +358,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(t => t.OpportunityId)
              .OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.Activity)
+             .WithMany(a => a.Tasks)
+             .HasForeignKey(t => t.ActivityId)
+             .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(t => t.AssignedTo)
              .WithMany()
              .HasForeignKey(t => t.AssignedToId)

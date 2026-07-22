@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Users, Building2, UserCircle, Settings, LogIn, Kanban, ChevronDown, ChevronRight, Package, Layers, Tag, List } from 'lucide-react';
+import { Users, Building2, UserCircle, Settings, LogIn, Kanban, CheckSquare } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
 
@@ -52,6 +52,11 @@ export const Sidebar: React.FC = () => {
             <NavLink to="/pipeline" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <Kanban className="link-icon" />
               <span>Pipeline</span>
+            </NavLink>
+
+            <NavLink to="/tasks" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <CheckSquare className="link-icon" />
+              <span>Tasks</span>
             </NavLink>
 
             {isManagerOrAbove && (

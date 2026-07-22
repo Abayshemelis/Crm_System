@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -6,6 +7,7 @@ import { Input } from '../components/ui/Input';
 import { DatePicker } from '../components/ui/DatePicker';
 import { OpportunityDetailPanel } from '../components/ui/OpportunityDetailPanel';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
+import { OpportunityFilters, FilterState } from '../components/opportunities/OpportunityFilters';
 import { api } from '../lib/api';
 import { Plus, Filter } from 'lucide-react';
 import './screens.css';
@@ -42,6 +44,7 @@ interface User {
 }
 
 export const PipelineScreen: React.FC = () => {
+    const navigate = useNavigate();
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [stages, setStages] = useState<OpportunityStage[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -52,12 +55,32 @@ export const PipelineScreen: React.FC = () => {
     const [selectedOpportunity, setSelectedOpportunity] = useState<number | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [activeFilters, setActiveFilters] = useState<FilterState>({});
+    const [activeFilterCount, setActiveFilterCount] = useState(0);
 
-    const loadOpportunities = useCallback(async () => {
+    const loadOpportunities = useCallback(async (filters?: FilterState) => {
         setIsLoading(true);
         try {
+            const params = new URLSearchParams();
+            if (filters?.customerId) params.append('customerId', filters.customerId.toString());
+            if (filters?.companyId) params.append('companyId', filters.companyId.toString());
+            if (filters?.ownerId) params.append('ownerId', filters.ownerId.toString());
+            if (filters?.opportunityStageId) params.append('opportunityStageId', filters.opportunityStageId.toString());
+            if (filters?.expectedCloseDateFrom) params.append('expectedCloseDateFrom', filters.expectedCloseDateFrom);
+            if (filters?.expectedCloseDateTo) params.append('expectedCloseDateTo', filters.expectedCloseDateTo);
+            if (filters?.createdDateFrom) params.append('createdDateFrom', filters.createdDateFrom);
+            if (filters?.createdDateTo) params.append('createdDateTo', filters.createdDateTo);
+            if (filters?.minValue) params.append('minValue', filters.minValue);
+            if (filters?.maxValue) params.append('maxValue', filters.maxValue);
+            if (filters?.lastActivityFrom) params.append('lastActivityFrom', filters.lastActivityFrom);
+            if (filters?.lastActivityTo) params.append('lastActivityTo', filters.lastActivityTo);
+            if (filters?.sourceId) params.append('sourceId', filters.sourceId.toString());
+
+            const queryString = params.toString();
+            const url = queryString ? `/api/opportunities?${queryString}` : '/api/opportunities';
+
             const [oppData, stageData, userData] = await Promise.all([
-                api.get<Opportunity[]>('/api/opportunities'),
+                api.get<Opportunity[]>(url),
                 api.get<OpportunityStage[]>('/api/opportunitystages'),
                 api.get<User[]>('/api/users')
             ]);
@@ -72,8 +95,20 @@ export const PipelineScreen: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        loadOpportunities(activeFilters);
+    }, [loadOpportunities, activeFilters]);
+
+    const handleFilterChange = (filters: FilterState) => {
+        setActiveFilters(filters);
+        const count = Object.values(filters).filter(v => v !== undefined && v !== '').length;
+        setActiveFilterCount(count);
+    };
+
+    const handleClearFilters = () => {
+        setActiveFilters({});
+        setActiveFilterCount(0);
         loadOpportunities();
-    }, [loadOpportunities]);
+    };
 
     const handleStageChange = async (opportunityId: number, newStageId: number) => {
         try {
@@ -131,7 +166,7 @@ export const PipelineScreen: React.FC = () => {
 
     const handleCardClick = (opportunityId: number) => {
         if (!isDragging) {
-            setSelectedOpportunity(opportunityId);
+            navigate(`/opportunities/${opportunityId}`);
         }
     };
 
@@ -204,7 +239,14 @@ export const PipelineScreen: React.FC = () => {
                     <h1>Pipeline</h1>
                     <p>{opportunities.length} opportunities</p>
                 </div>
-                <Button onClick={() => setIsCreateModalOpen(true)}><Plus size={16} style={{ marginRight: 6 }} /> New Opportunity</Button>
+                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+                    <OpportunityFilters
+                        onFilterChange={handleFilterChange}
+                        onClearFilters={handleClearFilters}
+                        activeFilterCount={activeFilterCount}
+                    />
+                    <Button onClick={() => setIsCreateModalOpen(true)}><Plus size={16} style={{ marginRight: 6 }} /> New Opportunity</Button>
+                </div>
             </div>
 
             <div className="filters-bar animate-fade-in">

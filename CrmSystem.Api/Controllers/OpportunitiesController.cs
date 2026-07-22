@@ -28,9 +28,28 @@ public class OpportunitiesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<OpportunityReadDto>>> GetAll()
+    public async Task<ActionResult<IReadOnlyList<OpportunityReadDto>>> GetAll(
+        [FromQuery] int? customerId,
+        [FromQuery] int? companyId,
+        [FromQuery] int? ownerId,
+        [FromQuery] int? opportunityStageId,
+        [FromQuery] DateTime? expectedCloseDateFrom,
+        [FromQuery] DateTime? expectedCloseDateTo,
+        [FromQuery] DateTime? createdDateFrom,
+        [FromQuery] DateTime? createdDateTo,
+        [FromQuery] decimal? minValue,
+        [FromQuery] decimal? maxValue,
+        [FromQuery] DateTime? lastActivityFrom,
+        [FromQuery] DateTime? lastActivityTo,
+        [FromQuery] int? sourceId)
     {
-        var list = await _service.GetAllAsync();
+        var list = await _service.GetAllAsync(
+            customerId, companyId, ownerId, opportunityStageId,
+            expectedCloseDateFrom, expectedCloseDateTo,
+            createdDateFrom, createdDateTo,
+            minValue, maxValue,
+            lastActivityFrom, lastActivityTo,
+            sourceId);
         return Ok(list);
     }
 

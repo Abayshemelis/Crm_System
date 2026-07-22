@@ -1,24 +1,40 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import {
   Palette, Plus, Trash2, Edit2, Check, X,
-  Layers, Tag, Package, Globe, List, Bell, Activity
+  Layers, Tag, Globe, List, Bell, Activity, Package
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-interface Stage    { id: number; name: string; sortOrder: number; isWon: boolean; isLost: boolean; }
-interface TagItem  { id: number; name: string; }
-interface Source   { id: number; name: string; }
-interface LeadStatus  { id: number; name: string; sortOrder: number; isTerminal: boolean; }
-interface TaskStatus  { id: number; name: string; isTerminal: boolean; }
+interface Stage { id: number; name: string; sortOrder: number; isWon: boolean; isLost: boolean; }
+interface TagItem { id: number; name: string; }
+interface Source { id: number; name: string; }
+interface LeadStatus { id: number; name: string; sortOrder: number; isTerminal: boolean; }
+interface TaskStatus { id: number; name: string; isTerminal: boolean; }
 interface ActivityTypeItem { id: number; name: string; icon?: string; }
-interface NotifType   { id: number; name: string; defaultChannel?: string; }
+interface NotifType { id: number; name: string; defaultChannel?: string; }
+
+interface Product {
+  id: number;
+  name: string;
+  sku: string;
+  description: string | null;
+  productCategoryId: number;
+  productCategoryName: string;
+  productStatusId: number;
+  productStatusName: string;
+  price: number;
+  cost: number | null;
+  stockQuantity: number;
+}
+interface ProductCategory { id: number; name: string; }
+interface ProductStatus { id: number; name: string; isSelectable: boolean; }
 
 type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme';
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
@@ -105,27 +121,58 @@ export const SettingsScreen: React.FC = () => {
 
   // ── Theme state (preserved from original) ──
   const PRESET_THEMES = [
-    { name: 'Cyan Ocean',         mode: 'dark' as const, bg: 'linear-gradient(135deg,#0a0e27,#1a1f3a,#0f172a)', accentColor: '#06b6d4' },
-    { name: 'Purple Galaxy',      mode: 'dark' as const, bg: 'linear-gradient(135deg,#1a0033,#330066,#1a0033)', accentColor: '#a78bfa' },
-    { name: 'Emerald Forest',     mode: 'dark' as const, bg: 'linear-gradient(135deg,#0d2818,#1a4d2e,#0d2818)', accentColor: '#10b981' },
-    { name: 'Rose Gold',          mode: 'dark' as const, bg: 'linear-gradient(135deg,#3d1a1a,#5a2a2a,#3d1a1a)', accentColor: '#f87171' },
+    { name: 'Cyan Ocean', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0a0e27,#1a1f3a,#0f172a)', accentColor: '#06b6d4' },
+    { name: 'Purple Galaxy', mode: 'dark' as const, bg: 'linear-gradient(135deg,#1a0033,#330066,#1a0033)', accentColor: '#a78bfa' },
+    { name: 'Emerald Forest', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0d2818,#1a4d2e,#0d2818)', accentColor: '#10b981' },
+    { name: 'Rose Gold', mode: 'dark' as const, bg: 'linear-gradient(135deg,#3d1a1a,#5a2a2a,#3d1a1a)', accentColor: '#f87171' },
     { name: 'Slate Professional', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0f172a,#1e293b,#0f172a)', accentColor: '#3b82f6' },
-    { name: 'Light Clean',        mode: 'light' as const, bg: 'linear-gradient(135deg,#f8fafc,#e2e8f0,#f1f5f9)', accentColor: '#0284c7' },
+    { name: 'Light Clean', mode: 'light' as const, bg: 'linear-gradient(135deg,#f8fafc,#e2e8f0,#f1f5f9)', accentColor: '#0284c7' },
   ];
-  const [theme, setTheme] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('crm-theme') || '{}'); } catch { return {}; }
+  const [storedTheme, setStoredTheme] = useState<Record<string, any>>(() => {
+    try {
+      const storedTheme = localStorage.getItem('crm-theme');
+      return storedTheme ? JSON.parse(storedTheme) : {};
+    } catch {
+      return {};
+    }
   });
-  const [customAccent, setCustomAccent] = useState(theme.accentColor || '#06b6d4');
+  const [theme, setTheme] = useState<Record<string, any>>({});
+  const [customAccent, setCustomAccent] = useState(storedTheme.accentColor || '#06b6d4');
+  const [hasThemeChanged, setHasThemeChanged] = useState(false);
 
   useEffect(() => {
+    if (!hasThemeChanged && storedTheme.accentColor) {
+      setCustomAccent(storedTheme.accentColor);
+    }
+  }, [storedTheme, hasThemeChanged]);
+
+  useEffect(() => {
+    if (!hasThemeChanged || !theme || Object.keys(theme).length === 0) {
+      return;
+    }
+
     const root = document.documentElement;
-    root.setAttribute('data-theme', theme.mode || 'dark');
-    root.style.setProperty('--accent-primary', theme.accentColor || '#06b6d4');
-    const hex = theme.accentColor || '#06b6d4';
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    if (typeof theme.mode === 'string') {
+      root.setAttribute('data-theme', theme.mode);
+    }
+    if (typeof theme.accentColor === 'string') {
+      root.style.setProperty('--accent-primary', theme.accentColor);
+    }
+    if (typeof theme.background === 'string') {
+      root.style.setProperty('--page-background', theme.background);
+    }
+
+    const accentHex = typeof theme.accentColor === 'string'
+      ? theme.accentColor
+      : getComputedStyle(root).getPropertyValue('--accent-primary').trim() || '#06b6d4';
+    const r = parseInt(accentHex.slice(1, 3), 16);
+    const g = parseInt(accentHex.slice(3, 5), 16);
+    const b = parseInt(accentHex.slice(5, 7), 16);
     root.style.setProperty('--accent-glow', `rgba(${r},${g},${b},0.5)`);
     localStorage.setItem('crm-theme', JSON.stringify(theme));
-  }, [theme]);
+  }, [theme, hasThemeChanged]);
+
+  const effectiveTheme = hasThemeChanged ? theme : storedTheme;
 
   // ── Pipeline Stages ──────────────────────────────────────────────────────────
   const stages = useLookup<Stage>('/api/opportunitystages');
@@ -189,6 +236,143 @@ export const SettingsScreen: React.FC = () => {
     if (!confirm('Delete this tag?')) return;
     try { await api.delete(`/api/tags/${id}`); tags.refresh(); toast('Tag deleted'); }
     catch (e: any) { toast(e?.message || 'Failed', 'error'); }
+  };
+
+  // ── Products ─────────────────────────────────────────────────────────────────
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
+  const [productStatuses, setProductStatuses] = useState<ProductStatus[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductSku, setNewProductSku] = useState('');
+  const [newProductDescription, setNewProductDescription] = useState('');
+  const [newProductCategoryId, setNewProductCategoryId] = useState('0');
+  const [newProductStatusId, setNewProductStatusId] = useState('0');
+  const [newProductPrice, setNewProductPrice] = useState('0');
+  const [newProductCost, setNewProductCost] = useState('');
+  const [newProductStockQuantity, setNewProductStockQuantity] = useState('0');
+
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editingProductName, setEditingProductName] = useState('');
+  const [editingProductSku, setEditingProductSku] = useState('');
+  const [editingProductDescription, setEditingProductDescription] = useState('');
+  const [editingProductCategoryId, setEditingProductCategoryId] = useState('0');
+  const [editingProductStatusId, setEditingProductStatusId] = useState('0');
+  const [editingProductPrice, setEditingProductPrice] = useState('0');
+  const [editingProductCost, setEditingProductCost] = useState('');
+  const [editingProductStockQuantity, setEditingProductStockQuantity] = useState('0');
+
+  const refreshProducts = useCallback(async () => {
+    setLoadingProducts(true);
+    try {
+      const [productsData, categoriesData, statusesData] = await Promise.all([
+        api.get<any[]>('/api/products'),
+        api.get<any[]>('/api/productcategories'),
+        api.get<any[]>('/api/productstatuses')
+      ]);
+      setProducts((productsData ?? []).map(p => ({ ...p, id: p.id ?? p.productId, productCategoryName: p.productCategory?.name || 'Uncategorized', productStatusName: p.productStatus?.name || 'Unknown' })));
+      setProductCategories((categoriesData ?? []).map(c => ({ ...c, id: c.id ?? c.productCategoryId })));
+      setProductStatuses((statusesData ?? []).map(s => ({ ...s, id: s.id ?? s.productStatusId })));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'products') {
+      refreshProducts();
+    }
+  }, [activeTab, refreshProducts]);
+
+  const addProduct = async () => {
+    if (!newProductName.trim()) return toast('Please enter a product name', 'error');
+    if (!newProductSku.trim()) return toast('Please enter a SKU', 'error');
+    const categoryId = Number(newProductCategoryId);
+    const statusId = Number(newProductStatusId);
+    if (isNaN(categoryId) || categoryId === 0) return toast('Please select a category', 'error');
+    if (isNaN(statusId) || statusId === 0) return toast('Please select a status', 'error');
+
+    try {
+      await api.post('/api/products', {
+        name: newProductName.trim(),
+        sku: newProductSku.trim(),
+        description: newProductDescription.trim() || null,
+        productCategoryId: categoryId,
+        productStatusId: statusId,
+        price: Number(newProductPrice),
+        cost: newProductCost ? Number(newProductCost) : null,
+        stockQuantity: Number(newProductStockQuantity)
+      });
+      setNewProductName('');
+      setNewProductSku('');
+      setNewProductDescription('');
+      setNewProductCategoryId('0');
+      setNewProductStatusId('0');
+      setNewProductPrice('0');
+      setNewProductCost('');
+      setNewProductStockQuantity('0');
+      refreshProducts();
+      toast('Product added successfully');
+    } catch (e: any) {
+      toast(e?.message || 'Failed to add product', 'error');
+    }
+  };
+
+  const deleteProduct = async (id: number) => {
+    if (!confirm('Delete this product?')) return;
+    try {
+      await api.delete(`/api/products/${id}`);
+      setProducts(prev => prev.filter(p => p.id !== id));
+      toast('Product deleted');
+    } catch (e: any) {
+      toast(e?.message || 'Failed to delete product', 'error');
+    }
+  };
+
+  const startEditProduct = (product: Product) => {
+    setEditingProductId(product.id);
+    setEditingProductName(product.name);
+    setEditingProductSku(product.sku);
+    setEditingProductDescription(product.description || '');
+    setEditingProductCategoryId(String(product.productCategoryId));
+    setEditingProductStatusId(String(product.productStatusId));
+    setEditingProductPrice(String(product.price));
+    setEditingProductCost(String(product.cost || ''));
+    setEditingProductStockQuantity(String(product.stockQuantity));
+  };
+
+  const saveProduct = async (id: number) => {
+    if (!editingProductName.trim()) return toast('Please enter a product name', 'error');
+    if (!editingProductSku.trim()) return toast('Please enter a SKU', 'error');
+    const categoryId = Number(editingProductCategoryId);
+    const statusId = Number(editingProductStatusId);
+    if (isNaN(categoryId) || categoryId === 0) return toast('Please select a category', 'error');
+    if (isNaN(statusId) || statusId === 0) return toast('Please select a status', 'error');
+
+    try {
+      await api.put(`/api/products/${id}`, {
+        name: editingProductName.trim(),
+        sku: editingProductSku.trim(),
+        description: editingProductDescription.trim() || null,
+        productCategoryId: categoryId,
+        productStatusId: statusId,
+        price: Number(editingProductPrice),
+        cost: editingProductCost ? Number(editingProductCost) : null,
+        stockQuantity: Number(editingProductStockQuantity)
+      });
+      setEditingProductId(null);
+      refreshProducts();
+      toast('Product updated');
+    } catch (e: any) {
+      toast(e?.message || 'Failed to update product', 'error');
+    }
+  };
+
+  const cancelEditProduct = () => {
+    setEditingProductId(null);
   };
 
   // ── Sources ───────────────────────────────────────────────────────────────────
@@ -322,21 +506,20 @@ export const SettingsScreen: React.FC = () => {
     } catch (e: any) { toast(e?.message || 'Failed', 'error'); }
   };
 
-  // ── Tab config ────────────────────────────────────────────────────────────────
   const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'pipeline', label: 'Pipeline Stages',   icon: <Layers size={15} /> },
-    { id: 'tags',     label: 'Tags',              icon: <Tag size={15} /> },
-    { id: 'products', label: 'Products',          icon: <Package size={15} /> },
-    { id: 'sources',  label: 'Sources',           icon: <Globe size={15} /> },
-    { id: 'statuses', label: 'Statuses & Types',  icon: <List size={15} /> },
-    { id: 'theme',    label: 'Theme',             icon: <Palette size={15} /> },
+    { id: 'pipeline', label: 'Pipeline Stages', icon: <Layers size={15} /> },
+    { id: 'tags', label: 'Tags', icon: <Tag size={15} /> },
+    { id: 'products', label: 'Products', icon: <Package size={15} /> },
+    { id: 'sources', label: 'Sources', icon: <Globe size={15} /> },
+    { id: 'statuses', label: 'Statuses & Types', icon: <List size={15} /> },
+    { id: 'theme', label: 'Theme', icon: <Palette size={15} /> },
   ];
 
   const STATUS_SUB_TABS: { id: StatusSubTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'lead',         label: 'Lead Statuses',      icon: <List size={13} /> },
-    { id: 'task',         label: 'Task Statuses',       icon: <Check size={13} /> },
-    { id: 'activity',     label: 'Activity Types',      icon: <Activity size={13} /> },
-    { id: 'notification', label: 'Notification Types',  icon: <Bell size={13} /> },
+    { id: 'lead', label: 'Lead Statuses', icon: <List size={13} /> },
+    { id: 'task', label: 'Task Statuses', icon: <Check size={13} /> },
+    { id: 'activity', label: 'Activity Types', icon: <Activity size={13} /> },
+    { id: 'notification', label: 'Notification Types', icon: <Bell size={13} /> },
   ];
 
   // ── Shared input style ────────────────────────────────────────────────────────
@@ -411,7 +594,7 @@ export const SettingsScreen: React.FC = () => {
                   ) : (
                     <LookupRow key={s.id} label={`${s.name}  ·  Order ${s.sortOrder}`}
                       badge={<>
-                        {s.isWon  && <Badge label="Won"  color="#10b981" />}
+                        {s.isWon && <Badge label="Won" color="#10b981" />}
                         {s.isLost && <Badge label="Lost" color="#ef4444" />}
                       </>}
                       onEdit={() => setEditingStage(s)}
@@ -457,20 +640,120 @@ export const SettingsScreen: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Products (redirect to existing page) ──────────────────────────────── */}
+      {/* ── Products ──────────────────────────────────────────────────────────── */}
       {activeTab === 'products' && (
         <Card className="glass-panel p-6">
           <Card.Content>
-            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-              <Package size={48} style={{ color: 'var(--accent-primary)', margin: '0 auto 1rem', display: 'block' }} />
-              <h2 style={{ marginBottom: '0.5rem' }}>Products Catalog</h2>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                Manage SKUs, categories, pricing, cost, stock quantity and status used by Opportunity line items.
-              </p>
-              <Button onClick={() => window.location.href = '/pipeline/products'}>
-                Open Products Catalog
-              </Button>
-            </div>
+            <Section title="Products Catalog">
+              {isManagerOrAbove && (
+                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add New Product</h4>
+                  <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Product Name</label>
+                      <input style={inputStyle} type="text" placeholder="e.g. Premium Plan" value={newProductName} onChange={e => setNewProductName(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>SKU</label>
+                      <input style={inputStyle} type="text" placeholder="e.g. PRE-01" value={newProductSku} onChange={e => setNewProductSku(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Category</label>
+                      <select style={{ ...inputStyle, width: '100%' }} value={newProductCategoryId} onChange={e => setNewProductCategoryId(e.target.value)}>
+                        <option value="0">Select Category</option>
+                        {productCategories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</label>
+                      <select style={{ ...inputStyle, width: '100%' }} value={newProductStatusId} onChange={e => setNewProductStatusId(e.target.value)}>
+                        <option value="0">Select Status</option>
+                        {productStatuses.map(status => (
+                          <option key={status.id} value={status.id}>{status.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Price ($)</label>
+                      <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0.00" value={newProductPrice} onChange={e => setNewProductPrice(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cost ($)</label>
+                      <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0.00" value={newProductCost} onChange={e => setNewProductCost(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Stock Quantity</label>
+                      <input style={inputStyle} type="number" min="0" placeholder="0" value={newProductStockQuantity} onChange={e => setNewProductStockQuantity(e.target.value)} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Description</label>
+                      <textarea style={{ ...inputStyle, width: '100%', minHeight: '60px', resize: 'vertical' }} placeholder="Product description..." value={newProductDescription} onChange={e => setNewProductDescription(e.target.value)} />
+                    </div>
+                  </div>
+                  <Button onClick={addProduct} style={{ marginTop: '1rem' }} size="sm">
+                    <Plus size={14} style={{ marginRight: 4 }} /> Add Product
+                  </Button>
+                </div>
+              )}
+
+              {loadingProducts ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading products...</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {products.map(product => (
+                    <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+                      {editingProductId === product.id ? (
+                        <>
+                          <input style={{ ...inputStyle, minWidth: '150px' }} placeholder="Name" value={editingProductName} onChange={e => setEditingProductName(e.target.value)} />
+                          <input style={{ ...inputStyle, width: '100px' }} placeholder="SKU" value={editingProductSku} onChange={e => setEditingProductSku(e.target.value)} />
+                          <select style={{ ...inputStyle, width: '130px' }} value={editingProductCategoryId} onChange={e => setEditingProductCategoryId(e.target.value)}>
+                            <option value="0">Category</option>
+                            {productCategories.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                          <select style={{ ...inputStyle, width: '130px' }} value={editingProductStatusId} onChange={e => setEditingProductStatusId(e.target.value)}>
+                            <option value="0">Status</option>
+                            {productStatuses.map(status => (
+                              <option key={status.id} value={status.id}>{status.name}</option>
+                            ))}
+                          </select>
+                          <input style={{ ...inputStyle, width: '90px' }} type="number" step="0.01" placeholder="Price" value={editingProductPrice} onChange={e => setEditingProductPrice(e.target.value)} />
+                          <input style={{ ...inputStyle, width: '90px' }} type="number" step="0.01" placeholder="Cost" value={editingProductCost} onChange={e => setEditingProductCost(e.target.value)} />
+                          <input style={{ ...inputStyle, width: '80px' }} type="number" placeholder="Stock" value={editingProductStockQuantity} onChange={e => setEditingProductStockQuantity(e.target.value)} />
+                          <Button size="sm" onClick={() => saveProduct(product.id)}><Check size={14} /></Button>
+                          <Button size="sm" variant="ghost" onClick={cancelEditProduct}><X size={14} /></Button>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ flex: '2 1 200px' }}>
+                            <strong style={{ display: 'block', color: 'var(--text-primary)' }}>{product.name}</strong>
+                            {product.description && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{product.description}</span>}
+                          </div>
+                          <span style={{ flex: '1 1 120px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>SKU: <code style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>{product.sku}</code></span>
+                          <span style={{ flex: '1 1 100px', fontSize: '0.8rem' }}><Badge label={product.productCategoryName} color="#3b82f6" /></span>
+                          <span style={{ flex: '1 1 100px', fontSize: '0.8rem' }}><Badge label={product.productStatusName} color="#10b981" /></span>
+                          <div style={{ display: 'flex', gap: '1rem', flex: '1 1 auto', justifyContent: 'flex-end', fontSize: '0.85rem' }}>
+                            <span>Price: <strong>${product.price}</strong></span>
+                            <span>Cost: <span style={{ color: 'var(--text-muted)' }}>${product.cost ?? '-'}</span></span>
+                            <span>Stock: <strong>{product.stockQuantity}</strong></span>
+                          </div>
+                          {isManagerOrAbove && (
+                            <div style={{ display: 'flex', gap: '0.2rem' }}>
+                              <Button variant="ghost" size="sm" onClick={() => startEditProduct(product)}><Edit2 size={13} /></Button>
+                              <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 size={13} /></Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {products.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No products yet.</p>}
+                </div>
+              )}
+            </Section>
           </Card.Content>
         </Card>
       )}
@@ -646,11 +929,11 @@ export const SettingsScreen: React.FC = () => {
             <Section title="Preset Themes">
               <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
                 {PRESET_THEMES.map((p, i) => (
-                  <div key={i} onClick={() => { setTheme({ mode: p.mode, accentColor: p.accentColor }); setCustomAccent(p.accentColor); }}
+                  <div key={i} onClick={() => { setTheme({ mode: p.mode, accentColor: p.accentColor, background: p.bg }); setHasThemeChanged(true); setCustomAccent(p.accentColor); }}
                     style={{
                       background: p.bg, cursor: 'pointer', borderRadius: 'var(--radius-lg)', padding: '1rem',
-                      border: theme.accentColor === p.accentColor ? `2px solid ${p.accentColor}` : '2px solid transparent',
-                      transform: theme.accentColor === p.accentColor ? 'scale(1.04)' : 'scale(1)',
+                      border: effectiveTheme.accentColor === p.accentColor ? `2px solid ${p.accentColor}` : '2px solid transparent',
+                      transform: effectiveTheme.accentColor === p.accentColor ? 'scale(1.04)' : 'scale(1)',
                       transition: 'all 0.2s',
                     }}>
                     <p style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem', marginBottom: 2 }}>{p.name}</p>
@@ -663,8 +946,8 @@ export const SettingsScreen: React.FC = () => {
             <Section title="Mode">
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 {(['dark', 'light'] as const).map(m => (
-                  <button key={m} onClick={() => setTheme((p: any) => ({ ...p, mode: m }))}
-                    style={{ padding: '0.6rem 1.25rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s', color: 'var(--text-primary)', background: theme.mode === m ? 'rgba(6,182,212,0.12)' : 'transparent', border: theme.mode === m ? `2px solid ${theme.accentColor}` : '2px solid var(--border-color)' }}>
+                  <button key={m} onClick={() => { setTheme((p: any) => ({ ...effectiveTheme, mode: m })); setHasThemeChanged(true); }}
+                    style={{ padding: '0.6rem 1.25rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s', color: 'var(--text-primary)', background: effectiveTheme.mode === m ? 'rgba(6,182,212,0.12)' : 'transparent', border: effectiveTheme.mode === m ? `2px solid ${effectiveTheme.accentColor || '#06b6d4'}` : '2px solid var(--border-color)' }}>
                     {m.charAt(0).toUpperCase() + m.slice(1)} Mode
                   </button>
                 ))}
@@ -673,7 +956,7 @@ export const SettingsScreen: React.FC = () => {
 
             <Section title="Custom Accent Color">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <input type="color" value={customAccent} onChange={e => { setCustomAccent(e.target.value); setTheme((p: any) => ({ ...p, accentColor: e.target.value })); }}
+                <input type="color" value={customAccent} onChange={e => { setCustomAccent(e.target.value); setTheme((p: any) => ({ ...effectiveTheme, accentColor: e.target.value })); setHasThemeChanged(true); }}
                   style={{ width: 64, height: 64, border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }} />
                 <div>
                   <p style={{ fontWeight: 600 }}>Accent Color</p>
@@ -681,7 +964,7 @@ export const SettingsScreen: React.FC = () => {
                   <p style={{ color: theme.accentColor, fontFamily: 'monospace', fontSize: '0.85rem', marginTop: 4 }}>{customAccent}</p>
                 </div>
               </div>
-              <Button variant="secondary" onClick={() => { setTheme({ mode: 'dark', accentColor: '#06b6d4' }); setCustomAccent('#06b6d4'); }} style={{ marginTop: '1rem' }}>
+              <Button variant="secondary" onClick={() => { setTheme({ mode: 'dark', accentColor: '#06b6d4', background: 'linear-gradient(135deg,#0a0e27,#1a1f3a,#0f172a)' }); setHasThemeChanged(true); setCustomAccent('#06b6d4'); }} style={{ marginTop: '1rem' }}>
                 Reset to Default
               </Button>
             </Section>

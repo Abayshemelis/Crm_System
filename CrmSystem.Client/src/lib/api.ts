@@ -33,6 +33,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   
   console.log(`API Response: ${res.status} ${res.statusText}`);
   
+  if (res.status === 401) {
+    // Clear invalid token and redirect to login
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    throw new Error('Unauthorized - token cleared');
+  }
+  
   if (!res.ok) {
     const err = await res.text();
     console.error(`API Error: ${err}`);

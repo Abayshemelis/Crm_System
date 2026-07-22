@@ -8,8 +8,12 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { AuditHistory } from '../components/audit/AuditHistory';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus, History } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus, History, CheckSquare, MessageSquare } from 'lucide-react';
 import Attachments from '../components/attachments/Attachments';
+import { TimelineList } from '../components/activities/TimelineList';
+import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
+import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
 interface Customer {
@@ -27,7 +31,9 @@ interface Attachment {
   fileSizeBytes: number; uploadedByName: string; uploadedAt: string;
   contentType?: string | null;
 }
-interface Lookup { id: number; name: string }
+interface Lookup { id: number; name: string; }
+
+type TabId = 'profile' | 'tags' | 'attachments' | 'activities' | 'tasks' | 'audit';
 interface EditFormState {
   firstName: string;
   lastName: string;
@@ -38,11 +44,10 @@ interface EditFormState {
   sourceId: string;
 }
 
-type TabId = 'profile' | 'tags' | 'attachments' | 'audit';
-
 export const CustomerDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [allTags, setAllTags] = useState<TagItem[]>([]);
   const [attachmentsCount, setAttachmentsCount] = useState(0);
@@ -67,6 +72,15 @@ export const CustomerDetailScreen: React.FC = () => {
   const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
 
+  // Phase 4 states
+  const [activities, setActivities] = useState<any[]>([]);
+  const [activityTypes, setActivityTypes] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<TaskReadDto[]>([]);
+  const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
+  const [users, setUsers] = useState<Lookup[]>([]);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
+
   const fetchAttachmentCount = useCallback(async () => {
     if (!id) return;
     try {
@@ -84,7 +98,28 @@ export const CustomerDetailScreen: React.FC = () => {
     api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100')
       .then(res => setCompanies((res.data ?? []).map(c => ({ id: c.companyId, name: c.name }))))
       .catch(() => { });
+
+    // Phase 4 lookups
+    api.get<any[]>('/api/activitytypes').then(res => setActivityTypes(res.map(x => ({ id: x.id, name: x.name, icon: x.icon })))).catch(() => { });
+    api.get<any[]>('/api/taskstatuses').then(res => setTaskStatuses(res.map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })))).catch(() => { });
+    api.get<any[]>('/api/users').then(res => setUsers(res.map(x => ({ id: x.identityId, name: x.name })))).catch(() => { });
   }, []);
+
+  const fetchActivities = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await api.get<any[]>(`/api/activities?customerId=${id}`);
+      setActivities(res);
+    } catch { }
+  }, [id]);
+
+  const fetchTasks = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await api.get<TaskReadDto[]>(`/api/tasks?customerId=${id}`);
+      setTasks(res);
+    } catch { }
+  }, [id]);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -106,12 +141,14 @@ export const CustomerDetailScreen: React.FC = () => {
         sourceId: cust.sourceId ? String(cust.sourceId) : ''
       });
       await fetchAttachmentCount();
+      await fetchActivities();
+      await fetchTasks();
     } catch {
       navigate('/customers');
     } finally {
       setIsLoading(false);
     }
-  }, [id, navigate, fetchAttachmentCount]);
+  }, [id, navigate, fetchAttachmentCount, fetchActivities, fetchTasks]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -228,6 +265,47 @@ export const CustomerDetailScreen: React.FC = () => {
   const assignedTagIds = new Set(customer.tags?.map(t => t.tagId) ?? []);
   const availableTags = allTags.filter(t => !assignedTagIds.has(t.tagId));
 
+  const groupedTasks = (() => {
+    const now = new Date();
+    const today = now.toDateString();
+
+    const overdue: TaskReadDto[] = [];
+    const dueToday: TaskReadDto[] = [];
+    const upcoming: TaskReadDto[] = [];
+    const completed: TaskReadDto[] = [];
+
+    tasks.forEach(t => {
+      if (t.isTerminal) {
+        completed.push(t);
+        return;
+      }
+      if (!t.dueDate) {
+        upcoming.push(t);
+      } else {
+        const due = new Date(t.dueDate);
+        const dueDateStr = due.toDateString();
+        if (due < now) {
+          overdue.push(t);
+        } else if (dueDateStr === today && due <= now) {
+          dueToday.push(t);
+        } else {
+          upcoming.push(t);
+        }
+      }
+    });
+    return { overdue, dueToday, upcoming, completed };
+  })();
+
+  const handleTaskComplete = (id: number) => {
+    setTasks(prev => prev.filter(t => t.crmTaskId !== id));
+  };
+
+  const handleTaskSaved = (saved: TaskReadDto) => {
+    setShowTaskModal(false);
+    setEditTask(null);
+    fetchTasks();
+  };
+
   return (
     <Layout>
       <div className="detail-header animate-fade-in">
@@ -326,11 +404,13 @@ export const CustomerDetailScreen: React.FC = () => {
         {/* Right: tabs */}
         <div className="detail-main">
           <div className="tabs-bar">
-            {(['profile', 'tags', 'attachments', 'audit'] as TabId[]).map(tab => (
+            {(['profile', 'tags', 'attachments', 'activities', 'tasks', 'audit'] as TabId[]).map(tab => (
               <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
                 {tab === 'profile' && <span>Profile</span>}
                 {tab === 'tags' && <span>Tags ({customer.tags?.length ?? 0})</span>}
                 {tab === 'attachments' && <span>Attachments ({attachmentsCount})</span>}
+                {tab === 'activities' && <span>Activities ({activities.length})</span>}
+                {tab === 'tasks' && <span>Tasks ({tasks.filter(t => !t.isTerminal).length})</span>}
                 {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
               </button>
             ))}
@@ -358,14 +438,14 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
                       ? customer.tags.map(tag => {
-                          const t = allTags.find(x => x.name === tag.name);
-                          return (
-                            <span key={tag.tagId} className="tag-badge tag-badge-removable">
-                              {tag.name}
-                              {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
-                            </span>
-                          );
-                        })
+                        const t = allTags.find(x => x.name === tag.name);
+                        return (
+                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                            {tag.name}
+                            {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
+                          </span>
+                        );
+                      })
                       : <p style={{ color: 'var(--text-muted)' }}>No tags assigned.</p>
                     }
                   </div>
@@ -389,6 +469,42 @@ export const CustomerDetailScreen: React.FC = () => {
                 <Attachments entity="customer" entityId={Number(id)} onCountChange={setAttachmentsCount} />
               )}
 
+              {/* Activities Tab */}
+              {activeTab === 'activities' && (
+                <TimelineList
+                  activities={activities}
+                  activityTypes={activityTypes}
+                  customerId={customer.customerId}
+                  currentUserId={currentUser?.userId}
+                  isAdmin={currentUser?.role === 'Admin'}
+                  onActivityLogged={(act) => setActivities(prev => [act, ...prev])}
+                  onActivityDeleted={(id) => setActivities(prev => prev.filter(a => a.activityId !== id))}
+                />
+              )}
+
+              {/* Tasks Tab */}
+              {activeTab === 'tasks' && (
+                <div>
+                  <div style={{ display: 'flex', justifySelf: 'end', marginBottom: '1rem' }}>
+                    <button
+                      type="button"
+                      className="btn-outline-sm"
+                      onClick={() => { setEditTask(null); setShowTaskModal(true); }}
+                    >
+                      <Plus size={14} /> New Task
+                    </button>
+                  </div>
+                  <TaskListGroup
+                    overdue={groupedTasks.overdue}
+                    dueToday={groupedTasks.dueToday}
+                    upcoming={groupedTasks.upcoming}
+                    completed={groupedTasks.completed}
+                    onTaskComplete={handleTaskComplete}
+                    onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
+                  />
+                </div>
+              )}
+
               {/* Audit History Tab - using reusable component with refresh trigger */}
               {activeTab === 'audit' && (
                 <AuditHistory entityType="customer" entityId={Number(id)} refreshTrigger={auditRefreshTrigger} />
@@ -403,10 +519,26 @@ export const CustomerDetailScreen: React.FC = () => {
         onCancel={() => setIsOpportunityModalOpen(false)}
         onCreated={() => {
           setIsOpportunityModalOpen(false);
-          // Optionally navigate to pipeline or refresh customer data
         }}
         preselectedCustomerId={customer.customerId}
       />
+
+      {showTaskModal && (
+        <TaskFormModal
+          task={editTask}
+          customerId={customer.customerId}
+          currentUserId={currentUser?.userId ?? 0}
+          users={users.length > 0 ? users : (currentUser ? [{ id: currentUser.userId, name: currentUser.name }] : [])}
+          statuses={taskStatuses}
+          onSaved={handleTaskSaved}
+          onDeleted={(taskId) => {
+            setShowTaskModal(false);
+            setEditTask(null);
+            fetchTasks();
+          }}
+          onClose={() => { setShowTaskModal(false); setEditTask(null); }}
+        />
+      )}
     </Layout>
   );
 };

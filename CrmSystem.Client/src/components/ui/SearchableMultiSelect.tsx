@@ -54,16 +54,19 @@ export const SearchableMultiSelect: React.FC<Props> = ({ options, selectedIds, o
             </div>
 
             {open && (
-                <div style={{ position: 'absolute', zIndex: 1200, top: 'calc(100% + 6px)', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: 6, maxHeight: 240, overflow: 'auto', boxShadow: '0 6px 20px rgba(0,0,0,0.12)' }}>
+                <div style={{ position: 'absolute', zIndex: 1200, top: 'calc(100% + 6px)', left: 0, right: 0, background: 'var(--bg-secondary)', border: '1px solid var(--border-highlight)', borderRadius: 6, maxHeight: 240, overflow: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
                     <div style={{ padding: 8 }}>
                         <input className="input-field" placeholder="Search tags…" value={filter} onChange={e => setFilter(e.target.value)} />
                     </div>
                     <div>
                         {visible.length === 0 && <div style={{ padding: 12, color: 'var(--text-secondary)' }}>No results</div>}
                         {visible.map(o => (
-                            <button key={o.id} type="button" onClick={() => { toggle(o.id); clearFilter(); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
+                            <button key={o.id} type="button" onClick={() => { toggle(o.id); clearFilter(); }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 12px', background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
                                 <span>{o.name}</span>
-                                <input type="checkbox" readOnly checked={selectedSet.has(o.id)} />
+                                <input type="checkbox" readOnly checked={selectedSet.has(o.id)} style={{ accentColor: 'var(--accent-primary)', cursor: 'pointer' }} />
                             </button>
                         ))}
                     </div>

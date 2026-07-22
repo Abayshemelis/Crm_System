@@ -22,7 +22,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://172.25.64.1:5173", "http://192.168.78.1:5173", "http://192.168.111.1:5173", "http://192.168.123.12:5173", "http://192.168.91.12:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://172.25.64.1:5174", "http://192.168.78.1:5174", "http://192.168.111.1:5174", "http://192.168.123.12:5174", "http://192.168.91.12:5174")
+        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://172.25.64.1:5173", "http://172.31.224.1:5173", "http://192.168.78.1:5173", "http://192.168.111.1:5173", "http://192.168.123.12:5173", "http://192.168.91.12:5173", "http://192.168.242.12:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://172.25.64.1:5174", "http://172.31.224.1:5174", "http://192.168.78.1:5174", "http://192.168.111.1:5174", "http://192.168.123.12:5174", "http://192.168.91.12:5174", "http://192.168.242.12:5174")
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -57,6 +57,10 @@ builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<IOpportunityService, OpportunityService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IActivityService, ActivityService>();
+builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddHostedService<NotificationBackgroundService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
@@ -230,7 +234,7 @@ using (var scope = app.Services.CreateScope())
     await db.SaveChangesAsync();
 
     // ── NotificationTypes ─────────────────────────────────────────────────
-    var notifTypeSeeds = new[] { ("TaskDue", "InApp"), ("TaskAssigned", "InApp"), ("OpportunityWon", "InApp"), ("OpportunityLost", "InApp"), ("LeadAssigned", "InApp"), ("MentionedInNote", "InApp") };
+    var notifTypeSeeds = new[] { ("TaskDue", "InApp"), ("TaskOverdue", "InApp"), ("TaskAssigned", "InApp"), ("OpportunityWon", "InApp"), ("OpportunityLost", "InApp"), ("OpportunityStalled", "InApp"), ("LeadAssigned", "InApp"), ("MentionedInNote", "InApp") };
     foreach (var (name, channel) in notifTypeSeeds)
     {
         if (!await db.NotificationTypes.AnyAsync(x => x.Name == name))

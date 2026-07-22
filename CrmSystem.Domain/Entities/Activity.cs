@@ -23,4 +23,6 @@ public class Activity
     public int CreatedById { get; set; }
     public Identity? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<CrmTask> Tasks { get; set; } = new List<CrmTask>();
 }

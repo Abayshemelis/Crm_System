@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
-import { Building2, LogOut, Users, LayoutDashboard, Briefcase, Search, Bell, User, Sun, Moon } from 'lucide-react';
+import { LogOut, Search, User, Sun, Moon } from 'lucide-react';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -31,19 +31,16 @@ export const Navbar: React.FC = () => {
           <input type="text" placeholder="Search everywhere..." disabled={!user} />
         </div>
       </div>
-      
+
       <div className="navbar-right">
         {user && (
           <>
             <button onClick={toggleTheme} className="nav-icon-btn" title="Toggle theme">
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            
-            <button className="nav-icon-btn">
-              <Bell size={20} />
-              <span className="badge">3</span>
-            </button>
-            
+
+            <NotificationBell />
+
             <div className="user-menu">
               <div className="user-info">
                 <span className="user-name">{user?.name}</span>

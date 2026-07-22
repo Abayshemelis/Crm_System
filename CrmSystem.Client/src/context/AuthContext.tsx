@@ -28,6 +28,17 @@ function parseJwt(token: string): any {
   }
 }
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = parseJwt(token);
+    if (!payload || !payload.exp) return true;
+    const exp = payload.exp * 1000; // Convert to milliseconds
+    return Date.now() >= exp;
+  } catch {
+    return true;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
@@ -44,8 +55,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    if (token) hydrateUser(token);
-    else setUser(null);
+    if (token) {
+      // Check if token is expired
+      if (isTokenExpired(token)) {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
+      } else {
+        hydrateUser(token);
+      }
+    } else {
+      setUser(null);
+    }
   }, [token, hydrateUser]);
 
   const login = (newToken: string) => {
