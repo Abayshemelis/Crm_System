@@ -1,5 +1,16 @@
-// Runtime-configurable API base. Set `VITE_API_BASE` in your Vite env for development (e.g. http://localhost:5000)
+// Runtime-configurable API base. In Vite dev, prefer the same-origin proxy so requests
+// work without requiring a separate backend host. An explicit VITE_API_BASE override still wins.
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE as string) ?? '';
+
+function buildUrl(path: string) {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith('/uploads')) return path;
+  if (API_BASE) {
+    return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+  return path.startsWith('/') ? path : `/${path}`;
+}
 
 function getToken() {
   return localStorage.getItem('token') ?? '';
@@ -14,32 +25,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...(options?.headers as Record<string, string> || {}),
   };
-  
+
   // Only set Content-Type for JSON requests (not FormData)
   if (!(options?.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
-  
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  
+
   console.log(`API Request: ${API_BASE}${path}`, { token: token ? 'present' : 'missing', headers });
-  
-  const res = await fetch(`${API_BASE}${path}`, {
+
+  const res = await fetch(buildUrl(path), {
     ...options,
     headers,
   });
-  
+
   console.log(`API Response: ${res.status} ${res.statusText}`);
-  
+
   if (res.status === 401) {
     // Clear invalid token and redirect to login
     localStorage.removeItem('token');
     window.location.href = '/login';
     throw new Error('Unauthorized - token cleared');
   }
-  
+
   if (!res.ok) {
     const err = await res.text();
     console.error(`API Error: ${err}`);
@@ -70,7 +81,5 @@ export function resolveUrl(path: string) {
   // proxy (or same-origin hosting) serves it. This avoids mixed-content or
   // insecure-download blocking when the frontend is served over HTTPS.
   if (path.startsWith('/uploads')) return path;
-  // Prefix with API base when path starts with '/'
-  if (path.startsWith('/')) return `${API_BASE}${path}`;
-  return `${API_BASE}/${path}`.replace(/([^:])\/\/+/, '$1/');
+  return buildUrl(path);
 }

@@ -386,15 +386,25 @@ public class CustomersController : ControllerBase
             return NotFound(new { message = "Customer not found." });
         }
 
-        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
-        if (entityType is null)
-        {
-            return Ok(new object[0]);
-        }
+        var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+        var leadEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
 
-        var auditLogs = await _db.AuditLogs
+        var convertedLeadIds = await _db.Leads
+            .Where(l => l.ConvertedCustomerId == id)
+            .Select(l => l.LeadId)
+            .ToListAsync();
+
+        var query = _db.AuditLogs
+            .Include(a => a.AuditActionType)
             .Include(a => a.ChangedBy)
-            .Where(a => a.EntityTypeId == entityType.EntityTypeId && a.EntityId == id)
+            .Where(a => !a.IsDeleted)
+            .AsQueryable();
+
+        query = query.Where(a =>
+            (customerEntityType != null && a.EntityTypeId == customerEntityType.EntityTypeId && a.EntityId == id) ||
+            (leadEntityType != null && convertedLeadIds.Contains(a.EntityId) && a.EntityTypeId == leadEntityType.EntityTypeId));
+
+        var auditLogs = await query
             .OrderByDescending(a => a.ChangedAt)
             .Select(a => new
             {

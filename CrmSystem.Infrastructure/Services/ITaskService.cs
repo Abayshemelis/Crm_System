@@ -8,6 +8,7 @@ public interface ITaskService
     Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId);
     Task<IReadOnlyList<TaskReadDto>> GetByCustomerAsync(int customerId);
     Task<IReadOnlyList<TaskReadDto>> GetByOpportunityAsync(int opportunityId);
+    Task<IReadOnlyList<TaskReadDto>> GetByLeadAsync(int leadId);
     Task<List<CalendarDayDto>> GetCalendarAsync(int year, int month, int? assignedToId);
     Task<TaskReadDto> CreateAsync(TaskCreateDto dto, int createdById);
     Task<TaskReadDto?> UpdateAsync(int id, TaskUpdateDto dto);

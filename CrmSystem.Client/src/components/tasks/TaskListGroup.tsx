@@ -15,6 +15,8 @@ export interface TaskReadDto {
   customerName?: string;
   opportunityId?: number;
   opportunityTitle?: string;
+  leadId?: number;
+  leadName?: string;
   activityId?: number;
   activitySubject?: string;
   activityTypeName?: string;

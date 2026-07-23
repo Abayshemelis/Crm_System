@@ -28,22 +28,33 @@ public class ActivitiesController : ControllerBase
     [HttpGet("timeline")]
     public async Task<IActionResult> GetTimeline(
         [FromQuery] int? customerId,
-        [FromQuery] int? opportunityId)
+        [FromQuery] int? opportunityId,
+        [FromQuery] int? leadId)
     {
-        if (!customerId.HasValue && !opportunityId.HasValue)
-            return BadRequest(new { message = "Provide customerId or opportunityId." });
+        if (!customerId.HasValue && !opportunityId.HasValue && !leadId.HasValue)
+            return BadRequest(new { message = "Provide customerId, opportunityId, or leadId." });
 
-        var result = await _service.GetTimelineAsync(customerId, opportunityId);
+        var result = await _service.GetTimelineAsync(customerId, opportunityId, leadId);
         return Ok(result);
     }
 
     /// <summary>
     /// GET /api/activities
-    /// Returns all activities for dropdown selection.
+    /// Returns activities for the current customer/opportunity context when filters are supplied,
+    /// otherwise returns the recent activity list used by the UI.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ActivityReadDto>>> GetAll()
+    public async Task<ActionResult<IReadOnlyList<ActivityReadDto>>> GetAll(
+        [FromQuery] int? customerId,
+        [FromQuery] int? opportunityId,
+        [FromQuery] int? leadId)
     {
+        if (customerId.HasValue || opportunityId.HasValue || leadId.HasValue)
+        {
+            var filtered = await _service.GetTimelineAsync(customerId, opportunityId, leadId);
+            return Ok(filtered);
+        }
+
         var result = await _service.GetAllAsync();
         return Ok(result);
     }
@@ -58,8 +69,19 @@ public class ActivitiesController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Subject))
             return BadRequest(new { message = "Subject is required." });
 
-        var result = await _service.CreateAsync(dto, _currentUser.UserId.Value);
-        return CreatedAtAction(nameof(GetTimeline), new { customerId = result.CustomerId }, result);
+        try
+        {
+            var result = await _service.CreateAsync(dto, _currentUser.UserId.Value);
+            return CreatedAtAction(nameof(GetTimeline), new { customerId = result.CustomerId, opportunityId = result.OpportunityId, leadId = result.LeadId }, result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>DELETE /api/activities/{id}</summary>

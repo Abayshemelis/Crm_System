@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
+using CrmSystem.Api.Services;
+using CrmSystem.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +15,14 @@ namespace CrmSystem.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly ICurrentUserService _currentUser;
+    private readonly IAuditService _auditService;
 
-    public UsersController(AppDbContext db)
+    public UsersController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
     {
         _db = db;
+        _currentUser = currentUser;
+        _auditService = auditService;
     }
 
     private int GetCurrentUserId()
@@ -25,21 +31,19 @@ public class UsersController : ControllerBase
         return int.Parse(claim!.Value);
     }
 
-    private string GetCurrentUserRole()
-    {
-        return User.FindFirst(ClaimTypes.Role)?.Value ?? "SalesRep";
-    }
-
     [HttpGet]
     public async Task<IActionResult> GetUsers()
     {
-        var role = GetCurrentUserRole();
         var userId = GetCurrentUserId();
 
-        var query = _db.Identities.Include(i => i.Role)
+        var query = _db.Identities
+            .Include(i => i.Role)
+            .Include(i => i.IdentityRoles)
+                .ThenInclude(ir => ir.Role)
             .Where(i => i.Role!.Name != "Admin")
             .AsQueryable();
-        if (role == "SalesRep")
+
+        if (User.IsInRole("SalesRep"))
         {
             query = query.Where(i => i.IdentityId == userId);
         }
@@ -49,8 +53,10 @@ public class UsersController : ControllerBase
             Id = i.IdentityId,
             i.Name,
             i.Email,
-            Role = i.Role!.Name,
+            // primary role: prefer explicit IdentityRoles, fallback to Role
+            Role = i.IdentityRoles.Select(ir => ir.Role!.Name).FirstOrDefault() ?? i.Role!.Name,
             RoleId = i.RoleId,
+            Roles = i.IdentityRoles.Select(ir => ir.Role!.Name).ToArray(),
             IsActive = i.IsActive
         }).ToListAsync();
 
@@ -59,7 +65,7 @@ public class UsersController : ControllerBase
 
     [HttpGet("roles")]
     public async Task<IActionResult> GetRoles()
-       {
+    {
         var roles = await _db.Roles
             .Where(r => r.Name == "Manager" || r.Name == "SalesRep")
             .Select(r => new { Id = r.RoleId, Name = r.Name })
@@ -87,10 +93,10 @@ public class UsersController : ControllerBase
             return BadRequest(new { message = "Invalid role." });
         }
 
-        var currentRole = GetCurrentUserRole();
+        var isAdmin = User.IsInRole("Admin");
 
         // Only Admin can create Manager users
-        if (role.Name == "Manager" && currentRole != "Admin")
+        if (role.Name == "Manager" && !isAdmin)
         {
             return Forbid();
         }
@@ -114,6 +120,18 @@ public class UsersController : ControllerBase
         _db.Identities.Add(user);
         await _db.SaveChangesAsync();
 
+        // persist identity role mapping for multi-role support
+        _db.IdentityRoles.Add(new IdentityRole { IdentityId = user.IdentityId, RoleId = request.RoleId });
+        await _db.SaveChangesAsync();
+
+        // Audit: log initial role assignment
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "User");
+        if (entityType is not null)
+        {
+            var roleName = (await _db.Roles.FindAsync(request.RoleId))?.Name;
+            await _auditService.LogFieldChangeAsync(entityType.EntityTypeId, user.IdentityId, "Roles", null, roleName, "Create", GetCurrentUserId());
+        }
+
         return CreatedAtAction(nameof(GetUsers), new { id = user.IdentityId }, new { Id = user.IdentityId });
     }
 
@@ -121,7 +139,9 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<IActionResult> UpdateUserRole(int id, [FromBody] UpdateRoleRequest request)
     {
-        var user = await _db.Identities.FindAsync(id);
+        var user = await _db.Identities
+            .Include(i => i.IdentityRoles)
+            .SingleOrDefaultAsync(i => i.IdentityId == id);
         if (user is null)
         {
             return NotFound();
@@ -139,10 +159,10 @@ public class UsersController : ControllerBase
             return BadRequest(new { message = "Invalid role." });
         }
 
-        var currentRole = GetCurrentUserRole();
+        var isAdmin = User.IsInRole("Admin");
 
         // Only Admin can assign Manager role
-        if (role.Name == "Manager" && currentRole != "Admin")
+        if (role.Name == "Manager" && !isAdmin)
         {
             return Forbid();
         }
@@ -153,10 +173,103 @@ public class UsersController : ControllerBase
             return BadRequest(new { message = "Cannot assign Admin role." });
         }
 
+        // Sync single-role change to IdentityRoles (clear existing, add new)
+        var existing = await _db.IdentityRoles.Where(ir => ir.IdentityId == id).ToListAsync();
+        if (existing.Any()) _db.IdentityRoles.RemoveRange(existing);
+        _db.IdentityRoles.Add(new IdentityRole { IdentityId = id, RoleId = request.RoleId });
+
+        var oldRole = await _db.Roles.FindAsync(user.RoleId);
         user.RoleId = request.RoleId;
         await _db.SaveChangesAsync();
 
+        // Audit: log role change
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "User");
+        if (entityType is not null)
+        {
+            var newRole = await _db.Roles.FindAsync(request.RoleId);
+            await _auditService.LogFieldChangeAsync(entityType.EntityTypeId, id, "Roles", oldRole?.Name, newRole?.Name, "Update", GetCurrentUserId());
+        }
+
         return NoContent();
+    }
+
+    [HttpPut("{id:int}/roles")]
+    [Authorize(Policy = "ManagerOrAbove")]
+    public async Task<IActionResult> UpdateUserRoles(int id, [FromBody] UpdateRolesRequest request)
+    {
+        var user = await _db.Identities
+            .Include(i => i.IdentityRoles)
+            .SingleOrDefaultAsync(i => i.IdentityId == id);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        // Prevent modifying own roles
+        if (user.IdentityId == GetCurrentUserId())
+        {
+            return BadRequest(new { message = "Cannot modify your own roles." });
+        }
+
+        // Validate provided role ids
+        var roles = await _db.Roles.Where(r => request.RoleIds.Contains(r.RoleId)).ToListAsync();
+        if (roles.Count != request.RoleIds.Distinct().Count())
+        {
+            return BadRequest(new { message = "One or more roles are invalid." });
+        }
+
+        var isAdmin = User.IsInRole("Admin");
+
+        // Only Admin can assign Manager or Admin roles
+        if (!isAdmin)
+        {
+            if (roles.Any(r => r.Name == "Manager" || r.Name == "Admin"))
+            {
+                return Forbid();
+            }
+        }
+
+        // Prevent assigning Admin role unless current user is Admin
+        if (roles.Any(r => r.Name == "Admin") && !isAdmin)
+        {
+            return BadRequest(new { message = "Cannot assign Admin role." });
+        }
+
+        // Sync IdentityRoles: remove existing, add new
+        var existing = await _db.IdentityRoles.Where(ir => ir.IdentityId == id).ToListAsync();
+        var oldRoleNames = existing.Any()
+            ? await _db.IdentityRoles.Where(ir => ir.IdentityId == id).Include(ir => ir.Role).Select(ir => ir.Role!.Name).ToListAsync()
+            : new List<string>();
+        if (existing.Any()) _db.IdentityRoles.RemoveRange(existing);
+        foreach (var rid in request.RoleIds.Distinct())
+        {
+            _db.IdentityRoles.Add(new IdentityRole { IdentityId = id, RoleId = rid });
+        }
+
+        // Keep legacy RoleId in sync with first provided role if any
+        if (request.RoleIds.Any())
+        {
+            user.RoleId = request.RoleIds.First();
+        }
+
+        await _db.SaveChangesAsync();
+
+        var updatedRoles = await _db.IdentityRoles
+            .Where(ir => ir.IdentityId == id)
+            .Include(ir => ir.Role)
+            .Select(ir => ir.Role!.Name)
+            .ToArrayAsync();
+
+        // Audit: record roles changed
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "User");
+        if (entityType is not null)
+        {
+            var oldVal = string.Join(",", oldRoleNames);
+            var newVal = string.Join(",", updatedRoles);
+            await _auditService.LogFieldChangeAsync(entityType.EntityTypeId, id, "Roles", oldVal, newVal, "Update", GetCurrentUserId());
+        }
+
+        return Ok(new { Roles = updatedRoles });
     }
 
     [HttpPut("{id:int}/status")]
@@ -240,4 +353,9 @@ public class UpdateRoleRequest
 public class UpdateStatusRequest
 {
     public bool IsActive { get; set; }
+}
+
+public class UpdateRolesRequest
+{
+    public int[] RoleIds { get; set; } = Array.Empty<int>();
 }

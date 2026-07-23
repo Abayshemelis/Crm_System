@@ -7,7 +7,6 @@ interface RoleGateProps {
 }
 
 export const RoleGate: React.FC<RoleGateProps> = ({ allow, children }) => {
-    const { user } = useAuth();
-    const role = user?.role ?? 'SalesRep';
-    return allow.includes(role as 'Admin' | 'Manager' | 'SalesRep') ? <>{children}</> : null;
+    const { userRole } = useAuth();
+    return allow.includes(userRole) ? <>{children}</> : null;
 };

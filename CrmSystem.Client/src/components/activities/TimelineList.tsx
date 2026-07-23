@@ -16,6 +16,8 @@ interface ActivityReadDto {
   customerName?: string;
   opportunityId?: number;
   opportunityTitle?: string;
+  leadId?: number;
+  leadName?: string;
   createdById: number;
   createdByName: string;
   createdAt: string;
@@ -26,8 +28,10 @@ interface TimelineListProps {
   activityTypes: ActivityType[];
   customerId?: number;
   opportunityId?: number;
+  leadId?: number;
   currentUserId?: number;
   isAdmin?: boolean;
+  readOnly?: boolean;
   onActivityLogged: (activity: ActivityReadDto) => void;
   onActivityDeleted: (id: number) => void;
 }
@@ -54,8 +58,8 @@ function formatDate(iso: string) {
 }
 
 export const TimelineList: React.FC<TimelineListProps> = ({
-  activities, activityTypes, customerId, opportunityId,
-  currentUserId, isAdmin, onActivityLogged, onActivityDeleted
+  activities, activityTypes, customerId, opportunityId, leadId,
+  currentUserId, isAdmin, readOnly = false, onActivityLogged, onActivityDeleted
 }) => {
   const [composerOpen, setComposerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -92,6 +96,7 @@ export const TimelineList: React.FC<TimelineListProps> = ({
         durationMinutes: Number(form.durationMinutes) || 0,
         customerId: customerId ?? null,
         opportunityId: opportunityId ?? null,
+        leadId: leadId ?? null,
       };
       const created = await api.post<ActivityReadDto>('/api/activities', payload);
       onActivityLogged(created);
@@ -115,19 +120,20 @@ export const TimelineList: React.FC<TimelineListProps> = ({
 
   return (
     <div className="timeline-container">
-      {/* Quick Log Composer */}
-      <div className="timeline-composer-header">
-        <button
-          type="button"
-          className="btn-outline-sm"
-          onClick={() => setComposerOpen(o => !o)}
-        >
-          {composerOpen ? <ChevronUp size={14} /> : <Plus size={14} />}
-          {composerOpen ? 'Cancel' : 'Log Activity'}
-        </button>
-      </div>
-
-      {composerOpen && (
+      {/* Quick Log Composer — hidden for read-only (converted) contexts */}
+      {!readOnly && (
+        <>
+          <div className="timeline-composer-header">
+            <button
+              type="button"
+              className="btn-outline-sm"
+              onClick={() => setComposerOpen(o => !o)}
+            >
+              {composerOpen ? <ChevronUp size={14} /> : <Plus size={14} />}
+              {composerOpen ? 'Cancel' : 'Log Activity'}
+            </button>
+          </div>
+          {composerOpen && (
         <form className="quick-log-form" onSubmit={handleLog}>
           <div className="form-row">
             <div className="form-group">
@@ -197,13 +203,15 @@ export const TimelineList: React.FC<TimelineListProps> = ({
             </button>
           </div>
         </form>
+        )}
+        </>
       )}
 
       {/* Timeline */}
       {activities.length === 0 ? (
         <div className="timeline-empty">
           <Calendar size={32} className="empty-icon" />
-          <p>No activities yet. Log the first one above.</p>
+          <p>{readOnly ? 'No activities were recorded for this lead.' : 'No activities yet. Log the first one above.'}</p>
         </div>
       ) : (
         <div className="timeline-list">

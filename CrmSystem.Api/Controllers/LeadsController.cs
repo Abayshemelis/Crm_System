@@ -49,15 +49,13 @@ public class LeadsController : ControllerBase
             leads = leads.Where(l => l.AssignedRepId == query.RepId);
         }
 
-        // By default hide converted leads (LeadStatus name "Converted" = id 5)
-        if (!query.ShowConverted)
-        {
-            leads = leads.Where(l => l.LeadStatus == null || l.LeadStatus.Name != "Converted");
-        }
-
         if (query.LeadStatusId is not null)
         {
             leads = leads.Where(l => l.LeadStatusId == query.LeadStatusId);
+        }
+        else if (!query.ShowConverted)
+        {
+            leads = leads.Where(l => l.LeadStatus == null || l.LeadStatus.Name != "Converted");
         }
 
         if (query.SourceId is not null)
@@ -138,7 +136,8 @@ public class LeadsController : ControllerBase
             LeadStatusId = leadStatusId,
             AssignedRepId = assignedRepId,
             Notes = request.Notes?.Trim(),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            CreatedById = _currentUser.UserId
         };
 
         _db.Leads.Add(lead);
@@ -371,15 +370,22 @@ public class LeadsController : ControllerBase
             return NotFound(new { message = "Lead not found." });
         }
 
-        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
-        if (entityType is null)
-        {
-            return Ok(new object[0]);
-        }
+        var leadEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+        var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
 
-        var auditLogs = await _db.AuditLogs
+        int? custId = lead.ConvertedCustomerId;
+
+        var query = _db.AuditLogs
+            .Include(a => a.AuditActionType)
             .Include(a => a.ChangedBy)
-            .Where(a => a.EntityTypeId == entityType.EntityTypeId && a.EntityId == id)
+            .Where(a => !a.IsDeleted)
+            .AsQueryable();
+
+        query = query.Where(a =>
+            (leadEntityType != null && a.EntityTypeId == leadEntityType.EntityTypeId && a.EntityId == id) ||
+            (customerEntityType != null && custId.HasValue && a.EntityTypeId == customerEntityType.EntityTypeId && a.EntityId == custId.Value));
+
+        var auditLogs = await query
             .OrderByDescending(a => a.ChangedAt)
             .Select(a => new
             {
@@ -560,8 +566,50 @@ public class LeadsController : ControllerBase
 
         // Set status to "Converted" (id=5)
         var convertedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(ls => ls.Name == "Converted");
+        var oldStatusName = lead.LeadStatus?.Name ?? "Qualified";
         lead.LeadStatusId = convertedStatus?.LeadStatusId;
         lead.ConvertedCustomerId = customer.CustomerId;
+        lead.ConvertedOpportunityId = opportunityId;
+        lead.ConvertedAt = DateTime.UtcNow;
+        lead.ConvertedById = _currentUser.UserId;
+        await _db.SaveChangesAsync();
+
+        if (_currentUser.UserId is not null)
+        {
+            var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+            if (entityType is not null)
+            {
+                await _auditService.LogFieldChangeAsync(
+                    entityTypeId: entityType.EntityTypeId,
+                    entityId: lead.LeadId,
+                    fieldName: "LeadStatus",
+                    oldValue: oldStatusName,
+                    newValue: "Converted",
+                    actionTypeName: "Convert",
+                    changedById: _currentUser.UserId.Value);
+            }
+        }
+        // Relink existing activities and tasks to the new Customer/Opportunity
+        var leadActivities = await _db.Activities.Where(a => a.LeadId == lead.LeadId).ToListAsync();
+        foreach (var act in leadActivities)
+        {
+            act.CustomerId = customer.CustomerId;
+            if (opportunityId.HasValue && act.OpportunityId == null)
+            {
+                act.OpportunityId = opportunityId.Value;
+            }
+        }
+        
+        var leadTasks = await _db.CrmTasks.Where(t => t.LeadId == lead.LeadId).ToListAsync();
+        foreach (var task in leadTasks)
+        {
+            task.CustomerId = customer.CustomerId;
+            if (opportunityId.HasValue && task.OpportunityId == null)
+            {
+                task.OpportunityId = opportunityId.Value;
+            }
+        }
+        
         await _db.SaveChangesAsync();
 
         await transaction.CommitAsync();
@@ -668,6 +716,10 @@ public class LeadsController : ControllerBase
             lead.AssignedRepId,
             lead.AssignedRep?.Name,
             lead.ConvertedCustomerId,
+            lead.CreatedById,
+            lead.ConvertedAt,
+            lead.ConvertedById,
+            lead.ConvertedOpportunityId,
             lead.Notes,
             lead.CreatedAt);
 }

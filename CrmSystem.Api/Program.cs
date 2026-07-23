@@ -12,17 +12,39 @@ using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers().AddJsonOptions(options =>
+var mvcBuilder = builder.Services.AddControllers();
+mvcBuilder.AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
+
+if (builder.Environment.IsEnvironment("Test"))
+{
+    // Use Newtonsoft for tests to avoid TestServer PipeWriter edge cases with System.Text.Json
+    mvcBuilder.AddNewtonsoftJson();
+}
+
+// Note: keep System.Text.Json as the primary serializer.
 builder.Services.AddOpenApi();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://172.25.64.1:5173", "http://172.31.224.1:5173", "http://192.168.78.1:5173", "http://192.168.111.1:5173", "http://192.168.123.12:5173", "http://192.168.91.12:5173", "http://192.168.242.12:5173", "http://localhost:5174", "http://127.0.0.1:5174", "http://172.25.64.1:5174", "http://172.31.224.1:5174", "http://192.168.78.1:5174", "http://192.168.111.1:5174", "http://192.168.123.12:5174", "http://192.168.91.12:5174", "http://192.168.242.12:5174")
+        policy.WithOrigins(
+                "http://localhost:5173", "http://127.0.0.1:5173",
+                "http://localhost:5174", "http://127.0.0.1:5174",
+                "http://localhost:5175", "http://127.0.0.1:5175",
+                "http://localhost:5176", "http://127.0.0.1:5176",
+                "http://172.25.64.1:5173", "http://172.25.64.1:5174", "http://172.25.64.1:5175", "http://172.25.64.1:5176",
+                "http://172.31.224.1:5173", "http://172.31.224.1:5174", "http://172.31.224.1:5175", "http://172.31.224.1:5176",
+                "http://192.168.78.1:5173", "http://192.168.78.1:5174", "http://192.168.78.1:5175", "http://192.168.78.1:5176",
+                "http://192.168.111.1:5173", "http://192.168.111.1:5174", "http://192.168.111.1:5175", "http://192.168.111.1:5176",
+                "http://192.168.123.12:5173", "http://192.168.123.12:5174", "http://192.168.123.12:5175", "http://192.168.123.12:5176",
+                "http://192.168.91.12:5173", "http://192.168.91.12:5174", "http://192.168.91.12:5175", "http://192.168.91.12:5176",
+                "http://192.168.242.12:5173", "http://192.168.242.12:5174", "http://192.168.242.12:5175", "http://192.168.242.12:5176",
+                "http://192.168.195.12:5173", "http://192.168.195.12:5174", "http://192.168.195.12:5175", "http://192.168.195.12:5176",
+                "http://172.24.96.1:5173", "http://172.24.96.1:5174", "http://172.24.96.1:5175", "http://172.24.96.1:5176")
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -150,10 +172,13 @@ app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
         }
 
         // Expose the file to the frontend dev server origin (CORS for static files).
-        // This mirrors the AllowFrontend policy for requests that hit static files.
+        // Echo back the request origin so any allowed Vite port works.
         if (!headers.ContainsKey("Access-Control-Allow-Origin"))
         {
-            headers["Access-Control-Allow-Origin"] = "http://localhost:5173";
+            var requestOrigin = ctx.Context.Request.Headers["Origin"].ToString();
+            headers["Access-Control-Allow-Origin"] = string.IsNullOrEmpty(requestOrigin)
+                ? "http://localhost:5173"
+                : requestOrigin;
         }
     }
 });
@@ -328,6 +353,14 @@ using (var scope = app.Services.CreateScope())
     }
 
     var adminUser = await db.Identities.SingleAsync(i => i.Email == adminEmail);
+
+    // Ensure admin has IdentityRole mapping (multi-role support)
+    var adminIdentityRoleExists = await db.IdentityRoles.AnyAsync(ir => ir.IdentityId == adminUser.IdentityId && ir.RoleId == adminRole.RoleId);
+    if (!adminIdentityRoleExists)
+    {
+        db.IdentityRoles.Add(new IdentityRole { IdentityId = adminUser.IdentityId, RoleId = adminRole.RoleId });
+        await db.SaveChangesAsync();
+    }
 
     if (!await db.Tags.AnyAsync())
     {

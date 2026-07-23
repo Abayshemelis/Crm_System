@@ -173,15 +173,25 @@ public class OpportunitiesController : ControllerBase
             return NotFound(new { message = "Opportunity not found." });
         }
 
-        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
-        if (entityType is null)
-        {
-            return Ok(new object[0]);
-        }
+        var oppEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
+        var leadEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
 
-        var auditLogs = await _db.AuditLogs
+        var lead = await _db.Leads
+            .FirstOrDefaultAsync(l => l.ConvertedOpportunityId == id);
+
+        int? leadId = lead?.LeadId;
+
+        var query = _db.AuditLogs
+            .Include(a => a.AuditActionType)
             .Include(a => a.ChangedBy)
-            .Where(a => a.EntityTypeId == entityType.EntityTypeId && a.EntityId == id)
+            .Where(a => !a.IsDeleted)
+            .AsQueryable();
+
+        query = query.Where(a =>
+            (oppEntityType != null && a.EntityTypeId == oppEntityType.EntityTypeId && a.EntityId == id) ||
+            (leadEntityType != null && leadId.HasValue && a.EntityTypeId == leadEntityType.EntityTypeId && a.EntityId == leadId.Value));
+
+        var auditLogs = await query
             .OrderByDescending(a => a.ChangedAt)
             .Select(a => new
             {

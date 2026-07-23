@@ -18,6 +18,16 @@ public class Lead
     public int? ConvertedCustomerId { get; set; }
     public Customer? ConvertedCustomer { get; set; }
     public string? Notes { get; set; }
+    public int? CreatedById { get; set; }
+    public Identity? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ConvertedAt { get; set; }
+    public int? ConvertedById { get; set; }
+    public Identity? ConvertedBy { get; set; }
+    public int? ConvertedOpportunityId { get; set; }
+    public Opportunity? ConvertedOpportunity { get; set; }
     public bool IsDeleted { get; set; } = false;
+
+    public ICollection<Activity> Activities { get; set; } = new List<Activity>();
+    public ICollection<CrmTask> Tasks { get; set; } = new List<CrmTask>();
 }

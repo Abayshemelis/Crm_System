@@ -315,6 +315,74 @@
   color: #dc2626;
 }
 
+/* Role Switcher */
+.role-switcher-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.role-switcher-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.role-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+[data-theme="light"] .role-dropdown {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.role-option {
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: background 0.2s;
+}
+
+.role-option:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.role-option.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+[data-theme="light"] .role-option:hover {
+  background: #eff6ff;
+}
+
+[data-theme="light"] .role-option.active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
 /* Main Content Area */
 .main-content {
   flex: 1;

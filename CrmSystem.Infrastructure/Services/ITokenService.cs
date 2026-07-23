@@ -33,15 +33,25 @@ public class JwtTokenService : ITokenService
         var issuer = _configuration["Jwt:Issuer"]!;
         var expiryMinutes = int.Parse(_configuration["Jwt:AccessTokenExpiryMinutes"]!);
 
+        var roleNames = new List<string>();
+        if (!string.IsNullOrWhiteSpace(identity.Role?.Name))
+        {
+            roleNames.Add(identity.Role.Name);
+        }
+        roleNames.AddRange(identity.IdentityRoles
+            .Where(ir => !string.IsNullOrWhiteSpace(ir.Role?.Name))
+            .Select(ir => ir.Role!.Name));
+
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, identity.IdentityId.ToString()),
             new(ClaimTypes.Email, identity.Email),
-            new(ClaimTypes.Role, identity.Role?.Name ?? string.Empty),
             new(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+
+        claims.AddRange(roleNames.Distinct().Select(role => new Claim(ClaimTypes.Role, role)));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -12,6 +12,9 @@ public class Activity
     public int? OpportunityId { get; set; }
     public Opportunity? Opportunity { get; set; }
 
+    public int? LeadId { get; set; }
+    public Lead? Lead { get; set; }
+
     public int ActivityTypeId { get; set; }
     public ActivityType? ActivityType { get; set; }
 

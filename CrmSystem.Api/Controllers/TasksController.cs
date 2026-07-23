@@ -46,17 +46,20 @@ public class TasksController : ControllerBase
         return Ok(await _service.GetCalendarAsync(year, month, assignedToId));
     }
 
-    /// <summary>GET /api/tasks?customerId=&opportunityId=</summary>
+    /// <summary>GET /api/tasks?customerId=&opportunityId=&leadId=</summary>
     [HttpGet]
     public async Task<IActionResult> GetScoped(
         [FromQuery] int? customerId,
-        [FromQuery] int? opportunityId)
+        [FromQuery] int? opportunityId,
+        [FromQuery] int? leadId)
     {
         if (customerId.HasValue)
             return Ok(await _service.GetByCustomerAsync(customerId.Value));
         if (opportunityId.HasValue)
             return Ok(await _service.GetByOpportunityAsync(opportunityId.Value));
-        return BadRequest(new { message = "Provide customerId or opportunityId." });
+        if (leadId.HasValue)
+            return Ok(await _service.GetByLeadAsync(leadId.Value));
+        return BadRequest(new { message = "Provide customerId, opportunityId, or leadId." });
     }
 
     /// <summary>POST /api/tasks</summary>

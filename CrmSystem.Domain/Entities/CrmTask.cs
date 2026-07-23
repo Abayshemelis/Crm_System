@@ -18,6 +18,9 @@ public class CrmTask
     public int? OpportunityId { get; set; }
     public Opportunity? Opportunity { get; set; }
 
+    public int? LeadId { get; set; }
+    public Lead? Lead { get; set; }
+
     public int? ActivityId { get; set; }
     public Activity? Activity { get; set; }
 

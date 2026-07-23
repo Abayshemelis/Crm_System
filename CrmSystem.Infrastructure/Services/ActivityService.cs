@@ -22,6 +22,7 @@ public class ActivityService : IActivityService
             .Include(a => a.CreatedBy)
             .Include(a => a.Customer)
             .Include(a => a.Opportunity)
+            .Include(a => a.Lead)
             .Where(a => a.ActivityDate >= thirtyDaysAgo)
             .OrderByDescending(a => a.ActivityDate)
             .ToListAsync();
@@ -29,30 +30,87 @@ public class ActivityService : IActivityService
         return list.Select(MapToDto).ToList();
     }
 
-    public async Task<IReadOnlyList<ActivityReadDto>> GetTimelineAsync(int? customerId, int? opportunityId)
+    public async Task<IReadOnlyList<ActivityReadDto>> GetTimelineAsync(int? customerId, int? opportunityId, int? leadId = null)
     {
-        var query = _db.Activities
+        var baseQuery = _db.Activities
             .Include(a => a.ActivityType)
             .Include(a => a.CreatedBy)
             .Include(a => a.Customer)
             .Include(a => a.Opportunity)
+            .Include(a => a.Lead)
             .AsQueryable();
 
+        var linkedCustomerIds = new HashSet<int>();
+        var linkedOpportunityIds = new HashSet<int>();
+        var linkedLeadIds = new HashSet<int>();
+
         if (customerId.HasValue)
-            query = query.Where(a => a.CustomerId == customerId.Value);
+        {
+            linkedCustomerIds.Add(customerId.Value);
+            var leads = await _db.Leads
+                .Where(l => l.ConvertedCustomerId == customerId.Value)
+                .Select(l => new { l.LeadId, l.ConvertedOpportunityId })
+                .ToListAsync();
+            foreach (var l in leads)
+            {
+                linkedLeadIds.Add(l.LeadId);
+                if (l.ConvertedOpportunityId.HasValue)
+                    linkedOpportunityIds.Add(l.ConvertedOpportunityId.Value);
+            }
+        }
 
         if (opportunityId.HasValue)
-            query = query.Where(a => a.OpportunityId == opportunityId.Value);
+        {
+            linkedOpportunityIds.Add(opportunityId.Value);
+            var leads = await _db.Leads
+                .Where(l => l.ConvertedOpportunityId == opportunityId.Value)
+                .Select(l => new { l.LeadId, l.ConvertedCustomerId })
+                .ToListAsync();
+            foreach (var l in leads)
+            {
+                linkedLeadIds.Add(l.LeadId);
+                if (l.ConvertedCustomerId.HasValue)
+                    linkedCustomerIds.Add(l.ConvertedCustomerId.Value);
+            }
+        }
+
+        if (leadId.HasValue)
+        {
+            linkedLeadIds.Add(leadId.Value);
+            var lead = await _db.Leads
+                .Where(l => l.LeadId == leadId.Value)
+                .Select(l => new { l.ConvertedCustomerId, l.ConvertedOpportunityId })
+                .FirstOrDefaultAsync();
+            if (lead?.ConvertedCustomerId != null)
+                linkedCustomerIds.Add(lead.ConvertedCustomerId.Value);
+            if (lead?.ConvertedOpportunityId != null)
+                linkedOpportunityIds.Add(lead.ConvertedOpportunityId.Value);
+        }
+
+        var cIds = linkedCustomerIds.ToList();
+        var oIds = linkedOpportunityIds.ToList();
+        var lIds = linkedLeadIds.ToList();
+
+        var query = baseQuery.Where(a =>
+            (a.CustomerId.HasValue && cIds.Contains(a.CustomerId.Value)) ||
+            (a.OpportunityId.HasValue && oIds.Contains(a.OpportunityId.Value)) ||
+            (a.LeadId.HasValue && lIds.Contains(a.LeadId.Value)));
 
         var list = await query
             .OrderByDescending(a => a.ActivityDate)
             .ToListAsync();
 
-        return list.Select(MapToDto).ToList();
+        return list.DistinctBy(a => a.ActivityId).Select(MapToDto).ToList();
     }
 
     public async Task<ActivityReadDto> CreateAsync(ActivityCreateDto dto, int createdById)
     {
+        var typeExists = await _db.ActivityTypes.AnyAsync(at => at.ActivityTypeId == dto.ActivityTypeId);
+        if (!typeExists)
+        {
+            throw new KeyNotFoundException($"ActivityType with ID {dto.ActivityTypeId} does not exist.");
+        }
+
         var entity = new Activity
         {
             ActivityTypeId = dto.ActivityTypeId,
@@ -62,6 +120,7 @@ public class ActivityService : IActivityService
             DurationMinutes = dto.DurationMinutes,
             CustomerId = dto.CustomerId,
             OpportunityId = dto.OpportunityId,
+            LeadId = dto.LeadId,
             CreatedById = createdById,
             CreatedAt = DateTime.UtcNow
         };
@@ -75,6 +134,7 @@ public class ActivityService : IActivityService
             .Include(a => a.CreatedBy)
             .Include(a => a.Customer)
             .Include(a => a.Opportunity)
+            .Include(a => a.Lead)
             .FirstAsync(a => a.ActivityId == entity.ActivityId);
 
         return MapToDto(created);
@@ -105,6 +165,8 @@ public class ActivityService : IActivityService
         CustomerName = a.Customer != null ? $"{a.Customer.FirstName} {a.Customer.LastName}" : null,
         OpportunityId = a.OpportunityId,
         OpportunityTitle = a.Opportunity?.Title,
+        LeadId = a.LeadId,
+        LeadName = a.Lead != null ? $"{a.Lead.FirstName} {a.Lead.LastName}" : null,
         CreatedById = a.CreatedById,
         CreatedByName = a.CreatedBy?.Name ?? string.Empty,
         CreatedAt = a.CreatedAt

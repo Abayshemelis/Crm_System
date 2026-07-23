@@ -6,24 +6,21 @@ import { CalendarGrid } from '../components/tasks/CalendarGrid';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
 import { List, Calendar, Plus, User } from 'lucide-react';
 import './screens.css';
 
-interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; completed: TaskReadDto[]; }
+interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; }
 interface CalendarDay { day: number; taskCount: number; tasks: TaskReadDto[]; }
 interface Lookup { id: number; name: string; }
 interface TaskStatus extends Lookup { isTerminal: boolean; }
 interface User extends Lookup {}
 
 export const TasksScreen: React.FC = () => {
-  const { user } = useAuth();
-  const isManager = user?.role === 'Manager' || user?.role === 'Admin';
-  const [searchParams] = useSearchParams();
-  const filterParam = searchParams.get('filter');
+  const { user, isManagerOrAboveSelected } = useAuth();
+  const isManager = isManagerOrAboveSelected;
 
   const [view, setView] = useState<'list' | 'calendar'>('list');
-  const [grouped, setGrouped] = useState<TaskGrouped>({ overdue: [], dueToday: [], upcoming: [], completed: [] });
+  const [grouped, setGrouped] = useState<TaskGrouped>({ overdue: [], dueToday: [], upcoming: [] });
   const [calDays, setCalDays] = useState<CalendarDay[]>([]);
   const [calDate, setCalDate] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [loading, setLoading] = useState(true);
@@ -54,18 +51,6 @@ export const TasksScreen: React.FC = () => {
     } catch { /* ignore */ } finally { setLoading(false); }
   }, [selectedRep, isManager]);
 
-  // Filter tasks based on URL parameter
-  const filteredGrouped = (() => {
-    if (!filterParam) return grouped;
-    if (filterParam === 'overdue') {
-      return { ...grouped, dueToday: [], upcoming: [], completed: [] };
-    }
-    if (filterParam === 'dueToday') {
-      return { ...grouped, overdue: [], upcoming: [], completed: [] };
-    }
-    return grouped;
-  })();
-
   const fetchCalendar = useCallback(async () => {
     try {
       const repId = (isManager && selectedRep !== 'me') ? `&assignedToId=${selectedRep}` : '';
@@ -79,11 +64,10 @@ export const TasksScreen: React.FC = () => {
       setStatuses(res.map(s => ({ id: s.id, name: s.name, isTerminal: s.isTerminal })))
     ).catch(() => {});
 
-    if (isManager) {
-      api.get<{ identityId: number; name: string }[]>('/api/users').then(res =>
-        setUsers(res.map(u => ({ id: u.identityId, name: u.name })))
-      ).catch(() => {});
-    }
+    api.get<any[]>('/api/users').then(res => {
+      const usersData = res ?? [];
+      setUsers(usersData.map(u => ({ id: u.Id || u.identityId || u.id, name: u.name })));
+    }).catch(() => {});
 
     api.get<{ data: Array<{ customerId: number; firstName: string; lastName: string }> }>('/api/customers?page=1&pageSize=100')
       .then(res => setCustomers((res.data ?? []).map(c => ({ id: c.customerId, name: `${c.firstName} ${c.lastName}` }))))
@@ -94,13 +78,18 @@ export const TasksScreen: React.FC = () => {
       .catch(() => {});
 
     api.get<any[]>('/api/activities')
-      .then(res => setActivities((res ?? []).map(a => ({ id: a.activityId, name: `${a.activityTypeName}: ${a.subject}` }))))
+      .then(res => setActivities((res ?? []).map(a => ({ id: a.activityId, name: a.subject }))))
       .catch(() => {});
 
     api.get<any[]>('/api/activitytypes')
-      .then(res => setActivityTypes((res ?? []).map(at => ({ id: at.activityTypeId, name: at.name }))))
+      .then(res => {
+        console.log('Activity types API response:', res);
+        const mapped = (res ?? []).map(at => ({ id: at.id ?? at.Id, name: at.name ?? at.Name }));
+        console.log('Activity types mapped:', mapped);
+        setActivityTypes(mapped);
+      })
       .catch(() => {});
-  }, [isManager]);
+  }, []);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
   useEffect(() => { if (view === 'calendar') fetchCalendar(); }, [view, fetchCalendar]);
@@ -110,7 +99,6 @@ export const TasksScreen: React.FC = () => {
       overdue: g.overdue.filter(t => t.crmTaskId !== id),
       dueToday: g.dueToday.filter(t => t.crmTaskId !== id),
       upcoming: g.upcoming.filter(t => t.crmTaskId !== id),
-      completed: g.completed,
     }));
   };
 
@@ -127,7 +115,6 @@ export const TasksScreen: React.FC = () => {
       overdue: g.overdue.filter(t => t.crmTaskId !== id),
       dueToday: g.dueToday.filter(t => t.crmTaskId !== id),
       upcoming: g.upcoming.filter(t => t.crmTaskId !== id),
-      completed: g.completed.filter(t => t.crmTaskId !== id),
     }));
     setShowModal(false);
     setEditTask(null);
@@ -193,10 +180,10 @@ export const TasksScreen: React.FC = () => {
             <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading tasks…</div>
           ) : view === 'list' ? (
             <TaskListGroup
-              overdue={filteredGrouped.overdue}
-              dueToday={filteredGrouped.dueToday}
-              upcoming={filteredGrouped.upcoming}
-              completed={filteredGrouped.completed}
+              overdue={grouped.overdue}
+              dueToday={grouped.dueToday}
+              upcoming={grouped.upcoming}
+              completed={[]}
               onTaskComplete={handleTaskComplete}
               onTaskClick={handleTaskClick}
             />

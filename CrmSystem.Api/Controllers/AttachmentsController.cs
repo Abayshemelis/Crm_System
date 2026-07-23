@@ -28,12 +28,7 @@ public class AttachmentsController : ControllerBase
         return int.Parse(claim?.Value ?? throw new InvalidOperationException("User id claim is missing."));
     }
 
-    private string GetCurrentUserRole()
-    {
-        return User.FindFirst(ClaimTypes.Role)?.Value ?? "SalesRep";
-    }
-
-    private bool IsSalesRep() => GetCurrentUserRole() == "SalesRep";
+    private bool IsSalesRep() => User.IsInRole("SalesRep");
 
     [HttpGet]
     public async Task<IActionResult> GetAttachments([FromQuery] int? customerId, [FromQuery] int? companyId, [FromQuery] int? opportunityId)

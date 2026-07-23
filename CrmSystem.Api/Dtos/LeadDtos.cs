@@ -71,6 +71,10 @@ public record LeadDetailDto(
     int? AssignedRepId,
     string? AssignedRepName,
     int? ConvertedCustomerId,
+    int? CreatedById,
+    DateTime? ConvertedAt,
+    int? ConvertedById,
+    int? ConvertedOpportunityId,
     string? Notes,
     DateTime CreatedAt);
 

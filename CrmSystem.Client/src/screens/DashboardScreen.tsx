@@ -120,7 +120,7 @@ const getOpenTasksCount = (stats: FilteredDashboardStats | null) =>
     (stats?.pendingTasksCount ?? 0) + (stats?.overdueTasksCount ?? 0) + (stats?.dueTodayTasksCount ?? 0);
 
 export const DashboardScreen: React.FC = () => {
-    const { user, token, isAdmin, userRole } = useAuth();
+    const { user, token, isAdmin, userRole, selectedRole } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -138,7 +138,7 @@ export const DashboardScreen: React.FC = () => {
         const fetchStats = async () => {
             try {
                 // Fetch filtered stats for SalesRep, Manager, and Admin (for widgets)
-                if (userRole === 'SalesRep' || userRole === 'Manager' || isAdmin) {
+                if (selectedRole === 'SalesRep' || selectedRole === 'Manager' || isAdmin) {
                     try {
                         const url = `/api/dashboard/stats${includeClosed ? '?includeClosed=true' : ''}`;
                         const filteredData = await api.get<FilteredDashboardStats>(url);
@@ -153,7 +153,7 @@ export const DashboardScreen: React.FC = () => {
                 setTaskGroups(taskGroups);
 
                 // Admin and Manager still get global stats
-                if (isAdmin || userRole === 'Manager') {
+                if (isAdmin || selectedRole === 'Manager') {
                     const [customers, companiesFull, leads] = await Promise.all([
                         api.get<{ totalCount?: number }>('/api/customers?page=1&pageSize=1'),
                         api.get<CompanySummaryResponse>('/api/companies?page=1&pageSize=100'),
@@ -172,7 +172,7 @@ export const DashboardScreen: React.FC = () => {
                 }
 
                 // Fetch user stats only for Admin
-                if (isAdmin) {
+                if (isAdmin && selectedRole === 'Admin') {
                     try {
                         const userStatsData = await api.get<UserStats>('/api/users/stats');
                         setUserStats(userStatsData);
@@ -195,7 +195,7 @@ export const DashboardScreen: React.FC = () => {
             }
         };
         fetchStats();
-    }, [token, location.key, isAdmin, userRole, includeClosed]);
+    }, [token, location.key, isAdmin, selectedRole, includeClosed]);
 
     // Admin Dashboard Cards
     const adminStatCards: StatCard[] = [
@@ -399,8 +399,8 @@ export const DashboardScreen: React.FC = () => {
     ];
 
     const getStatCards = () => {
-        if (isAdmin) return adminStatCards;
-        if (userRole === 'Manager') return managerStatCards;
+        if (isAdmin && selectedRole === 'Admin') return adminStatCards;
+        if (selectedRole === 'Manager') return managerStatCards;
         return salesRepStatCards;
     };
 
@@ -415,7 +415,7 @@ export const DashboardScreen: React.FC = () => {
             <div className="dashboard-header animate-fade-in">
                 <div className="dashboard-title">
                     <h1>Dashboard</h1>
-                    <p>Welcome{user ? ' back,' : ''}{user?.name ? ` ${user.name}.` : ' to CRM Pro.'} Here's your {isAdmin ? 'system' : userRole === 'Manager' ? 'team' : 'personal'} overview.</p>
+                    <p>Welcome{user ? ' back,' : ''}{user?.name ? ` ${user.name}.` : ' to CRM Pro.'} Here's your {selectedRole === 'Admin' ? 'system' : selectedRole === 'Manager' ? 'team' : 'personal'} overview.</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>

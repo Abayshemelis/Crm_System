@@ -55,7 +55,11 @@ public class AuthController : ControllerBase
         _db.Identities.Add(identity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, salesRepRole.Name, null, null));
+        // persist initial IdentityRole mapping
+        _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
+        await _db.SaveChangesAsync();
+
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, salesRepRole.Name, new[] { salesRepRole.Name }, null, null));
     }
 
     [HttpPost("login")]
@@ -63,6 +67,8 @@ public class AuthController : ControllerBase
     {
         var identity = await _db.Identities
             .Include(i => i.Role)
+            .Include(i => i.IdentityRoles)
+                .ThenInclude(ir => ir.Role)
             .SingleOrDefaultAsync(i => i.Email == request.Email);
 
         if (identity is null || !_passwordHasher.Verify(request.Password, identity.PasswordHash))
@@ -84,7 +90,8 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(refreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, identity.Role?.Name ?? string.Empty, accessToken, rawRefreshToken));
+        var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, accessToken, rawRefreshToken));
     }
 
     [HttpPost("refresh")]
@@ -95,6 +102,9 @@ public class AuthController : ControllerBase
         var storedToken = await _db.RefreshTokens
             .Include(rt => rt.Identity)
                 .ThenInclude(i => i!.Role)
+            .Include(rt => rt.Identity)
+                .ThenInclude(i => i!.IdentityRoles)
+                    .ThenInclude(ir => ir.Role)
             .SingleOrDefaultAsync(rt => rt.TokenHash == incomingHash);
 
         if (storedToken is null || storedToken.IsRevoked || storedToken.ExpiresAt < DateTime.UtcNow)
@@ -119,7 +129,8 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(newRefreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, identity.Role?.Name ?? string.Empty, newAccessToken, newRawRefreshToken));
+        var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
+        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, newAccessToken, newRawRefreshToken));
     }
 
     [HttpPost("forgot-password")]
@@ -191,9 +202,10 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         var email = User.FindFirstValue(ClaimTypes.Email);
-        var role = User.FindFirstValue(ClaimTypes.Role);
+        var roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
+        var role = roles.FirstOrDefault();
 
-        return Ok(new { userId, email, role });
+        return Ok(new { userId, email, role, roles });
     }
 
     [Authorize(Policy = "AdminOnly")]

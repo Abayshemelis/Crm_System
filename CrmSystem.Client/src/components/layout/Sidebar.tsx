@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import './layout.css';
 
 export const Sidebar: React.FC = () => {
-  const { isManagerOrAbove, user } = useAuth();
+  const { isManagerOrAboveSelected, user } = useAuth();
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const location = useLocation();
 
@@ -59,7 +59,7 @@ export const Sidebar: React.FC = () => {
               <span>Tasks</span>
             </NavLink>
 
-            {isManagerOrAbove && (
+            {isManagerOrAboveSelected && (
               <NavLink to="/users" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
                 <UserCircle className="link-icon" />
                 <span>Users</span>
@@ -77,7 +77,7 @@ export const Sidebar: React.FC = () => {
       </nav>
 
       <div className="sidebar-footer">
-        {user && isManagerOrAbove && (
+        {user && isManagerOrAboveSelected && (
           <NavLink to="/settings" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
             <Settings className="link-icon" />
             <span>Settings</span>

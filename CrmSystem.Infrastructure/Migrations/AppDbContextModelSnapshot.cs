@@ -52,6 +52,9 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("int");
 
+                    b.Property<int?>("LeadId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("OpportunityId")
                         .HasColumnType("int");
 
@@ -67,6 +70,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("LeadId");
 
                     b.HasIndex("OpportunityId");
 
@@ -312,6 +317,9 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("LeadId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("OpportunityId")
                         .HasColumnType("int");
 
@@ -331,6 +339,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("CrmTaskStatusId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("LeadId");
 
                     b.HasIndex("OpportunityId");
 
@@ -486,6 +496,21 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.ToTable("Identities");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.IdentityRole", b =>
+                {
+                    b.Property<int>("IdentityId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("IdentityId", "RoleId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("IdentityRoles");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Lead", b =>
                 {
                     b.Property<int>("LeadId")
@@ -501,11 +526,23 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<DateTime?>("ConvertedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ConvertedById")
+                        .HasColumnType("int");
+
                     b.Property<int?>("ConvertedCustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ConvertedOpportunityId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedById")
+                        .HasColumnType("int");
 
                     b.Property<string>("Email")
                         .HasMaxLength(255)
@@ -546,7 +583,13 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("AssignedRepId");
 
+                    b.HasIndex("ConvertedById");
+
                     b.HasIndex("ConvertedCustomerId");
+
+                    b.HasIndex("ConvertedOpportunityId");
+
+                    b.HasIndex("CreatedById");
 
                     b.HasIndex("LeadStatusId");
 
@@ -1065,6 +1108,11 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("CrmSystem.Domain.Entities.Lead", "Lead")
+                        .WithMany("Activities")
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("CrmSystem.Domain.Entities.Opportunity", "Opportunity")
                         .WithMany()
                         .HasForeignKey("OpportunityId")
@@ -1075,6 +1123,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Lead");
 
                     b.Navigation("Opportunity");
                 });
@@ -1184,6 +1234,11 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("CrmSystem.Domain.Entities.Lead", "Lead")
+                        .WithMany("Tasks")
+                        .HasForeignKey("LeadId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("CrmSystem.Domain.Entities.Opportunity", "Opportunity")
                         .WithMany()
                         .HasForeignKey("OpportunityId")
@@ -1198,6 +1253,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("CrmTaskStatus");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Lead");
 
                     b.Navigation("Opportunity");
                 });
@@ -1238,6 +1295,25 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.IdentityRole", b =>
+                {
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "Identity")
+                        .WithMany("IdentityRoles")
+                        .HasForeignKey("IdentityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CrmSystem.Domain.Entities.Role", "Role")
+                        .WithMany("IdentityRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Identity");
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Lead", b =>
                 {
                     b.HasOne("CrmSystem.Domain.Entities.Identity", "AssignedRep")
@@ -1245,10 +1321,25 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("AssignedRepId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "ConvertedBy")
+                        .WithMany()
+                        .HasForeignKey("ConvertedById")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("CrmSystem.Domain.Entities.Customer", "ConvertedCustomer")
                         .WithMany()
                         .HasForeignKey("ConvertedCustomerId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CrmSystem.Domain.Entities.Opportunity", "ConvertedOpportunity")
+                        .WithMany()
+                        .HasForeignKey("ConvertedOpportunityId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("CrmSystem.Domain.Entities.LeadStatus", "LeadStatus")
                         .WithMany()
@@ -1262,7 +1353,13 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.Navigation("AssignedRep");
 
+                    b.Navigation("ConvertedBy");
+
                     b.Navigation("ConvertedCustomer");
+
+                    b.Navigation("ConvertedOpportunity");
+
+                    b.Navigation("CreatedBy");
 
                     b.Navigation("LeadStatus");
 
@@ -1442,9 +1539,26 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Tasks");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Identity", b =>
+                {
+                    b.Navigation("IdentityRoles");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Lead", b =>
+                {
+                    b.Navigation("Activities");
+
+                    b.Navigation("Tasks");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Opportunity", b =>
                 {
                     b.Navigation("LineItems");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Role", b =>
+                {
+                    b.Navigation("IdentityRoles");
                 });
 #pragma warning restore 612, 618
         }

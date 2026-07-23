@@ -35,7 +35,8 @@ export const LoginScreen: React.FC = () => {
         throw new Error('Something went wrong');
       }
       const data = await response.json();
-      login(data.accessToken);
+      // Prefer server-provided roles array and refreshToken when available
+      login({ accessToken: data.accessToken, roles: data.roles, refreshToken: data.refreshToken });
       showToast('Signed in successfully', 'success');
       navigate('/dashboard');
     } catch (err: any) {

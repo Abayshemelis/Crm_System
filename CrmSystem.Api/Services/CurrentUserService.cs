@@ -29,18 +29,24 @@ public class CurrentUserService : ICurrentUserService
 
     public string? Email => User?.FindFirstValue(ClaimTypes.Email);
 
-    public UserRole? Role
+    public IReadOnlyList<UserRole> Roles
     {
         get
         {
-            var value = User?.FindFirstValue(ClaimTypes.Role);
-            return Enum.TryParse<UserRole>(value, out var role) ? role : null;
+            var values = User?.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
+            return values
+                .Select(v => Enum.TryParse<UserRole>(v, out var role) ? role : (UserRole?)null)
+                .Where(r => r.HasValue)
+                .Select(r => r!.Value)
+                .ToList();
         }
     }
 
-    public bool IsAdmin => Role == UserRole.Admin;
+    public UserRole? Role => Roles.FirstOrDefault();
 
-    public bool IsManagerOrAbove => Role is UserRole.Manager or UserRole.Admin;
+    public bool IsAdmin => Roles.Contains(UserRole.Admin);
+
+    public bool IsManagerOrAbove => Roles.Contains(UserRole.Manager) || Roles.Contains(UserRole.Admin);
 
     public bool CanAccessOwnedRecord(int? ownerRepId)
     {

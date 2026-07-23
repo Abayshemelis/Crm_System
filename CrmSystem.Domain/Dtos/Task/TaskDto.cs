@@ -10,6 +10,7 @@ public class TaskCreateDto
     public int CrmTaskStatusId { get; set; }
     public int? CustomerId { get; set; }
     public int? OpportunityId { get; set; }
+    public int? LeadId { get; set; }
     public int? ActivityId { get; set; }
     public int? AssignedToId { get; set; }
 }
@@ -22,6 +23,7 @@ public class TaskUpdateDto
     public int CrmTaskStatusId { get; set; }
     public int? CustomerId { get; set; }
     public int? OpportunityId { get; set; }
+    public int? LeadId { get; set; }
     public int? ActivityId { get; set; }
     public int? AssignedToId { get; set; }
 }
@@ -49,6 +51,8 @@ public class TaskReadDto
     public string? CustomerName { get; set; }
     public int? OpportunityId { get; set; }
     public string? OpportunityTitle { get; set; }
+    public int? LeadId { get; set; }
+    public string? LeadName { get; set; }
     public int? ActivityId { get; set; }
     public string? ActivitySubject { get; set; }
     public string? ActivityTypeName { get; set; }

@@ -9,9 +9,10 @@ interface Lookup { id: number; name: string; }
 
 interface TaskFormModalProps {
   task?: TaskReadDto | null;
-  prefillDueDate?: string;   // ISO date string (YYYY-MM-DD) pre-filled from calendar
+  prefillDueDate?: string;
   customerId?: number;
   opportunityId?: number;
+  leadId?: number;
   currentUserId: number;
   users: Lookup[];
   customers?: Lookup[];
@@ -25,13 +26,25 @@ interface TaskFormModalProps {
 }
 
 export const TaskFormModal: React.FC<TaskFormModalProps> = ({
-  task, prefillDueDate, customerId, opportunityId, currentUserId,
+  task, prefillDueDate, customerId, opportunityId, leadId, currentUserId,
   users, customers = [], opportunities = [], activities = [], activityTypes = [], statuses,
   onSaved, onDeleted, onClose,
 }) => {
   const isEditing = !!task;
   const defaultStatus = statuses.find(s => !s.isTerminal)?.id ?? 0;
   const userOptions = users.length > 0 ? users : [{ id: currentUserId, name: 'Me' }];
+
+  // Fallback activity types if not provided or invalid
+  const fallbackActivityTypes = [
+    { id: 1, name: 'Call' },
+    { id: 2, name: 'Email' },
+    { id: 3, name: 'Meeting' },
+    { id: 4, name: 'Note' },
+    { id: 5, name: 'Demo' },
+    { id: 6, name: 'Follow-Up' }
+  ];
+  const validActivityTypes = activityTypes.filter(at => at && at.id != null && !isNaN(Number(at.id)) && Number(at.id) > 0);
+  const effectiveActivityTypes = validActivityTypes.length > 0 ? validActivityTypes : fallbackActivityTypes;
 
   const [form, setForm] = useState({
     title: task?.title ?? '',
@@ -41,6 +54,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
     assignedToId: String(task?.assignedToId ?? currentUserId),
     customerId: String(task?.customerId ?? customerId ?? ''),
     opportunityId: String(task?.opportunityId ?? opportunityId ?? ''),
+    leadId: String(task?.leadId ?? leadId ?? ''),
     activityId: String(task?.activityId ?? ''),
   });
   const [activityMode, setActivityMode] = useState<'none' | 'link' | 'create'>('none');
@@ -86,32 +100,52 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (isEditing && pastDateWarning) {
       if (!window.confirm('Set due date to a past date? The task will appear as Overdue.')) return;
     }
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
     setSaving(true);
     try {
       let activityId = Number(form.activityId) || null;
 
       // If creating a new activity, create it first
       if (activityMode === 'create') {
-        if (!newActivity.activityTypeId || !newActivity.subject) {
-          setErrors({ submit: 'Activity type and subject are required when creating a new activity.' });
+        const activityTypeIdValue = String(newActivity.activityTypeId ?? '').trim();
+        const subjectTrimmed = (newActivity.subject ?? '').trim();
+        const activityTypeIdNum = parseInt(activityTypeIdValue, 10);
+
+        console.log('DEBUG: Creating activity', { activityTypeIdValue, activityTypeIdNum, subjectTrimmed, effectiveActivityTypes });
+
+        if (!activityTypeIdValue || isNaN(activityTypeIdNum) || activityTypeIdNum < 0 || !subjectTrimmed) {
+          const errs: Record<string, string> = {};
+          if (!activityTypeIdValue || isNaN(activityTypeIdNum) || activityTypeIdNum < 0) {
+            errs.activityTypeId = 'Activity type is required';
+          }
+          if (!subjectTrimmed) {
+            errs.subject = 'Subject is required';
+          }
+          setErrors(errs);
           setSaving(false);
           return;
         }
         const activityPayload = {
-          activityTypeId: Number(newActivity.activityTypeId),
-          subject: newActivity.subject.trim(),
+          activityTypeId: activityTypeIdNum,
+          subject: subjectTrimmed,
           description: newActivity.description.trim() || null,
           activityDate: newActivity.activityDate ? new Date(newActivity.activityDate).toISOString() : new Date().toISOString(),
           durationMinutes: 0,
           customerId: Number(form.customerId) || null,
           opportunityId: Number(form.opportunityId) || null,
+          leadId: Number(form.leadId) || null,
         };
+        console.log('DEBUG: Activity payload', activityPayload);
         const createdActivity = await api.post<any>('/api/activities', activityPayload);
+        console.log('DEBUG: Activity created', createdActivity);
         activityId = createdActivity.activityId;
       }
 
@@ -121,8 +155,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
         crmTaskStatusId: Number(form.crmTaskStatusId),
         assignedToId: Number(form.assignedToId) || null,
-        customerId: Number(form.customerId) || null,
-        opportunityId: Number(form.opportunityId) || null,
+        customerId: form.customerId ? Number(form.customerId) : null,
+        opportunityId: form.opportunityId ? Number(form.opportunityId) : null,
+        leadId: form.leadId ? Number(form.leadId) : null,
         activityId: activityId,
       };
       let saved: TaskReadDto;
@@ -132,8 +167,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         saved = await api.post<TaskReadDto>('/api/tasks', payload);
       }
       onSaved(saved);
-    } catch {
-      setErrors({ submit: 'Save failed. Please try again.' });
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setErrors({ submit: err?.response?.data?.message || err?.message || 'Save failed. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -218,7 +254,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 value={form.assignedToId}
                 onChange={e => setForm(f => ({ ...f, assignedToId: e.target.value }))}
               >
-                {userOptions.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                {userOptions.map((u, index) => (
+                  <option key={u.id != null ? `user-${u.id}` : `user-${index}`} value={u.id}>{u.name}</option>
+                ))}
               </select>
             </div>
 
@@ -230,7 +268,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                   value={form.crmTaskStatusId}
                   onChange={e => setForm(f => ({ ...f, crmTaskStatusId: e.target.value }))}
                 >
-                  {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {statuses.map((s, index) => (
+                    <option key={s.id != null ? `status-${s.id}` : `status-${index}`} value={s.id}>{s.name}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -245,8 +285,10 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                       value={form.customerId}
                       onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
                     >
-                      <option value="">None</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option key="customer-none-option" value="">None</option>
+                      {customers.map((c, index) => (
+                        <option key={c.id != null ? `customer-${c.id}` : `customer-${index}`} value={c.id}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -258,8 +300,10 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                       value={form.opportunityId}
                       onChange={e => setForm(f => ({ ...f, opportunityId: e.target.value }))}
                     >
-                      <option value="">None</option>
-                      {opportunities.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      <option key="opportunity-none-option" value="">None</option>
+                      {opportunities.map((o, index) => (
+                        <option key={o.id != null ? `opportunity-${o.id}` : `opportunity-${index}`} value={o.id}>{o.name}</option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -307,8 +351,10 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                   value={form.activityId}
                   onChange={e => setForm(f => ({ ...f, activityId: e.target.value }))}
                 >
-                  <option value="">Select an activity...</option>
-                  {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  <option key="activity-none-option" value="">Select an activity...</option>
+                  {activities.map((a, index) => (
+                    <option key={a.id != null ? `activity-${a.id}` : `activity-${index}`} value={a.id}>{a.name}</option>
+                  ))}
                 </select>
               )}
 
@@ -323,11 +369,20 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                     <select
                       className="form-select"
                       value={newActivity.activityTypeId}
-                      onChange={e => setNewActivity(a => ({ ...a, activityTypeId: e.target.value }))}
+                      onChange={e => {
+                        setNewActivity(a => ({ ...a, activityTypeId: e.target.value }));
+                        if (errors.activityTypeId) setErrors(e => ({ ...e, activityTypeId: '' }));
+                      }}
                     >
-                      <option value="">Select type...</option>
-                      {activityTypes.map(at => <option key={at.id} value={at.id}>{at.name}</option>)}
+                      <option key="activity-type-none-option" value="">Select type...</option>
+                      {effectiveActivityTypes.map((at, index) => {
+                        const idValue = at.id != null && at.id !== undefined ? String(at.id) : String(index);
+                        return (
+                          <option key={`activity-type-${idValue}`} value={idValue}>{at.name}</option>
+                        );
+                      })}
                     </select>
+                    {errors.activityTypeId && <span className="form-error">{errors.activityTypeId}</span>}
                   </div>
                   <div className="form-field">
                     <label>Date & Time</label>
@@ -342,8 +397,12 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                     <Input
                       placeholder="e.g. Follow up call"
                       value={newActivity.subject}
-                      onChange={e => setNewActivity(a => ({ ...a, subject: e.target.value }))}
+                      onChange={e => {
+                        setNewActivity(a => ({ ...a, subject: e.target.value }));
+                        if (errors.subject) setErrors(e => ({ ...e, subject: '' }));
+                      }}
                     />
+                    {errors.subject && <span className="form-error">{errors.subject}</span>}
                   </div>
                   <div className="form-field" style={{ gridColumn: '1 / -1' }}>
                     <label>Description</label>
@@ -370,9 +429,18 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
             )}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-              <Button type="submit" disabled={saving || deleting}>
+              <button 
+                type="submit" 
+                className="btn btn-primary btn-md"
+                disabled={saving || deleting}
+                onClick={(e) => {
+                  console.log('Submit button clicked directly');
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }}
+              >
                 {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Task'}
-              </Button>
+              </button>
             </div>
           </div>
         </form>

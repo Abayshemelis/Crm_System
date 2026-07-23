@@ -2511,8 +2511,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.15);
   z-index: 999;
+  pointer-events: auto;
+}
+
+[data-theme="light"] .filter-backdrop {
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .filter-toggle-btn {
@@ -2527,6 +2532,9 @@
   cursor: pointer;
   font-size: 0.875rem;
   transition: background 0.15s;
+  position: relative;
+  z-index: 1001;
+  pointer-events: auto;
 }
 
 .filter-toggle-btn:hover {
@@ -2558,6 +2566,12 @@
   max-height: 80vh;
   overflow-y: auto;
   padding: var(--space-4);
+}
+
+[data-theme="light"] .filter-panel {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .filter-header {

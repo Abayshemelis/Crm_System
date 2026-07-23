@@ -3,7 +3,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Plus, Trash2, Edit2, User, Shield, Check, X } from 'lucide-react';
+import { Plus, Trash2, User, Shield, Check, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
@@ -14,6 +14,7 @@ interface User {
   email: string;
   role: string;
   roleId: number;
+  roles: string[];
   isActive: boolean;
 }
 
@@ -23,21 +24,21 @@ interface Role {
 }
 
 export const UsersScreen: React.FC = () => {
-  const { isManagerOrAbove, userRole } = useAuth();
+  const { isManagerOrAboveSelected, selectedRole } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Create user form state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRoleId, setNewUserRoleId] = useState<number | null>(null);
-  
+
   // Edit role state
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
-  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [editingRoleIds, setEditingRoleIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadUsers();
@@ -62,8 +63,8 @@ export const UsersScreen: React.FC = () => {
       // Admin can see Manager and SalesRep
       // Manager can only see SalesRep
       const filteredRoles = (data ?? []).filter(role => {
-        if (userRole === 'Admin') return role.name === 'Manager' || role.name === 'SalesRep';
-        if (userRole === 'Manager') return role.name === 'SalesRep';
+        if (selectedRole === 'Admin') return role.name === 'Manager' || role.name === 'SalesRep';
+        if (selectedRole === 'Manager') return role.name === 'SalesRep';
         return false;
       });
       setRoles(filteredRoles);
@@ -97,12 +98,25 @@ export const UsersScreen: React.FC = () => {
   };
 
   const handleUpdateRole = async (userId: number) => {
-    if (!editingRoleId) return;
+    if (!editingRoleIds.length) {
+      alert('Select at least one role');
+      return;
+    }
+
+    const canAssignManager = selectedRole === 'Admin';
+    const requestedRoles = roles.filter(role => editingRoleIds.includes(role.id));
+    const containsProtectedRole = requestedRoles.some(role => role.name === 'Manager' || role.name === 'Admin');
+
+    if (!canAssignManager && containsProtectedRole) {
+      alert('Only admins can assign Manager or Admin roles.');
+      return;
+    }
+
     try {
-      await api.put(`/api/users/${userId}/role`, { roleId: editingRoleId });
+      await api.put(`/api/users/${userId}/roles`, { roleIds: editingRoleIds });
       await loadUsers();
       setEditingUserId(null);
-      setEditingRoleId(null);
+      setEditingRoleIds([]);
       alert('Role updated successfully');
     } catch (error: any) {
       alert(error?.message || 'Failed to update role');
@@ -145,14 +159,14 @@ export const UsersScreen: React.FC = () => {
           <h1 className="screen-title">User Management</h1>
           <p className="screen-subtitle">Manage CRM users and roles.</p>
         </div>
-        {isManagerOrAbove && (
+        {isManagerOrAboveSelected && (
           <Button onClick={() => setShowCreateForm(true)}>
             <Plus size={16} style={{ marginRight: 6 }} /> Add User
           </Button>
         )}
       </div>
 
-      {showCreateForm && isManagerOrAbove && (
+      {showCreateForm && isManagerOrAboveSelected && (
         <Card className="p-6 mt-6">
           <h3 className="text-xl font-semibold mb-4">Create New User</h3>
           <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -240,42 +254,61 @@ export const UsersScreen: React.FC = () => {
                   <p style={{ fontWeight: 500, margin: 0 }}>{user.name}</p>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0 }}>{user.email}</p>
                 </div>
-                {editingUserId === user.id && isManagerOrAbove ? (
+                {editingUserId === user.id && isManagerOrAboveSelected ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <select
-                      value={editingRoleId ?? user.roleId}
-                      onChange={e => setEditingRoleId(Number(e.target.value))}
-                      style={{
-                        padding: '0.375rem 0.75rem',
-                        border: '1px solid var(--border-highlight)',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)'
-                      }}
-                    >
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       {roles.map(role => (
-                        <option key={role.id} value={role.id}>{role.name}</option>
+                        <label key={role.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={editingRoleIds.includes(role.id)}
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              setEditingRoleIds(prev => checked ? Array.from(new Set([...prev, role.id])) : prev.filter(id => id !== role.id));
+                            }}
+                          />
+                          <span style={{ fontSize: '0.85rem' }}>{role.name}</span>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                     <Button size="sm" onClick={() => handleUpdateRole(user.id)}>
                       <Check size={14} />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingUserId(null); setEditingRoleId(null); }}>
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingUserId(null); setEditingRoleIds([]); }}>
                       <X size={14} />
                     </Button>
                   </div>
                 ) : (
-                  <span
-                    style={{
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 500,
-                      ...getRoleBadgeColor(user.role)
-                    }}
-                  >
-                    {user.role}
-                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {user.roles && user.roles.length > 0 ? (
+                      user.roles.map(r => (
+                        <span
+                          key={r}
+                          style={{
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '9999px',
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            ...getRoleBadgeColor(r)
+                          }}
+                        >
+                          {r}
+                        </span>
+                      ))
+                    ) : (
+                      <span
+                        style={{
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          ...getRoleBadgeColor(user.role)
+                        }}
+                      >
+                        {user.role}
+                      </span>
+                    )}
+                  </div>
                 )}
                 <span
                   style={{
@@ -289,11 +322,17 @@ export const UsersScreen: React.FC = () => {
                 >
                   {user.isActive ? 'Active' : 'Inactive'}
                 </span>
-                {isManagerOrAbove && (
+                {isManagerOrAboveSelected && (
                   <div style={{ display: 'flex', gap: '0.25rem' }}>
                     {/* Only Admin can edit Manager roles */}
-                    {(userRole === 'Admin' || user.role !== 'Manager') && (
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingUserId(user.id); setEditingRoleId(user.roleId); }} title="Edit Role">
+                    {(selectedRole === 'Admin' || user.role !== 'Manager') && (
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        const selectedIds = (user.roles && user.roles.length > 0)
+                          ? roles.filter(r => user.roles.includes(r.name)).map(r => r.id)
+                          : (user.roleId ? [user.roleId] : []);
+                        setEditingUserId(user.id);
+                        setEditingRoleIds(selectedIds);
+                      }} title="Edit Role">
                         <Shield size={14} />
                       </Button>
                     )}

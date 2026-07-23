@@ -1,12 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import './layout.css';
-import { LogOut, Search, User, Sun, Moon } from 'lucide-react';
+import { LogOut, Search, User, Sun, Moon, ChevronDown } from 'lucide-react';
 import { NotificationBell } from '../notifications/NotificationBell';
 
 export const Navbar: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, userRole, selectedRole, switchRole, logout } = useAuth();
+  const navigate = useNavigate();
   const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
@@ -44,7 +47,36 @@ export const Navbar: React.FC = () => {
             <div className="user-menu">
               <div className="user-info">
                 <span className="user-name">{user?.name}</span>
-                <span className="user-role">{user?.role}</span>
+                {user && user.roles.length > 1 ? (
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      className="role-switcher-btn"
+                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                    >
+                      <span className="user-role">{selectedRole}</span>
+                      <ChevronDown size={14} />
+                    </button>
+                    {showRoleDropdown && (
+                      <div className="role-dropdown">
+                        {user.roles.map(role => (
+                          <button
+                            key={role}
+                            className={`role-option ${selectedRole === role ? 'active' : ''}`}
+                            onClick={() => {
+                              switchRole(role);
+                              setShowRoleDropdown(false);
+                              navigate('/dashboard');
+                            }}
+                          >
+                            {role}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="user-role">{userRole}</span>
+                )}
               </div>
               <div className="avatar">
                 <User size={20} />

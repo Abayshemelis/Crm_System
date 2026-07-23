@@ -27,10 +27,7 @@ public class DashboardController : ControllerBase
         return int.Parse(claim!.Value);
     }
 
-    private string GetCurrentUserRole()
-    {
-        return User.FindFirst(ClaimTypes.Role)?.Value ?? "SalesRep";
-    }
+    private bool IsSalesRep() => User.IsInRole("SalesRep");
 
     [HttpGet("public-stats")]
     [AllowAnonymous]
@@ -94,7 +91,6 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> GetDashboardStats([FromQuery] bool includeClosed = false)
     {
         var userId = GetCurrentUserId();
-        var role = GetCurrentUserRole();
         var today = DateTime.UtcNow.Date;
 
         IQueryable<Customer> customersQuery = _db.Customers.Where(c => !c.IsDeleted);
@@ -105,7 +101,7 @@ public class DashboardController : ControllerBase
         IQueryable<Product> productsQuery = _db.Products;
 
         // Filter based on role
-        if (role == "SalesRep")
+        if (IsSalesRep())
         {
             customersQuery = customersQuery.Where(c => c.AssignedRepId == userId);
             leadsQuery = leadsQuery.Where(l => l.AssignedRepId == userId);

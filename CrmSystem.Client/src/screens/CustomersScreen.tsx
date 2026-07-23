@@ -13,34 +13,34 @@ import './screens.css';
 interface TagItem { id: number; name: string; }
 interface Lookup { id: number; name: string; role?: string; }
 interface CustomerApiResponse {
-  customerId: number; 
-  firstName: string; 
-  lastName: string; 
-  email: string; 
+  customerId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
   phone?: string;
   jobTitle?: string;
-  companyId?: number; 
-  companyName?: string; 
-  sourceId?: number; 
+  companyId?: number;
+  companyName?: string;
+  sourceId?: number;
   sourceName?: string;
-  assignedRepId: number; 
-  assignedRepName: string; 
+  assignedRepId: number;
+  assignedRepName: string;
   assignedRepEmail?: string;
   createdAt: string;
   tags: { tagId: number; name: string }[];
 }
 interface Customer {
-  customerId: number; 
-  firstName: string; 
-  lastName: string; 
-  email: string; 
+  customerId: number;
+  firstName: string;
+  lastName: string;
+  email: string;
   phone?: string;
   jobTitle?: string;
-  companyId?: number; 
-  companyName?: string; 
-  sourceId?: number; 
+  companyId?: number;
+  companyName?: string;
+  sourceId?: number;
   sourceName?: string;
-  assignedRepId: number; 
+  assignedRepId: number;
   assignedRepName: string;
   assignedRepEmail?: string;
   createdAt: string;
@@ -198,7 +198,7 @@ export const CustomersScreen: React.FC = () => {
       <div style={{ minWidth: 220 }}>
         <SearchableMultiSelect options={tags.map(t => ({ id: t.id, name: t.name }))} selectedIds={tagIds} onChange={setTagIds} placeholder="Filter tags…" />
       </div>
-      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map(r => <option key={r.id} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>}
+      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map((r, index) => <option key={r.id != null ? `rep-${r.id}` : `rep-${index}`} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>}
     </div>
     {selected.size > 0 && <div className="bulk-panel"><span>{selected.size} selected</span>
       <select className="filter-select" disabled={bulkLoading} value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}><option value="">Add tag…</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
@@ -209,7 +209,7 @@ export const CustomersScreen: React.FC = () => {
           <option value="SalesRep">As user</option>
           <option value="Manager">As manager</option>
         </select>
-        <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{filteredReps.map(r => <option key={r.id} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>
+        <select className="filter-select" disabled={bulkLoading} value={bulkRepId} onChange={e => setBulkRepId(e.target.value)}><option value="">Reassign to…</option>{filteredReps.map((r, index) => <option key={r.id != null ? `rep-${r.id}` : `rep-${index}`} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>
         <Button size="sm" disabled={bulkLoading} onClick={() => bulk('reassign')}><UserCheck size={14} /> Reassign</Button>
         <select className="filter-select" disabled={bulkLoading} value={bulkCompanyId} onChange={e => setBulkCompanyId(e.target.value)}>
           <option value="">Assign to company…</option>

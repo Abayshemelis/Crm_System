@@ -95,6 +95,7 @@ export const OpportunityDetailScreen: React.FC = () => {
   const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
+  const [allActivities, setAllActivities] = useState<any[]>([]);
 
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>({});
   const [newLineItem, setNewLineItem] = useState({
@@ -127,16 +128,18 @@ export const OpportunityDetailScreen: React.FC = () => {
       setProducts(productsData.filter(p => p.productStatus?.isSelectable));
       setStages(stagesData);
       setUsers(usersData);
-      setActivityTypes(actTypes.map(x => ({ id: x.id, name: x.name, icon: x.icon })));
+      setActivityTypes(actTypes.map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })));
       setTaskStatuses(taskStats.map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })));
 
       // Load activities & tasks
-      const [activitiesData, tasksData] = await Promise.all([
+      const [activitiesData, tasksData, allActivitiesData] = await Promise.all([
         api.get<any[]>(`/api/activities?opportunityId=${id}`),
-        api.get<TaskReadDto[]>(`/api/tasks?opportunityId=${id}`)
+        api.get<TaskReadDto[]>(`/api/tasks?opportunityId=${id}`),
+        api.get<any[]>('/api/activities')
       ]);
       setActivities(activitiesData);
       setTasks(tasksData);
+      setAllActivities(allActivitiesData);
     } catch (error) {
       console.error('Failed to load opportunity details:', error);
       navigate('/pipeline');
@@ -539,7 +542,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   activityTypes={activityTypes}
                   opportunityId={opportunity.opportunityId}
                   currentUserId={currentUser?.userId}
-                  isAdmin={currentUser?.role === 'Admin'}
+                  isAdmin={currentUser?.roles?.includes('Admin') ?? false}
                   onActivityLogged={(act) => setActivities(prev => [act, ...prev])}
                   onActivityDeleted={(id) => setActivities(prev => prev.filter(a => a.activityId !== id))}
                 />
@@ -583,6 +586,8 @@ export const OpportunityDetailScreen: React.FC = () => {
           opportunityId={opportunity.opportunityId}
           currentUserId={currentUser?.userId ?? 0}
           users={users.length > 0 ? users : (currentUser ? [{ id: currentUser.userId, name: currentUser.name }] : [])}
+          activities={allActivities.map(a => ({ id: a.activityId, name: a.subject }))}
+          activityTypes={activityTypes.map(at => ({ id: at.id, name: at.name }))}
           statuses={taskStatuses}
           onSaved={handleTaskSaved}
           onDeleted={() => {

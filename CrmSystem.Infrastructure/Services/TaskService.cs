@@ -30,20 +30,54 @@ public class TaskService : ITaskService
 
     public async Task<IReadOnlyList<TaskReadDto>> GetByCustomerAsync(int customerId)
     {
+        var linkedLeadIds = await _db.Leads
+            .Where(l => l.ConvertedCustomerId == customerId)
+            .Select(l => l.LeadId)
+            .ToListAsync();
+
         var tasks = await GetAllTasksQuery()
-            .Where(t => t.CustomerId == customerId)
+            .Where(t => t.CustomerId == customerId || (t.LeadId.HasValue && linkedLeadIds.Contains(t.LeadId.Value)))
             .OrderBy(t => t.DueDate)
             .ToListAsync();
-        return tasks.Select(MapToDto).ToList();
+        return tasks.DistinctBy(t => t.CrmTaskId).Select(MapToDto).ToList();
     }
 
     public async Task<IReadOnlyList<TaskReadDto>> GetByOpportunityAsync(int opportunityId)
     {
+        var lead = await _db.Leads
+            .Where(l => l.ConvertedOpportunityId == opportunityId)
+            .Select(l => new { l.LeadId, l.ConvertedCustomerId })
+            .FirstOrDefaultAsync();
+
+        int? leadId = lead?.LeadId;
+        int? custId = lead?.ConvertedCustomerId;
+
         var tasks = await GetAllTasksQuery()
-            .Where(t => t.OpportunityId == opportunityId)
+            .Where(t => t.OpportunityId == opportunityId ||
+                        (leadId.HasValue && t.LeadId == leadId.Value) ||
+                        (custId.HasValue && t.CustomerId == custId.Value))
             .OrderBy(t => t.DueDate)
             .ToListAsync();
-        return tasks.Select(MapToDto).ToList();
+        return tasks.DistinctBy(t => t.CrmTaskId).Select(MapToDto).ToList();
+    }
+
+    public async Task<IReadOnlyList<TaskReadDto>> GetByLeadAsync(int leadId)
+    {
+        var lead = await _db.Leads
+            .Where(l => l.LeadId == leadId)
+            .Select(l => new { l.ConvertedCustomerId, l.ConvertedOpportunityId })
+            .FirstOrDefaultAsync();
+
+        int? custId = lead?.ConvertedCustomerId;
+        int? oppId = lead?.ConvertedOpportunityId;
+
+        var tasks = await GetAllTasksQuery()
+            .Where(t => t.LeadId == leadId ||
+                        (custId.HasValue && t.CustomerId == custId.Value) ||
+                        (oppId.HasValue && t.OpportunityId == oppId.Value))
+            .OrderBy(t => t.DueDate)
+            .ToListAsync();
+        return tasks.DistinctBy(t => t.CrmTaskId).Select(MapToDto).ToList();
     }
 
     public async Task<List<CalendarDayDto>> GetCalendarAsync(int year, int month, int? assignedToId)
@@ -72,16 +106,7 @@ public class TaskService : ITaskService
 
     public async Task<TaskReadDto> CreateAsync(TaskCreateDto dto, int createdById)
     {
-        // Default status to the first non-terminal status (Pending)
-        int statusId = dto.CrmTaskStatusId;
-        if (statusId == 0)
-        {
-            var defaultStatus = await _db.CrmTaskStatuses
-                .Where(s => !s.IsTerminal)
-                .OrderBy(s => s.CrmTaskStatusId)
-                .FirstOrDefaultAsync();
-            statusId = defaultStatus?.CrmTaskStatusId ?? 1;
-        }
+        int statusId = await ResolveTaskStatusIdAsync(dto.CrmTaskStatusId);
 
         var entity = new CrmTask
         {
@@ -91,6 +116,7 @@ public class TaskService : ITaskService
             CrmTaskStatusId = statusId,
             CustomerId = dto.CustomerId,
             OpportunityId = dto.OpportunityId,
+            LeadId = dto.LeadId,
             ActivityId = dto.ActivityId,
             AssignedToId = dto.AssignedToId ?? createdById,
             CreatedById = createdById,
@@ -101,7 +127,7 @@ public class TaskService : ITaskService
         await _db.SaveChangesAsync();
 
         // Create an activity for the task creation
-        if (entity.CustomerId.HasValue || entity.OpportunityId.HasValue)
+        if (entity.CustomerId.HasValue || entity.OpportunityId.HasValue || entity.LeadId.HasValue)
         {
             // Find or create a "Task Created" activity type
             var taskCreatedType = await _db.ActivityTypes
@@ -127,6 +153,7 @@ public class TaskService : ITaskService
                 DurationMinutes = 0,
                 CustomerId = entity.CustomerId,
                 OpportunityId = entity.OpportunityId,
+                LeadId = entity.LeadId,
                 CreatedById = createdById,
                 CreatedAt = DateTime.UtcNow
             };
@@ -149,6 +176,7 @@ public class TaskService : ITaskService
         task.CrmTaskStatusId = dto.CrmTaskStatusId;
         task.CustomerId = dto.CustomerId;
         task.OpportunityId = dto.OpportunityId;
+        task.LeadId = dto.LeadId;
         task.ActivityId = dto.ActivityId;
         task.AssignedToId = dto.AssignedToId;
 
@@ -173,7 +201,7 @@ public class TaskService : ITaskService
         await _db.SaveChangesAsync();
 
         // Create an activity for the task completion
-        if (task.CustomerId.HasValue || task.OpportunityId.HasValue)
+        if (task.CustomerId.HasValue || task.OpportunityId.HasValue || task.LeadId.HasValue)
         {
             // Find or create a "Task Completed" activity type
             var taskCompletedType = await _db.ActivityTypes
@@ -199,6 +227,7 @@ public class TaskService : ITaskService
                 DurationMinutes = 0,
                 CustomerId = task.CustomerId,
                 OpportunityId = task.OpportunityId,
+                LeadId = task.LeadId,
                 CreatedById = completedById ?? task.AssignedToId ?? task.CreatedById,
                 CreatedAt = DateTime.UtcNow
             };
@@ -226,7 +255,7 @@ public class TaskService : ITaskService
         await _db.SaveChangesAsync();
 
         // Create an activity for the task cancellation
-        if (task.CustomerId.HasValue || task.OpportunityId.HasValue)
+        if (task.CustomerId.HasValue || task.OpportunityId.HasValue || task.LeadId.HasValue)
         {
             // Find or create a "Task Cancelled" activity type
             var taskCancelledType = await _db.ActivityTypes
@@ -252,6 +281,7 @@ public class TaskService : ITaskService
                 DurationMinutes = 0,
                 CustomerId = task.CustomerId,
                 OpportunityId = task.OpportunityId,
+                LeadId = task.LeadId,
                 CreatedById = task.AssignedToId ?? task.CreatedById,
                 CreatedAt = DateTime.UtcNow
             };
@@ -279,6 +309,7 @@ public class TaskService : ITaskService
             .Include(t => t.CrmTaskStatus)
             .Include(t => t.Customer)
             .Include(t => t.Opportunity)
+            .Include(t => t.Lead)
             .Include(t => t.Activity)
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
@@ -290,6 +321,7 @@ public class TaskService : ITaskService
             .Include(t => t.CrmTaskStatus)
             .Include(t => t.Customer)
             .Include(t => t.Opportunity)
+            .Include(t => t.Lead)
             .Include(t => t.Activity)
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
@@ -326,12 +358,49 @@ public class TaskService : ITaskService
             .Include(t => t.CrmTaskStatus)
             .Include(t => t.Customer)
             .Include(t => t.Opportunity)
+            .Include(t => t.Lead)
             .Include(t => t.Activity)
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
             .Include(t => t.CreatedBy)
-            .FirstAsync(t => t.CrmTaskId == id);
-        return MapToDto(t);
+            .FirstOrDefaultAsync(t => t.CrmTaskId == id);
+
+        if (t != null)
+            return MapToDto(t);
+
+        var tracked = _db.ChangeTracker.Entries<CrmTask>()
+            .Select(e => e.Entity)
+            .FirstOrDefault(task => task.CrmTaskId == id);
+
+        return tracked != null ? MapToDto(tracked) : throw new InvalidOperationException($"Task {id} could not be reloaded after creation.");
+    }
+
+    private async Task<int> ResolveTaskStatusIdAsync(int requestedStatusId)
+    {
+        if (requestedStatusId > 0)
+        {
+            var requestedStatus = await _db.CrmTaskStatuses.FindAsync(requestedStatusId);
+            if (requestedStatus != null)
+                return requestedStatus.CrmTaskStatusId;
+        }
+
+        var defaultStatus = await _db.CrmTaskStatuses
+            .Where(s => !s.IsTerminal)
+            .OrderBy(s => s.CrmTaskStatusId)
+            .FirstOrDefaultAsync();
+
+        if (defaultStatus != null)
+            return defaultStatus.CrmTaskStatusId;
+
+        var createdStatus = new CrmTaskStatus
+        {
+            Name = "Pending",
+            IsTerminal = false
+        };
+
+        _db.CrmTaskStatuses.Add(createdStatus);
+        await _db.SaveChangesAsync();
+        return createdStatus.CrmTaskStatusId;
     }
 
     private static TaskReadDto MapToDto(CrmTask t) => new()
@@ -347,6 +416,8 @@ public class TaskService : ITaskService
         CustomerName = t.Customer != null ? $"{t.Customer.FirstName} {t.Customer.LastName}" : null,
         OpportunityId = t.OpportunityId,
         OpportunityTitle = t.Opportunity?.Title,
+        LeadId = t.LeadId,
+        LeadName = t.Lead != null ? $"{t.Lead.FirstName} {t.Lead.LastName}" : null,
         ActivityId = t.ActivityId,
         ActivitySubject = t.Activity?.Subject,
         ActivityTypeName = t.Activity?.ActivityType?.Name,

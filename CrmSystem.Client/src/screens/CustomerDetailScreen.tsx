@@ -80,6 +80,7 @@ export const CustomerDetailScreen: React.FC = () => {
   const [users, setUsers] = useState<Lookup[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
+  const [allActivities, setAllActivities] = useState<any[]>([]);
 
   const fetchAttachmentCount = useCallback(async () => {
     if (!id) return;
@@ -100,9 +101,10 @@ export const CustomerDetailScreen: React.FC = () => {
       .catch(() => { });
 
     // Phase 4 lookups
-    api.get<any[]>('/api/activitytypes').then(res => setActivityTypes(res.map(x => ({ id: x.id, name: x.name, icon: x.icon })))).catch(() => { });
+    api.get<any[]>('/api/activitytypes').then(res => setActivityTypes(res.map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })))).catch(() => { });
     api.get<any[]>('/api/taskstatuses').then(res => setTaskStatuses(res.map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })))).catch(() => { });
-    api.get<any[]>('/api/users').then(res => setUsers(res.map(x => ({ id: x.identityId, name: x.name })))).catch(() => { });
+    api.get<any[]>('/api/users').then(res => setUsers(res.map(x => ({ id: x.id || x.identityId, name: x.name })))).catch(() => { });
+    api.get<any[]>('/api/activities').then(res => setAllActivities(res)).catch(() => { });
   }, []);
 
   const fetchActivities = useCallback(async () => {
@@ -476,7 +478,7 @@ export const CustomerDetailScreen: React.FC = () => {
                   activityTypes={activityTypes}
                   customerId={customer.customerId}
                   currentUserId={currentUser?.userId}
-                  isAdmin={currentUser?.role === 'Admin'}
+                  isAdmin={currentUser?.roles?.includes('Admin') ?? false}
                   onActivityLogged={(act) => setActivities(prev => [act, ...prev])}
                   onActivityDeleted={(id) => setActivities(prev => prev.filter(a => a.activityId !== id))}
                 />
@@ -529,6 +531,8 @@ export const CustomerDetailScreen: React.FC = () => {
           customerId={customer.customerId}
           currentUserId={currentUser?.userId ?? 0}
           users={users.length > 0 ? users : (currentUser ? [{ id: currentUser.userId, name: currentUser.name }] : [])}
+          activities={allActivities.map(a => ({ id: a.activityId, name: a.subject }))}
+          activityTypes={activityTypes.map(at => ({ id: at.id, name: at.name }))}
           statuses={taskStatuses}
           onSaved={handleTaskSaved}
           onDeleted={(taskId) => {

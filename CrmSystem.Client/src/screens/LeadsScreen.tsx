@@ -28,6 +28,7 @@ export const LeadsScreen: React.FC = () => {
     const [search, setSearch] = useState('');
     const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
     const [selectedStatusId, setSelectedStatusId] = useState<string>('');
+    const [showConverted, setShowConverted] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -36,14 +37,15 @@ export const LeadsScreen: React.FC = () => {
         setLoadError(null);
         try {
             const statusFilter = selectedStatusId ? `&leadStatusId=${selectedStatusId}` : '';
-            const response = await api.get<{ data: LeadSummary[] }>(`/api/leads?page=1&pageSize=100${statusFilter}`);
+            const convertedFilter = showConverted ? '&showConverted=true' : '';
+            const response = await api.get<{ data: LeadSummary[] }>(`/api/leads?page=1&pageSize=100${statusFilter}${convertedFilter}`);
             setLeads(response.data ?? []);
         } catch {
             setLoadError('Failed to load leads. Please try again.');
         } finally {
             setIsLoading(false);
         }
-    }, [selectedStatusId]);
+    }, [selectedStatusId, showConverted]);
 
     useEffect(() => { loadLeads(); }, [loadLeads, location.key]);
 
@@ -109,18 +111,26 @@ export const LeadsScreen: React.FC = () => {
                         onChange={e => setSearch(e.target.value)}
                     />
                 </div>
-                <div style={{ marginLeft: '1rem' }}>
+                <div style={{ marginLeft: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <select
                         className="filter-input"
                         value={selectedStatusId}
                         onChange={e => setSelectedStatusId(e.target.value)}
                         style={{ minWidth: '150px' }}
                     >
-                        <option value="">All Statuses</option>
+                        <option value="">All Active Statuses</option>
                         {statuses.map(status => (
                             <option key={status.id} value={status.id}>{status.name}</option>
                         ))}
                     </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        <input
+                            type="checkbox"
+                            checked={showConverted}
+                            onChange={e => setShowConverted(e.target.checked)}
+                        />
+                        Include Converted
+                    </label>
                 </div>
             </div>
 

@@ -231,8 +231,8 @@ export const CustomerFormScreen: React.FC = () => {
                                 <label className="input-label">Assigned Rep</label>
                                 <select value={form.assignedRepId} onChange={e => handleChange('assignedRepId', e.target.value)} className="input-field">
                                     <option value="">Select rep</option>
-                                    {reps.map(rep => (
-                                        <option key={rep.id} value={rep.id}>{rep.name}{rep.role ? ` (${rep.role})` : ''}</option>
+                                    {reps.map((rep, index) => (
+                                        <option key={rep.id != null ? `rep-${rep.id}` : `rep-${index}`} value={rep.id}>{rep.name}{rep.role ? ` (${rep.role})` : ''}</option>
                                     ))}
                                 </select>
                                 {errors.assignedRepId && <div className="input-error">{errors.assignedRepId}</div>}

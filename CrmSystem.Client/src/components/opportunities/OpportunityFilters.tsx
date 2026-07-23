@@ -69,13 +69,13 @@ export const OpportunityFilters: React.FC<OpportunityFiltersProps> = ({
       try {
         const [custData, compData, userData, stageData, sourceData] = await Promise.all([
           api.get<{ data: Customer[] }>('/api/customers?page=1&pageSize=1000'),
-          api.get<Company[]>('/api/companies'),
+          api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=1000'),
           api.get<User[]>('/api/users'),
           api.get<OpportunityStage[]>('/api/opportunitystages'),
           api.get<Source[]>('/api/sources')
         ]);
         setCustomers(custData.data ?? []);
-        setCompanies(compData ?? []);
+        setCompanies(compData.data ?? []);
         setUsers(userData ?? []);
         setStages(stageData ?? []);
         setSources(sourceData ?? []);
@@ -117,11 +117,17 @@ export const OpportunityFilters: React.FC<OpportunityFiltersProps> = ({
 
       {isOpen && (
         <>
-          <div className="filter-backdrop" onClick={() => setIsOpen(false)} />
-          <div className="filter-panel">
+          <div className="filter-backdrop" onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(false);
+          }} />
+          <div className="filter-panel" onClick={(e) => e.stopPropagation()}>
             <div className="filter-header">
               <h3>Filter Opportunities</h3>
-              <button type="button" className="filter-close-btn" onClick={() => setIsOpen(false)}>
+              <button type="button" className="filter-close-btn" onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(false);
+              }}>
                 <X size={16} />
               </button>
             </div>
@@ -279,7 +285,10 @@ export const OpportunityFilters: React.FC<OpportunityFiltersProps> = ({
           </div>
 
           <div className="filter-footer">
-            <button type="button" className="filter-clear-btn" onClick={handleClear}>
+            <button type="button" className="filter-clear-btn" onClick={(e) => {
+              e.stopPropagation();
+              handleClear();
+            }}>
               Clear All Filters
             </button>
           </div>

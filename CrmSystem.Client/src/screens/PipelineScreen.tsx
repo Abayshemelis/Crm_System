@@ -7,7 +7,6 @@ import { Input } from '../components/ui/Input';
 import { DatePicker } from '../components/ui/DatePicker';
 import { OpportunityDetailPanel } from '../components/ui/OpportunityDetailPanel';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
-import { OpportunityFilters, FilterState } from '../components/opportunities/OpportunityFilters';
 import { api } from '../lib/api';
 import { Plus, Filter } from 'lucide-react';
 import './screens.css';
@@ -48,67 +47,48 @@ export const PipelineScreen: React.FC = () => {
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [stages, setStages] = useState<OpportunityStage[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [companies, setCompanies] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
-    const [dateFilter, setDateFilter] = useState<string>('all');
+    const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
     const [draggedOpportunity, setDraggedOpportunity] = useState<Opportunity | null>(null);
     const [selectedOpportunity, setSelectedOpportunity] = useState<number | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [activeFilters, setActiveFilters] = useState<FilterState>({});
-    const [activeFilterCount, setActiveFilterCount] = useState(0);
 
-    const loadOpportunities = useCallback(async (filters?: FilterState) => {
+    const loadOpportunities = useCallback(async () => {
         setIsLoading(true);
         try {
             const params = new URLSearchParams();
-            if (filters?.customerId) params.append('customerId', filters.customerId.toString());
-            if (filters?.companyId) params.append('companyId', filters.companyId.toString());
-            if (filters?.ownerId) params.append('ownerId', filters.ownerId.toString());
-            if (filters?.opportunityStageId) params.append('opportunityStageId', filters.opportunityStageId.toString());
-            if (filters?.expectedCloseDateFrom) params.append('expectedCloseDateFrom', filters.expectedCloseDateFrom);
-            if (filters?.expectedCloseDateTo) params.append('expectedCloseDateTo', filters.expectedCloseDateTo);
-            if (filters?.createdDateFrom) params.append('createdDateFrom', filters.createdDateFrom);
-            if (filters?.createdDateTo) params.append('createdDateTo', filters.createdDateTo);
-            if (filters?.minValue) params.append('minValue', filters.minValue);
-            if (filters?.maxValue) params.append('maxValue', filters.maxValue);
-            if (filters?.lastActivityFrom) params.append('lastActivityFrom', filters.lastActivityFrom);
-            if (filters?.lastActivityTo) params.append('lastActivityTo', filters.lastActivityTo);
-            if (filters?.sourceId) params.append('sourceId', filters.sourceId.toString());
+            if (selectedCustomerId) params.append('customerId', selectedCustomerId);
+            if (selectedCompanyId) params.append('companyId', selectedCompanyId);
 
             const queryString = params.toString();
             const url = queryString ? `/api/opportunities?${queryString}` : '/api/opportunities';
 
-            const [oppData, stageData, userData] = await Promise.all([
+            const [oppData, stageData, userData, custData, compData] = await Promise.all([
                 api.get<Opportunity[]>(url),
                 api.get<OpportunityStage[]>('/api/opportunitystages'),
-                api.get<User[]>('/api/users')
+                api.get<User[]>('/api/users'),
+                api.get<{ data: any[] }>('/api/customers?page=1&pageSize=1000'),
+                api.get<{ data: any[] }>('/api/companies?page=1&pageSize=1000')
             ]);
             setOpportunities(oppData);
             setStages(stageData.sort((a, b) => a.sortOrder - b.sortOrder));
             setUsers(userData ?? []);
+            setCustomers(custData.data ?? []);
+            setCompanies(compData.data ?? []);
         } catch (error) {
             console.error('Failed to load pipeline data:', error);
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [selectedCustomerId, selectedCompanyId]);
 
     useEffect(() => {
-        loadOpportunities(activeFilters);
-    }, [loadOpportunities, activeFilters]);
-
-    const handleFilterChange = (filters: FilterState) => {
-        setActiveFilters(filters);
-        const count = Object.values(filters).filter(v => v !== undefined && v !== '').length;
-        setActiveFilterCount(count);
-    };
-
-    const handleClearFilters = () => {
-        setActiveFilters({});
-        setActiveFilterCount(0);
         loadOpportunities();
-    };
+    }, [loadOpportunities]);
 
     const handleStageChange = async (opportunityId: number, newStageId: number) => {
         try {
@@ -171,50 +151,7 @@ export const PipelineScreen: React.FC = () => {
     };
 
     const getOpportunitiesByStage = (stageId: number) => {
-        let filtered = opportunities.filter(opp => opp.opportunityStageId === stageId);
-
-        // Filter by owner
-        if (selectedOwnerId) {
-            filtered = filtered.filter(opp => opp.ownerId === Number(selectedOwnerId));
-        }
-
-        // Filter by date
-        if (dateFilter !== 'all') {
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth();
-            const currentQuarter = Math.floor(currentMonth / 3);
-
-            filtered = filtered.filter(opp => {
-                if (!opp.expectedCloseDate) return false;
-
-                const closeDate = new Date(opp.expectedCloseDate);
-                const closeYear = closeDate.getFullYear();
-                const closeMonth = closeDate.getMonth();
-                const closeQuarter = Math.floor(closeMonth / 3);
-
-                switch (dateFilter) {
-                    case 'overdue':
-                        return closeDate < now;
-                    case 'thisMonth':
-                        return closeYear === currentYear && closeMonth === currentMonth;
-                    case 'thisQuarter':
-                        return closeYear === currentYear && closeQuarter === currentQuarter;
-                    case 'nextMonth':
-                        const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-                        const nextMonthYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-                        return closeYear === nextMonthYear && closeMonth === nextMonth;
-                    case 'nextQuarter':
-                        const nextQuarter = currentQuarter === 3 ? 0 : currentQuarter + 1;
-                        const nextQuarterYear = currentQuarter === 3 ? currentYear + 1 : currentYear;
-                        return closeYear === nextQuarterYear && closeQuarter === nextQuarter;
-                    default:
-                        return true;
-                }
-            });
-        }
-
-        return filtered;
+        return opportunities.filter(opp => opp.opportunityStageId === stageId);
     };
 
     const getStageTotal = (stageId: number) => {
@@ -239,14 +176,9 @@ export const PipelineScreen: React.FC = () => {
                     <h1>Pipeline</h1>
                     <p>{opportunities.length} opportunities</p>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
-                    <OpportunityFilters
-                        onFilterChange={handleFilterChange}
-                        onClearFilters={handleClearFilters}
-                        activeFilterCount={activeFilterCount}
-                    />
-                    <Button onClick={() => setIsCreateModalOpen(true)}><Plus size={16} style={{ marginRight: 6 }} /> New Opportunity</Button>
-                </div>
+                <Button onClick={() => setIsCreateModalOpen(true)}>
+                    <Plus size={16} style={{ marginRight: 6 }} /> New Opportunity
+                </Button>
             </div>
 
             <div className="filters-bar animate-fade-in">
@@ -254,29 +186,29 @@ export const PipelineScreen: React.FC = () => {
                     <Filter size={16} className="filter-icon" />
                     <select
                         className="filter-input"
-                        value={selectedOwnerId}
-                        onChange={e => setSelectedOwnerId(e.target.value)}
-                        style={{ minWidth: '150px' }}
+                        value={selectedCustomerId}
+                        onChange={e => setSelectedCustomerId(e.target.value)}
+                        style={{ minWidth: '200px' }}
                     >
-                        <option value="">All Owners</option>
-                        {users.filter(u => u.isActive).map(u => (
-                            <option key={u.id} value={u.id}>{u.name}</option>
+                        <option value="">All Customers</option>
+                        {customers.map(c => (
+                            <option key={c.customerId} value={c.customerId}>
+                                {c.firstName} {c.lastName}
+                            </option>
                         ))}
                     </select>
                 </div>
                 <div style={{ marginLeft: '1rem' }}>
                     <select
                         className="filter-input"
-                        value={dateFilter}
-                        onChange={e => setDateFilter(e.target.value)}
-                        style={{ minWidth: '150px' }}
+                        value={selectedCompanyId}
+                        onChange={e => setSelectedCompanyId(e.target.value)}
+                        style={{ minWidth: '200px' }}
                     >
-                        <option value="all">All Dates</option>
-                        <option value="overdue">Overdue</option>
-                        <option value="thisMonth">This Month</option>
-                        <option value="thisQuarter">This Quarter</option>
-                        <option value="nextMonth">Next Month</option>
-                        <option value="nextQuarter">Next Quarter</option>
+                        <option value="">All Companies</option>
+                        {companies.map(c => (
+                            <option key={c.companyId} value={c.companyId}>{c.name}</option>
+                        ))}
                     </select>
                 </div>
             </div>

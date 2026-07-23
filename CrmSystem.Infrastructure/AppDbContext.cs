@@ -42,6 +42,8 @@ public class AppDbContext : DbContext
     public DbSet<StageHistory> StageHistories => Set<StageHistory>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
 
+    public DbSet<IdentityRole> IdentityRoles => Set<IdentityRole>();
+
     // ── Notifications & Audit ─────────────────────────────────────────────
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -69,6 +71,23 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(i => i.RoleId)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(i => i.IdentityRoles)
+             .WithOne(ir => ir.Identity)
+             .HasForeignKey(ir => ir.IdentityId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IdentityRole>(e =>
+        {
+            e.HasKey(ir => new { ir.IdentityId, ir.RoleId });
+            e.HasOne(ir => ir.Identity)
+             .WithMany(i => i.IdentityRoles)
+             .HasForeignKey(ir => ir.IdentityId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ir => ir.Role)
+             .WithMany(r => r.IdentityRoles)
+             .HasForeignKey(ir => ir.RoleId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── RefreshToken ──────────────────────────────────────────────────
@@ -252,6 +271,18 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(l => l.ConvertedCustomerId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(l => l.ConvertedOpportunity)
+             .WithMany()
+             .HasForeignKey(l => l.ConvertedOpportunityId)
+             .OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(l => l.CreatedBy)
+             .WithMany()
+             .HasForeignKey(l => l.CreatedById)
+             .OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(l => l.ConvertedBy)
+             .WithMany()
+             .HasForeignKey(l => l.ConvertedById)
+             .OnDelete(DeleteBehavior.NoAction);
             e.HasQueryFilter(l => !l.IsDeleted);
         });
 
@@ -326,6 +357,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(a => a.OpportunityId)
              .OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(a => a.Lead)
+             .WithMany(l => l.Activities)
+             .HasForeignKey(a => a.LeadId)
+             .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(a => a.ActivityType)
              .WithMany()
              .HasForeignKey(a => a.ActivityTypeId)
@@ -358,6 +393,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(t => t.OpportunityId)
              .OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(t => t.Lead)
+             .WithMany(l => l.Tasks)
+             .HasForeignKey(t => t.LeadId)
+             .OnDelete(DeleteBehavior.SetNull);
             e.HasOne(t => t.Activity)
              .WithMany(a => a.Tasks)
              .HasForeignKey(t => t.ActivityId)

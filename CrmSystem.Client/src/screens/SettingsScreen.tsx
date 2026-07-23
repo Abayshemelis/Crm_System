@@ -115,7 +115,7 @@ const toast = (message: string, type: 'success' | 'error' = 'success') =>
 // Main SettingsScreen
 // ═══════════════════════════════════════════════════════════════════════════════
 export const SettingsScreen: React.FC = () => {
-  const { isManagerOrAbove } = useAuth();
+  const { isManagerOrAboveSelected } = useAuth();
   const [activeTab, setActiveTab] = useState<MainTab>('pipeline');
   const [statusSubTab, setStatusSubTab] = useState<StatusSubTab>('lead');
 
@@ -572,7 +572,7 @@ export const SettingsScreen: React.FC = () => {
         <Card className="glass-panel p-6">
           <Card.Content>
             <Section title="Pipeline Stages">
-              {isManagerOrAbove && (
+              {isManagerOrAboveSelected && (
                 <AddForm onAdd={addStage}>
                   <input style={inputStyle} placeholder="Stage name" value={stageForm.name} onChange={e => setStageForm(p => ({ ...p, name: e.target.value }))} />
                   <input style={{ ...inputStyle, width: 80, flex: 'none' }} type="number" placeholder="Order" value={stageForm.sortOrder} onChange={e => setStageForm(p => ({ ...p, sortOrder: e.target.value }))} />
@@ -599,7 +599,7 @@ export const SettingsScreen: React.FC = () => {
                       </>}
                       onEdit={() => setEditingStage(s)}
                       onDelete={() => deleteStage(s.id)}
-                      canEdit={isManagerOrAbove}
+                      canEdit={isManagerOrAboveSelected}
                     />
                   )
                 ))}
@@ -614,7 +614,7 @@ export const SettingsScreen: React.FC = () => {
         <Card className="glass-panel p-6">
           <Card.Content>
             <Section title="Tags">
-              {isManagerOrAbove && (
+              {isManagerOrAboveSelected && (
                 <AddForm onAdd={addTag}>
                   <input style={inputStyle} placeholder="Tag name" value={tagName} onChange={e => setTagName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addTag()} />
@@ -630,7 +630,7 @@ export const SettingsScreen: React.FC = () => {
                     </div>
                   ) : (
                     <LookupRow key={t.id} label={t.name}
-                      onEdit={() => setEditingTag(t)} onDelete={() => deleteTag(t.id)} canEdit={isManagerOrAbove} />
+                      onEdit={() => setEditingTag(t)} onDelete={() => deleteTag(t.id)} canEdit={isManagerOrAboveSelected} />
                   )
                 ))}
                 {tags.items.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No tags yet.</p>}
@@ -645,7 +645,7 @@ export const SettingsScreen: React.FC = () => {
         <Card className="glass-panel p-6">
           <Card.Content>
             <Section title="Products Catalog">
-              {isManagerOrAbove && (
+              {isManagerOrAboveSelected && (
                 <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                   <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Add New Product</h4>
                   <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
@@ -740,7 +740,7 @@ export const SettingsScreen: React.FC = () => {
                             <span>Cost: <span style={{ color: 'var(--text-muted)' }}>${product.cost ?? '-'}</span></span>
                             <span>Stock: <strong>{product.stockQuantity}</strong></span>
                           </div>
-                          {isManagerOrAbove && (
+                          {isManagerOrAboveSelected && (
                             <div style={{ display: 'flex', gap: '0.2rem' }}>
                               <Button variant="ghost" size="sm" onClick={() => startEditProduct(product)}><Edit2 size={13} /></Button>
                               <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 size={13} /></Button>
@@ -763,7 +763,7 @@ export const SettingsScreen: React.FC = () => {
         <Card className="glass-panel p-6">
           <Card.Content>
             <Section title="Lead & Customer Sources">
-              {isManagerOrAbove && (
+              {isManagerOrAboveSelected && (
                 <AddForm onAdd={addSource}>
                   <input style={inputStyle} placeholder="e.g. Website, Referral, LinkedIn" value={sourceName} onChange={e => setSourceName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addSource()} />
@@ -779,7 +779,7 @@ export const SettingsScreen: React.FC = () => {
                     </div>
                   ) : (
                     <LookupRow key={s.id} label={s.name}
-                      onEdit={() => setEditingSource(s)} onDelete={() => deleteSource(s.id)} canEdit={isManagerOrAbove} />
+                      onEdit={() => setEditingSource(s)} onDelete={() => deleteSource(s.id)} canEdit={isManagerOrAboveSelected} />
                   )
                 ))}
               </div>
@@ -808,7 +808,7 @@ export const SettingsScreen: React.FC = () => {
             {/* Lead Statuses */}
             {statusSubTab === 'lead' && (
               <Section title="Lead Statuses">
-                {isManagerOrAbove && (
+                {isManagerOrAboveSelected && (
                   <AddForm onAdd={addLeadStatus}>
                     <input style={inputStyle} placeholder="e.g. New, Qualified, Converted" value={leadStatusForm.name} onChange={e => setLeadStatusForm(p => ({ ...p, name: e.target.value }))} />
                     <input style={{ ...inputStyle, width: 80, flex: 'none' }} type="number" placeholder="Order" value={leadStatusForm.sortOrder} onChange={e => setLeadStatusForm(p => ({ ...p, sortOrder: e.target.value }))} />
@@ -828,7 +828,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={s.id} label={`${s.name}  ·  Order ${s.sortOrder}`}
                         badge={s.isTerminal ? <Badge label="Terminal" color="#3b82f6" /> : undefined}
-                        onEdit={() => setEditingLeadStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/leadstatuses/${s.id}`); leadStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAbove} />
+                        onEdit={() => setEditingLeadStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/leadstatuses/${s.id}`); leadStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -838,7 +838,7 @@ export const SettingsScreen: React.FC = () => {
             {/* Task Statuses */}
             {statusSubTab === 'task' && (
               <Section title="Task Statuses">
-                {isManagerOrAbove && (
+                {isManagerOrAboveSelected && (
                   <AddForm onAdd={addTaskStatus}>
                     <input style={inputStyle} placeholder="e.g. Pending, In Progress, Done" value={taskStatusForm.name} onChange={e => setTaskStatusForm(p => ({ ...p, name: e.target.value }))} />
                     {checkboxRow('Terminal', taskStatusForm.isTerminal, v => setTaskStatusForm(p => ({ ...p, isTerminal: v })))}
@@ -856,7 +856,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={s.id} label={s.name}
                         badge={s.isTerminal ? <Badge label="Terminal" color="#3b82f6" /> : undefined}
-                        onEdit={() => setEditingTaskStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/taskstatuses/${s.id}`); taskStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAbove} />
+                        onEdit={() => setEditingTaskStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/taskstatuses/${s.id}`); taskStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -866,7 +866,7 @@ export const SettingsScreen: React.FC = () => {
             {/* Activity Types */}
             {statusSubTab === 'activity' && (
               <Section title="Activity Types">
-                {isManagerOrAbove && (
+                {isManagerOrAboveSelected && (
                   <AddForm onAdd={addActivity}>
                     <input style={inputStyle} placeholder="e.g. Call, Email, Meeting" value={activityForm.name} onChange={e => setActivityForm(p => ({ ...p, name: e.target.value }))} />
                     <input style={{ ...inputStyle, width: 120, flex: 'none' }} placeholder="Icon (optional)" value={activityForm.icon} onChange={e => setActivityForm(p => ({ ...p, icon: e.target.value }))} />
@@ -884,7 +884,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={a.id} label={a.name}
                         badge={a.icon ? <Badge label={a.icon} color="#a78bfa" /> : undefined}
-                        onEdit={() => setEditingActivity(a)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/activitytypes/${a.id}`); activityTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAbove} />
+                        onEdit={() => setEditingActivity(a)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/activitytypes/${a.id}`); activityTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -894,7 +894,7 @@ export const SettingsScreen: React.FC = () => {
             {/* Notification Types */}
             {statusSubTab === 'notification' && (
               <Section title="Notification Types">
-                {isManagerOrAbove && (
+                {isManagerOrAboveSelected && (
                   <AddForm onAdd={addNotif}>
                     <input style={inputStyle} placeholder="e.g. TaskDue, OpportunityWon" value={notifForm.name} onChange={e => setNotifForm(p => ({ ...p, name: e.target.value }))} />
                     <input style={{ ...inputStyle, width: 140, flex: 'none' }} placeholder="Channel (InApp/Email)" value={notifForm.defaultChannel} onChange={e => setNotifForm(p => ({ ...p, defaultChannel: e.target.value }))} />
@@ -912,7 +912,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={n.id} label={n.name}
                         badge={n.defaultChannel ? <Badge label={n.defaultChannel} color="#06b6d4" /> : undefined}
-                        onEdit={() => setEditingNotif(n)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/notificationtypes/${n.id}`); notifTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAbove} />
+                        onEdit={() => setEditingNotif(n)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/notificationtypes/${n.id}`); notifTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>

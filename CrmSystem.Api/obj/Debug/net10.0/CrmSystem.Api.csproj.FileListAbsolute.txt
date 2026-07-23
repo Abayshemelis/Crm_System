@@ -165,3 +165,6 @@ C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\BCrypt-Net-Nex
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\CrmSystem.Api.staticwebassets.runtime.json
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.InMemory.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.JsonPatch.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.Mvc.NewtonsoftJson.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Newtonsoft.Json.Bson.dll
