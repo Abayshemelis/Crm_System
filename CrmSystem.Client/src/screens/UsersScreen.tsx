@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Plus, Trash2, User, Shield, Check, X } from 'lucide-react';
+import { RoleBadge } from '../components/ui/RoleBadge';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
@@ -143,14 +144,7 @@ export const UsersScreen: React.FC = () => {
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'Admin': return { background: '#f3e8ff', color: '#7c3aed' };
-      case 'Manager': return { background: '#dbeafe', color: '#2563eb' };
-      case 'SalesRep': return { background: '#dcfce7', color: '#16a34a' };
-      default: return { background: '#f3f4f6', color: '#4b5563' };
-    }
-  };
+  // getRoleBadgeColor removed in favor of RoleBadge component
 
   return (
     <Layout>
@@ -282,31 +276,10 @@ export const UsersScreen: React.FC = () => {
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     {user.roles && user.roles.length > 0 ? (
                       user.roles.map(r => (
-                        <span
-                          key={r}
-                          style={{
-                            padding: '0.25rem 0.75rem',
-                            borderRadius: '9999px',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            ...getRoleBadgeColor(r)
-                          }}
-                        >
-                          {r}
-                        </span>
+                        <RoleBadge key={r} role={r} />
                       ))
                     ) : (
-                      <span
-                        style={{
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '9999px',
-                          fontSize: '0.75rem',
-                          fontWeight: 500,
-                          ...getRoleBadgeColor(user.role)
-                        }}
-                      >
-                        {user.role}
-                      </span>
+                      <RoleBadge role={user.role} />
                     )}
                   </div>
                 )}

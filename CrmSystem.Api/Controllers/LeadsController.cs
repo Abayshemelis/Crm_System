@@ -371,9 +371,6 @@ public class LeadsController : ControllerBase
         }
 
         var leadEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
-        var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
-
-        int? custId = lead.ConvertedCustomerId;
 
         var query = _db.AuditLogs
             .Include(a => a.AuditActionType)
@@ -382,8 +379,7 @@ public class LeadsController : ControllerBase
             .AsQueryable();
 
         query = query.Where(a =>
-            (leadEntityType != null && a.EntityTypeId == leadEntityType.EntityTypeId && a.EntityId == id) ||
-            (customerEntityType != null && custId.HasValue && a.EntityTypeId == customerEntityType.EntityTypeId && a.EntityId == custId.Value));
+            leadEntityType != null && a.EntityTypeId == leadEntityType.EntityTypeId && a.EntityId == id);
 
         var auditLogs = await query
             .OrderByDescending(a => a.ChangedAt)

@@ -22,6 +22,7 @@ import { PipelineScreen } from './screens/PipelineScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
 import { TasksScreen } from './screens/TasksScreen';
 import { OpportunityDetailScreen } from './screens/OpportunityDetailScreen';
+import { ReportsScreen } from './screens/ReportsScreen';
 import { Toast } from './components/ui/Toast';
 import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
@@ -35,6 +36,7 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/reset-password" element={<ResetPasswordScreen />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
+        <Route path="/reports" element={<ProtectedRoute><ReportsScreen /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersScreen /></ProtectedRoute>} />
         <Route path="/customers/new" element={<ProtectedRoute><CustomerFormScreen /></ProtectedRoute>} />
         <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetailScreen /></ProtectedRoute>} />

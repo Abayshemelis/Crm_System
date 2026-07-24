@@ -63,18 +63,8 @@ public class TaskService : ITaskService
 
     public async Task<IReadOnlyList<TaskReadDto>> GetByLeadAsync(int leadId)
     {
-        var lead = await _db.Leads
-            .Where(l => l.LeadId == leadId)
-            .Select(l => new { l.ConvertedCustomerId, l.ConvertedOpportunityId })
-            .FirstOrDefaultAsync();
-
-        int? custId = lead?.ConvertedCustomerId;
-        int? oppId = lead?.ConvertedOpportunityId;
-
         var tasks = await GetAllTasksQuery()
-            .Where(t => t.LeadId == leadId ||
-                        (custId.HasValue && t.CustomerId == custId.Value) ||
-                        (oppId.HasValue && t.OpportunityId == oppId.Value))
+            .Where(t => t.LeadId == leadId)
             .OrderBy(t => t.DueDate)
             .ToListAsync();
         return tasks.DistinctBy(t => t.CrmTaskId).Select(MapToDto).ToList();

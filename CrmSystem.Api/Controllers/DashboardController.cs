@@ -148,7 +148,7 @@ public class DashboardController : ControllerBase
         var sixMonthsAgo = today.AddMonths(-6);
         var revenueByMonth = await wonOpportunitiesQuery
             .Where(o => o.ActualCloseDate.HasValue && o.ActualCloseDate.Value >= sixMonthsAgo)
-            .GroupBy(o => new { Year = o.ActualCloseDate.Value.Year, Month = o.ActualCloseDate.Value.Month })
+            .GroupBy(o => new { Year = o.ActualCloseDate!.Value.Year, Month = o.ActualCloseDate!.Value.Month })
             .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
             .Select(g => new
             {

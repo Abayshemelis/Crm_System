@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
-import { AuditHistory } from '../components/audit/AuditHistory';
+import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { api } from '../lib/api';
 import Attachments from '../components/attachments/Attachments';
 import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Tag, Link, X, History } from 'lucide-react';
@@ -405,7 +405,7 @@ export const CompanyDetailScreen: React.FC = () => {
               )}
 
               {activeTab === 'audit' && (
-                <AuditHistory entityType="company" entityId={Number(id)} />
+                <AuditHistoryTable entityType="companies" entityId={Number(id)} />
               )}
             </Card.Content>
           </Card>

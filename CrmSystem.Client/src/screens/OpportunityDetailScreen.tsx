@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { DatePicker } from '../components/ui/DatePicker';
 import { SelectDown } from '../components/ui/SelectDown';
-import { AuditHistory } from '../components/audit/AuditHistory';
+import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { TimelineList } from '../components/activities/TimelineList';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
@@ -573,7 +573,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               {/* Audit History Tab */}
               {activeTab === 'audit' && (
-                <AuditHistory entityType="opportunity" entityId={opportunity.opportunityId} refreshTrigger={auditRefreshTrigger} />
+                <AuditHistoryTable entityType="opportunities" entityId={opportunity.opportunityId} />
               )}
             </Card.Content>
           </Card>

@@ -41,7 +41,7 @@ export const ForgotPasswordScreen: React.FC = () => {
     <AuthLayout title="Reset password" subtitle="Enter your email to receive a reset link">
       {message ? (
         <div className="login-form">
-          <div style={{ padding: '1rem', background: 'rgba(34,197,94,0.1)', color: '#22c55e', borderRadius: '0.375rem', textAlign: 'center' }}>
+          <div className="auth-success-banner">
             {message}
           </div>
           <Button onClick={() => navigate('/login')} fullWidth size="lg">

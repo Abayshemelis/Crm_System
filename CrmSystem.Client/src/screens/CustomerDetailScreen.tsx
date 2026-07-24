@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
-import { AuditHistory } from '../components/audit/AuditHistory';
+import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
 import { ArrowLeft, Mail, Phone, MapPin, Building2, Tag, X, Plus, History, CheckSquare, MessageSquare } from 'lucide-react';
@@ -509,7 +509,7 @@ export const CustomerDetailScreen: React.FC = () => {
 
               {/* Audit History Tab - using reusable component with refresh trigger */}
               {activeTab === 'audit' && (
-                <AuditHistory entityType="customer" entityId={Number(id)} refreshTrigger={auditRefreshTrigger} />
+                <AuditHistoryTable entityType="customers" entityId={Number(id)} />
               )}
             </Card.Content>
           </Card>

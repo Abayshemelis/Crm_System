@@ -36,7 +36,7 @@ public class OpportunityLineItemsController : ControllerBase
 
         var lineItems = await _db.OpportunityLineItems
             .Include(li => li.Product)
-            .ThenInclude(p => p.ProductCategory)
+            .ThenInclude(p => p!.ProductCategory)
             .Where(li => li.OpportunityId == opportunityId)
             .OrderBy(li => li.LineItemId)
             .Select(li => new OpportunityLineItemDto
@@ -103,7 +103,10 @@ public class OpportunityLineItemsController : ControllerBase
         await RecalculateEstimatedValueAsync(request.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
-        await _db.Entry(lineItem.Product).Reference(p => p.ProductCategory).LoadAsync();
+        if (lineItem.Product != null)
+        {
+            await _db.Entry(lineItem.Product).Reference(p => p!.ProductCategory).LoadAsync();
+        }
 
         var dto = new OpportunityLineItemDto
         {
@@ -164,7 +167,10 @@ public class OpportunityLineItemsController : ControllerBase
         await RecalculateEstimatedValueAsync(lineItem.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
-        await _db.Entry(lineItem.Product).Reference(p => p.ProductCategory).LoadAsync();
+        if (lineItem.Product != null)
+        {
+            await _db.Entry(lineItem.Product).Reference(p => p!.ProductCategory).LoadAsync();
+        }
 
         var dto = new OpportunityLineItemDto
         {
@@ -201,7 +207,7 @@ public class OpportunityLineItemsController : ControllerBase
         if (lineItem == null)
             return NotFound(new { message = "Line item not found." });
 
-        if (!_currentUser.CanAccessOwnedRecord(lineItem.Opportunity.OwnerId))
+        if (lineItem.Opportunity == null || !_currentUser.CanAccessOwnedRecord(lineItem.Opportunity.OwnerId))
             return Forbid();
 
         var opportunityId = lineItem.OpportunityId;

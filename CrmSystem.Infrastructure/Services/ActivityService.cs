@@ -40,6 +40,17 @@ public class ActivityService : IActivityService
             .Include(a => a.Lead)
             .AsQueryable();
 
+        // If ONLY leadId is provided, we treat this as a snapshot request for the Lead page.
+        // It should not show new activities created on the Customer/Opportunity after conversion.
+        if (leadId.HasValue && !customerId.HasValue && !opportunityId.HasValue)
+        {
+            var listLeadOnly = await baseQuery
+                .Where(a => a.LeadId == leadId.Value)
+                .OrderByDescending(a => a.ActivityDate)
+                .ToListAsync();
+            return listLeadOnly.Select(MapToDto).ToList();
+        }
+
         var linkedCustomerIds = new HashSet<int>();
         var linkedOpportunityIds = new HashSet<int>();
         var linkedLeadIds = new HashSet<int>();
@@ -77,14 +88,6 @@ public class ActivityService : IActivityService
         if (leadId.HasValue)
         {
             linkedLeadIds.Add(leadId.Value);
-            var lead = await _db.Leads
-                .Where(l => l.LeadId == leadId.Value)
-                .Select(l => new { l.ConvertedCustomerId, l.ConvertedOpportunityId })
-                .FirstOrDefaultAsync();
-            if (lead?.ConvertedCustomerId != null)
-                linkedCustomerIds.Add(lead.ConvertedCustomerId.Value);
-            if (lead?.ConvertedOpportunityId != null)
-                linkedOpportunityIds.Add(lead.ConvertedOpportunityId.Value);
         }
 
         var cIds = linkedCustomerIds.ToList();
