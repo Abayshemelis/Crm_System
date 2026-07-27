@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
-import { Building2, Globe, MapPin, Briefcase, Plus, Building } from 'lucide-react';
+import { Building2, Globe, MapPin, Briefcase, Plus, Building, Search, X, Trash2 } from 'lucide-react';
+import { showToast } from '../lib/toast';
 import './screens.css';
 
 interface CompanyApiResponse {
@@ -62,6 +63,8 @@ interface Company {
 
 export const CompaniesScreen: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [search, setSearch] = useState('');
+  const [selectedIndustry, setSelectedIndustry] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -94,6 +97,25 @@ export const CompaniesScreen: React.FC = () => {
       .finally(() => setIsLoading(false));
   }, [location.key]);
 
+  const industries = useMemo(() => {
+    const list = Array.from(new Set(companies.map(c => c.industry).filter(Boolean))) as string[];
+    return list.sort();
+  }, [companies]);
+
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(c => {
+      const term = search.trim().toLowerCase();
+      const matchesSearch = !term || (
+        c.name.toLowerCase().includes(term) ||
+        (c.industry && c.industry.toLowerCase().includes(term)) ||
+        (c.email && c.email.toLowerCase().includes(term)) ||
+        (c.website && c.website.toLowerCase().includes(term))
+      );
+      const matchesIndustry = !selectedIndustry || c.industry === selectedIndustry;
+      return matchesSearch && matchesIndustry;
+    });
+  }, [companies, search, selectedIndustry]);
+
   // Loading state with skeleton cards
   if (isLoading) {
     return (
@@ -119,7 +141,7 @@ export const CompaniesScreen: React.FC = () => {
       <div className="dashboard-header animate-fade-in">
         <div className="dashboard-title">
           <h1>Companies</h1>
-          <p>{companies.length} accounts</p>
+          <p>{filteredCompanies.length} accounts</p>
         </div>
         <Button onClick={() => navigate('/companies/new')}><Plus size={16} style={{ marginRight: 6 }} /> New Company</Button>
       </div>
@@ -130,38 +152,72 @@ export const CompaniesScreen: React.FC = () => {
         </div>
       )}
 
+      {/* Responsive Filter Bar */}
+      <div className="filters-bar customer-filters animate-fade-in" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
+          <Search size={16} className="filter-icon" />
+          <input
+            className="filter-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search companies by name, email, website..."
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        {industries.length > 0 && (
+          <select
+            className="filter-select"
+            value={selectedIndustry}
+            onChange={e => setSelectedIndustry(e.target.value)}
+            style={{ flex: '0 1 200px' }}
+          >
+            <option value="">All Industries</option>
+            {industries.map(ind => (
+              <option key={ind} value={ind}>{ind}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div className="customers-grid">
-        {companies.map((c, i) => (
+        {filteredCompanies.map((c, i) => (
           <Card
             key={c.companyId}
             className="customer-card glass-panel animate-fade-in"
-            style={{ animationDelay: `${i * 0.04}s` } as React.CSSProperties}
+            style={{ animationDelay: `${i * 0.04}s`, cursor: 'pointer' } as React.CSSProperties}
             onClick={() => navigate(`/companies/${c.companyId}`)}
           >
             <Card.Content>
               <div className="customer-header">
                 <div className="company-avatar">{c.name[0]}</div>
-                <div className="customer-info">
-                  <h3>{c.name}</h3>
-                  <p>{c.industry ?? 'Unknown industry'}</p>
+                <div className="customer-info" style={{ minWidth: 0 }}>
+                  <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</h3>
+                  <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.industry ?? 'Unknown industry'}</p>
                   {c.companySize && <span className="badge" style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'var(--accent-primary)', color: 'white' }}>{c.companySize}</span>}
                 </div>
               </div>
               <div className="customer-details">
-                {c.website && <div className="detail-row"><Globe size={14} /><span>{c.website}</span></div>}
-                {c.address && <div className="detail-row"><MapPin size={14} /><span>{c.address}</span></div>}
+                {c.website && <div className="detail-row"><Globe size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.website}</span></div>}
+                {c.address && <div className="detail-row"><MapPin size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address}</span></div>}
                 {c.phone && <div className="detail-row"><Briefcase size={14} /><span>{c.phone}</span></div>}
-                {c.email && <div className="detail-row"><Building2 size={14} /><span>{c.email}</span></div>}
+                {c.email && <div className="detail-row"><Building2 size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span></div>}
                 {c.contactCount !== undefined && <div className="detail-row"><Building size={14} /><span>{c.contactCount} contacts</span></div>}
                 {c.sourceName && <div className="detail-row"><span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Source: {c.sourceName}</span></div>}
               </div>
             </Card.Content>
           </Card>
         ))}
-        {companies.length === 0 && !loadError && (
+        {filteredCompanies.length === 0 && !loadError && (
           <EmptyState
             title="No companies found"
-            description="Get started by adding your first company to the CRM."
+            description="Adjust your search filters or add a new company to the CRM."
             icon={Building}
             actionText="New Company"
             onActionClick={() => navigate('/companies/new')}

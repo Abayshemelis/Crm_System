@@ -5,9 +5,10 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { LeadConvertModal } from '../components/ui/LeadConvertModal';
-import { AuditHistory } from '../components/audit/AuditHistory';
+import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { api } from '../lib/api';
-import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle, History, MessageSquare, CheckSquare, Plus } from 'lucide-react';
+import { showToast } from '../lib/toast';
+import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle, History, MessageSquare, CheckSquare, Plus, Trash2 } from 'lucide-react';
 import { TimelineList } from '../components/activities/TimelineList';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
@@ -99,9 +100,14 @@ export const LeadDetailScreen: React.FC = () => {
     }, [id]);
 
     const deleteLead = async () => {
-        if (!id || !window.confirm('Delete this lead?')) return;
-        await api.delete(`/api/leads/${id}`);
-        navigate('/leads');
+        if (!id || !window.confirm('Are you sure you want to delete this lead?')) return;
+        try {
+            await api.delete(`/api/leads/${id}`);
+            showToast('Lead deleted successfully', 'success');
+            navigate('/leads');
+        } catch (err: any) {
+            showToast(err.message || 'Failed to delete lead', 'error');
+        }
     };
 
     const handleConvert = (customerId: number) => {
@@ -265,6 +271,9 @@ export const LeadDetailScreen: React.FC = () => {
                     {lead.leadStatusName !== 'Converted' && (
                         <Button onClick={() => navigate(`/leads/${id}/edit`)} size="sm">Edit</Button>
                     )}
+                    <Button variant="ghost" size="sm" onClick={deleteLead} style={{ color: 'var(--accent-red, #ef4444)' }}>
+                        <Trash2 size={16} style={{ marginRight: 6 }} /> Delete
+                    </Button>
                 </div>
             </div>
 
@@ -421,7 +430,7 @@ export const LeadDetailScreen: React.FC = () => {
                                     />
                                 </div>
                             ) : (
-                                <AuditHistory entityType="lead" entityId={Number(id)} />
+                                <AuditHistoryTable entityType="leads" entityId={Number(id)} entityName={`${lead.firstName} ${lead.lastName}`} />
                             )}
                         </Card.Content>
                     </Card>

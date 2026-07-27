@@ -184,40 +184,43 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-out;
+  z-index: 1050;
+  animation: fadeIn 0.15s ease-out;
+  padding: 1rem;
 }
 
 .modal-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  max-width: 420px;
-  width: 90%;
-  max-height: 80vh;
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.2));
+  border-radius: 0.75rem;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
   overflow: hidden;
-  box-shadow: 0 24px 60px -24px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
 }
 
 [data-theme="light"] .modal-content {
   background: #ffffff;
-  border-color: #e5e7eb;
+  border-color: #e2e8f0;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.12);
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--border-color);
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -227,24 +230,29 @@
 }
 
 .modal-body {
-  padding: var(--space-6);
+  padding: 1.5rem;
   overflow-y: auto;
-  max-height: calc(80vh - 140px);
+  flex: 1 1 auto;
 }
 
 .modal-body p {
   color: var(--text-secondary);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.02);
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+[data-theme="light"] .modal-footer {
+  background: #f9fafb;
 }
 
 .modal-subtitle {

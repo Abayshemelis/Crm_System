@@ -8,7 +8,7 @@
 
 /* Sidebar Styles */
 .sidebar {
-  width: 260px;
+  width: 220px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -42,10 +42,10 @@
 }
 
 .sidebar-brand {
-  padding: 24px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   border-bottom: 1px solid var(--border-color);
 }
 

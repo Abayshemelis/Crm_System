@@ -59,14 +59,16 @@ export const PreviewModal: React.FC<Props> = ({ attachment, onClose }) => {
     }, [attachment, fileUrl, isText]);
 
     return (
-        <div style={overlay} onClick={onClose}>
-            <div style={box} onClick={e => e.stopPropagation()}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <strong style={{ fontSize: 14 }}>{attachment.fileName}</strong>
-                    <button onClick={onClose} style={closeBtn}>✕</button>
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px' }}>
+                <div className="modal-header">
+                    <h3>{attachment.fileName}</h3>
+                    <button className="icon-btn" onClick={onClose} aria-label="Close modal">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
                 </div>
 
-                <div style={{ minHeight: 120, maxHeight: '70vh', overflow: 'auto' }}>
+                <div className="modal-body">
                     {isImage && (
                         <img src={fileUrl} alt={attachment.fileName} style={{ width: '100%', height: 'auto', borderRadius: 6 }} onError={() => setLoadError('Unable to load image preview.')} />
                     )}
@@ -88,22 +90,22 @@ export const PreviewModal: React.FC<Props> = ({ attachment, onClose }) => {
                     )}
 
                     {isText && (
-                        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{textPreview ?? 'Loading…'}</pre>
+                        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, background: 'var(--bg-primary)', padding: '1rem', borderRadius: '4px' }}>{textPreview ?? 'Loading…'}</pre>
                     )}
 
                     {!isImage && !isPdf && !isVideo && !isAudio && !isText && (
                         <div>
                             <iframe src={fileUrl} style={{ width: '100%', height: '70vh', border: 'none' }} title="File Preview" onError={() => setLoadError('Unable to load preview.')} />
-                            <p style={{ color: '#666', marginTop: 12 }}>Browser preview is attempted for this file type; if it does not render, use Download.</p>
+                            <p style={{ color: 'var(--text-secondary)', marginTop: 12 }}>Browser preview is attempted for this file type; if it does not render, use Download.</p>
                         </div>
                     )}
 
-                    {loadError && <p style={{ color: '#d32f2f' }}>{loadError}</p>}
+                    {loadError && <p style={{ color: 'var(--error)' }}>{loadError}</p>}
                 </div>
 
-                <div style={{ marginTop: 8, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <a href={fileUrl} target="_blank" rel="noreferrer" className="btn-link">Open in new tab</a>
-                    <a href={fileUrl} download className="btn-link">Download</a>
+                <div className="modal-footer">
+                    <a href={fileUrl} target="_blank" rel="noreferrer" className="btn-link" style={{ textDecoration: 'none', color: 'var(--text-primary)', padding: '0.375rem 0.75rem', background: 'var(--bg-tertiary)', borderRadius: '4px' }}>Open in new tab</a>
+                    <a href={fileUrl} download className="btn-link" style={{ textDecoration: 'none', color: '#fff', padding: '0.375rem 0.75rem', background: 'var(--accent-primary)', borderRadius: '4px' }}>Download</a>
                 </div>
             </div>
         </div>

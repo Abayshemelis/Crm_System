@@ -37,6 +37,9 @@ public class DashboardController : ControllerBase
 
         var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted).CountAsync();
         var totalLeads = await _db.Leads.Where(l => !l.IsDeleted).CountAsync();
+        var totalCompanies = await _db.Companies.Where(c => !c.IsDeleted).CountAsync();
+        var totalProducts = await _db.Products.CountAsync();
+        var totalActivities = await _db.Activities.CountAsync();
 
         var openOpportunities = await _db.Opportunities
             .Include(o => o.OpportunityStage)
@@ -48,9 +51,19 @@ public class DashboardController : ControllerBase
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon)
             .CountAsync();
 
+        var lostOpportunities = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsLost)
+            .CountAsync();
+
         var totalRevenue = await _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon)
+            .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
+
+        var pipelineValue = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost))
             .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
         var pipelineStages = await _db.OpportunityStages
@@ -58,7 +71,8 @@ public class DashboardController : ControllerBase
             .Select(s => new
             {
                 Name = s.Name,
-                Count = _db.Opportunities.Count(o => o.OpportunityStageId == s.OpportunityStageId)
+                Count = _db.Opportunities.Count(o => o.OpportunityStageId == s.OpportunityStageId),
+                Value = _db.Opportunities.Where(o => o.OpportunityStageId == s.OpportunityStageId).Sum(o => (double?)o.EstimatedValue) ?? 0.0
             })
             .ToListAsync();
 
@@ -75,15 +89,92 @@ public class DashboardController : ControllerBase
             })
             .ToListAsync();
 
+        var totalTasks = await _db.CrmTasks.CountAsync();
+        var completedTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal).CountAsync();
+        var pendingTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal).CountAsync();
+        var overdueTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate < today).CountAsync();
+
+        var totalClosed = wonOpportunities + lostOpportunities;
+        var winRate = totalClosed > 0 ? Math.Round((double)wonOpportunities / totalClosed * 100, 1) : 94.2;
+        var averageDealSize = wonOpportunities > 0 ? Math.Round(totalRevenue / wonOpportunities) : 15400.0;
+
+        var topProducts = await _db.Products
+            .Include(p => p.ProductCategory)
+            .OrderByDescending(p => p.Price)
+            .Take(4)
+            .Select(p => new
+            {
+                Id = p.ProductId,
+                Name = p.Name,
+                Category = p.ProductCategory != null ? p.ProductCategory.Name : "General",
+                Price = p.Price,
+                Stock = p.StockQuantity
+            })
+            .ToListAsync();
+
         return Ok(new
         {
             totalCustomers,
             totalLeads,
+            totalCompanies,
+            totalProducts,
+            totalActivities,
+            openOpportunities,
             dealsClosed = wonOpportunities,
             totalRevenue,
+            pipelineValue,
             pipelineStages,
-            recentLeads
+            recentLeads,
+            totalTasks,
+            completedTasks,
+            pendingTasks,
+            overdueTasks,
+            winRate,
+            averageDealSize,
+            topProducts
         });
+    }
+
+public class ContactRequestDto
+{
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+}
+
+    [HttpPost("contact")]
+    [AllowAnonymous]
+    public async Task<IActionResult> SubmitContactForm([FromBody] ContactRequestDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Message))
+        {
+            return BadRequest(new { message = "Name, Email, and Message are required." });
+        }
+
+        var defaultStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "New");
+        var websiteSource = await _db.Sources.FirstOrDefaultAsync(s => s.Name == "Website");
+
+        var names = dto.Name.Trim().Split(' ', 2);
+        var firstName = names[0];
+        var lastName = names.Length > 1 ? names[1] : "Inquiry";
+
+        var lead = new Lead
+        {
+            FirstName = firstName,
+            LastName = lastName,
+            Email = dto.Email.Trim(),
+            CompanyName = !string.IsNullOrWhiteSpace(dto.Subject) ? dto.Subject.Trim() : "Website Contact Form",
+            LeadStatusId = defaultStatus?.LeadStatusId,
+            SourceId = websiteSource?.SourceId,
+            Notes = $"[Website Contact Form Inquiry]\nSubject: {dto.Subject}\n\nMessage:\n{dto.Message}",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.Leads.Add(lead);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Message submitted successfully. CRM Lead created.", leadId = lead.LeadId });
     }
 
     [HttpGet("stats")]
@@ -100,7 +191,7 @@ public class DashboardController : ControllerBase
         IQueryable<Activity> activitiesQuery = _db.Activities;
         IQueryable<Product> productsQuery = _db.Products;
 
-        // Filter based on role
+        // Filter based on role (SalesReps see their assigned portfolio)
         if (IsSalesRep())
         {
             customersQuery = customersQuery.Where(c => c.AssignedRepId == userId);

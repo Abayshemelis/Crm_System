@@ -64,9 +64,21 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
       setError(null);
       setErrors({});
       
-      // Load companies
+      // Load companies and auto-match existing company
       api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=100')
-        .then(res => setCompanies(res.data ?? []))
+        .then(res => {
+          const list = res.data ?? [];
+          setCompanies(list);
+          if (leadData.companyName) {
+            const match = list.find(c => c.name.trim().toLowerCase() === leadData.companyName?.trim().toLowerCase());
+            if (match) {
+              setCompanyId(String(match.companyId));
+              setCreateCompany(false);
+            } else {
+              setCreateCompany(true);
+            }
+          }
+        })
         .catch(() => setCompanies([]));
     }
   }, [isOpen, leadData]);
@@ -137,7 +149,7 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Convert Lead to Customer</h3>
         </div>
@@ -181,7 +193,7 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
               Company
             </label>
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                 <input
                   type="radio"

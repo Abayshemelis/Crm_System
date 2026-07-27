@@ -129,6 +129,19 @@ export const DashboardScreen: React.FC = () => {
     const [includeClosed, setIncludeClosed] = useState<boolean>(false);
     const [taskGroups, setTaskGroups] = useState<TaskGroupedDto>({ overdue: [], dueToday: [], upcoming: [] });
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedKpiCard, setSelectedKpiCard] = useState<StatCard | null>(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setSelectedKpiCard(null);
+            }
+        };
+        if (selectedKpiCard) {
+            window.addEventListener('keydown', handleKeyDown);
+        }
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedKpiCard]);
 
     useEffect(() => {
         if (!token) {
@@ -407,7 +420,7 @@ export const DashboardScreen: React.FC = () => {
     const statCards = getStatCards();
 
     const handleStatCardAction = (card: StatCard) => {
-        navigate(card.path);
+        setSelectedKpiCard(card);
     };
 
     return (
@@ -431,43 +444,64 @@ export const DashboardScreen: React.FC = () => {
                 )}
             </div>
 
-            <div className="stats-grid">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem' }}>
                 {statCards.map((card, i) => (
-                    <Card
+                    <div
                         key={card.title}
-                        className="stat-card glass-panel animate-fade-in"
-                        style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
+                        className="glass-panel animate-fade-in"
+                        style={{ 
+                            animationDelay: `${i * 0.05}s`,
+                            padding: '1.25rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.75rem',
+                            borderRadius: '1rem',
+                            cursor: 'pointer',
+                            border: '1px solid rgba(148, 163, 184, 0.2)',
+                            width: '240px',
+                            minWidth: '240px',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
+                        }}
                         onClick={() => handleStatCardAction(card)}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)';
+                        }}
                     >
-                        <Card.Content>
-                            <div className="stat-header">
-                                <div className="stat-icon" style={{ color: card.color }}>
-                                    {React.createElement(card.icon, { size: 24 })}
-                                </div>
-                                <div className="stat-value">
-                                    {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
-                                </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ 
+                                background: `color-mix(in srgb, ${card.color} 15%, transparent)`,
+                                color: card.color,
+                                padding: '0.75rem',
+                                borderRadius: '0.75rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                {React.createElement(card.icon, { size: 24 })}
                             </div>
-                            <div className="stat-info">
-                                <h3>{card.title}</h3>
-                                <p>{card.description}</p>
+                            <div style={{ color: 'var(--text-muted)' }}>
+                                <ArrowRight size={16} />
                             </div>
-                            {card.footer ? card.footer : (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="stat-action"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleStatCardAction(card);
-                                    }}
-                                    disabled={!user}
-                                >
-                                    View all <ArrowRight size={14} />
-                                </Button>
-                            )}
-                        </Card.Content>
-                    </Card>
+                        </div>
+
+                        <div style={{ marginTop: '0.25rem' }}>
+                            <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+                                {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
+                            </div>
+                            <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                                {card.title}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', marginTop: '0.25rem', fontWeight: '500' }}>
+                                {card.description}
+                            </div>
+                        </div>
+                    </div>
                 ))}
             </div>
 
@@ -489,13 +523,13 @@ export const DashboardScreen: React.FC = () => {
                     {taskGroups.overdue.length > 0 && (
                         <div style={{ marginBottom: '1.5rem' }}>
                             <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>Overdue Tasks</h3>
-                            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+                            <div className="dashboard-task-grid">
                                 {taskGroups.overdue.map((task) => (
-                                    <Card key={task.crmTaskId} className="glass-panel" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                    <Card key={task.crmTaskId} className="glass-panel task-card-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
                                         <Card.Content>
                                             <div style={{ marginBottom: '0.5rem' }}>
-                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{task.title}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', wordBreak: 'break-word' }}>{task.title}</h4>
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)', wordBreak: 'break-word' }}>
                                                     {task.description || 'No description'}
                                                 </p>
                                             </div>
@@ -515,13 +549,13 @@ export const DashboardScreen: React.FC = () => {
                     {taskGroups.dueToday.length > 0 && (
                         <div style={{ marginBottom: '1.5rem' }}>
                             <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>Due Today</h3>
-                            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+                            <div className="dashboard-task-grid">
                                 {taskGroups.dueToday.map((task) => (
-                                    <Card key={task.crmTaskId} className="glass-panel" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                    <Card key={task.crmTaskId} className="glass-panel task-card-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
                                         <Card.Content>
                                             <div style={{ marginBottom: '0.5rem' }}>
-                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{task.title}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', wordBreak: 'break-word' }}>{task.title}</h4>
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)', wordBreak: 'break-word' }}>
                                                     {task.description || 'No description'}
                                                 </p>
                                             </div>
@@ -541,13 +575,13 @@ export const DashboardScreen: React.FC = () => {
                     {taskGroups.upcoming.length > 0 && (
                         <div>
                             <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>Upcoming Tasks</h3>
-                            <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+                            <div className="dashboard-task-grid">
                                 {taskGroups.upcoming.map((task) => (
-                                    <Card key={task.crmTaskId} className="glass-panel" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+                                    <Card key={task.crmTaskId} className="glass-panel task-card-item" style={{ cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
                                         <Card.Content>
                                             <div style={{ marginBottom: '0.5rem' }}>
-                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600' }}>{task.title}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', wordBreak: 'break-word' }}>{task.title}</h4>
+                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)', wordBreak: 'break-word' }}>
                                                     {task.description || 'No description'}
                                                 </p>
                                             </div>
@@ -632,6 +666,66 @@ export const DashboardScreen: React.FC = () => {
                                 </div>
                             </Card.Content>
                         </Card>
+                    </div>
+                </div>
+            )}
+            {/* Standard Detail Modal Popup */}
+            {selectedKpiCard && (
+                <div className="modal-overlay" onClick={() => setSelectedKpiCard(null)}>
+                    <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '340px' }}>
+                        <div className="modal-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <div className="stat-icon" style={{ color: selectedKpiCard.color }}>
+                                    {React.createElement(selectedKpiCard.icon, { size: 24 })}
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: '1rem' }}>{selectedKpiCard.title}</h3>
+                                </div>
+                            </div>
+                            <button className="icon-btn" onClick={() => setSelectedKpiCard(null)} aria-label="Close modal">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                {selectedKpiCard.description}
+                            </p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Metric Value</span>
+                                    <span style={{ fontSize: '1rem', fontWeight: 700, color: selectedKpiCard.color }}>
+                                        {isLoading ? '—' : selectedKpiCard.format === 'currency' ? formatCurrency(selectedKpiCard.value) : selectedKpiCard.format === 'percentage' ? formatPercentage(selectedKpiCard.value) : selectedKpiCard.value}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</span>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)' }}>Active Sync</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Data Scope</span>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{selectedRole === 'SalesRep' ? 'Assigned' : 'Organization'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedKpiCard(null)}>
+                                Close
+                            </Button>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                    const path = selectedKpiCard.path;
+                                    setSelectedKpiCard(null);
+                                    navigate(path);
+                                }}
+                            >
+                                Open Full Page <ArrowRight size={14} style={{ marginLeft: 4 }} />
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}

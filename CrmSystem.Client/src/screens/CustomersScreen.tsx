@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, Building, Plus, Search, Tag, UserCheck, Users, X } from 'lucide-react';
+import { Download, Building, Plus, Search, Tag, UserCheck, Users, X, Trash2 } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -8,6 +8,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
+import { showToast } from '../lib/toast';
 import './screens.css';
 
 interface TagItem { id: number; name: string; }

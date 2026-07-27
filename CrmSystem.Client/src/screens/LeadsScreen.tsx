@@ -7,7 +7,8 @@ import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
-import { Plus, Search, UserPlus, CheckCircle } from 'lucide-react';
+import { showToast } from '../lib/toast';
+import { Plus, Search, UserPlus, CheckCircle, Trash2 } from 'lucide-react';
 import './screens.css';
 
 interface LeadSummary {
@@ -101,37 +102,35 @@ export const LeadsScreen: React.FC = () => {
                 </div>
             )}
 
-            <div className="filters-bar animate-fade-in">
-                <div style={{ position: 'relative', flex: 1 }}>
+            <div className="filters-bar customer-filters animate-fade-in">
+                <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
                     <Search size={16} className="filter-icon" />
                     <input
                         className="filter-input"
-                        placeholder="Search leads..."
+                        placeholder="Search leads by name, email..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
                 </div>
-                <div style={{ marginLeft: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <select
-                        className="filter-input"
-                        value={selectedStatusId}
-                        onChange={e => setSelectedStatusId(e.target.value)}
-                        style={{ minWidth: '150px' }}
-                    >
-                        <option value="">All Active Statuses</option>
-                        {statuses.map(status => (
-                            <option key={status.id} value={status.id}>{status.name}</option>
-                        ))}
-                    </select>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        <input
-                            type="checkbox"
-                            checked={showConverted}
-                            onChange={e => setShowConverted(e.target.checked)}
-                        />
-                        Include Converted
-                    </label>
-                </div>
+                <select
+                    className="filter-select"
+                    value={selectedStatusId}
+                    onChange={e => setSelectedStatusId(e.target.value)}
+                    style={{ flex: '0 1 180px' }}
+                >
+                    <option value="">All Active Statuses</option>
+                    {statuses.map(status => (
+                        <option key={status.id} value={status.id}>{status.name}</option>
+                    ))}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap', minHeight: '44px' }}>
+                    <input
+                        type="checkbox"
+                        checked={showConverted}
+                        onChange={e => setShowConverted(e.target.checked)}
+                    />
+                    Include Converted
+                </label>
             </div>
 
             <div className="customers-grid">

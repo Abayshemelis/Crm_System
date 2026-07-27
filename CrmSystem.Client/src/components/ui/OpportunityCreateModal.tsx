@@ -125,7 +125,7 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Create New Opportunity</h3>
           <button className="icon-btn" onClick={onCancel}>

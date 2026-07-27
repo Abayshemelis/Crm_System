@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckSquare, Square, AlertTriangle, Clock, Building2, Briefcase, ChevronDown, ChevronRight, MoreVertical, X, Calendar, MessageSquare } from 'lucide-react';
+import { CheckSquare, Square, AlertTriangle, Clock, Building2, Briefcase, ChevronDown, ChevronRight, MoreVertical, X, Calendar, MessageSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 

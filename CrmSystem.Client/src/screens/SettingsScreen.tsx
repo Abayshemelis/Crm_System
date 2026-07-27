@@ -54,14 +54,16 @@ const LookupRow: React.FC<RowProps> = ({ label, badge, onEdit, onDelete, canEdit
     background: 'var(--bg-secondary)',
     borderRadius: 'var(--radius-md)',
     border: '1px solid var(--border-color)',
+    flexWrap: 'wrap',
+    minWidth: 0
   }}>
-    <span style={{ flex: 1, fontWeight: 500 }}>{label}</span>
+    <span style={{ flex: 1, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     {badge}
     {canEdit && (
-      <>
+      <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
         <Button variant="ghost" size="sm" onClick={onEdit}><Edit2 size={14} /></Button>
         <Button variant="ghost" size="sm" onClick={onDelete}><Trash2 size={14} /></Button>
-      </>
+      </div>
     )}
   </div>
 );

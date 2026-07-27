@@ -181,14 +181,14 @@ export const PipelineScreen: React.FC = () => {
                 </Button>
             </div>
 
-            <div className="filters-bar animate-fade-in">
-                <div style={{ position: 'relative', flex: 1 }}>
+            <div className="filters-bar customer-filters animate-fade-in">
+                <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0 }}>
                     <Filter size={16} className="filter-icon" />
                     <select
-                        className="filter-input"
+                        className="filter-select"
                         value={selectedCustomerId}
                         onChange={e => setSelectedCustomerId(e.target.value)}
-                        style={{ minWidth: '200px' }}
+                        style={{ width: '100%' }}
                     >
                         <option value="">All Customers</option>
                         {customers.map(c => (
@@ -198,19 +198,17 @@ export const PipelineScreen: React.FC = () => {
                         ))}
                     </select>
                 </div>
-                <div style={{ marginLeft: '1rem' }}>
-                    <select
-                        className="filter-input"
-                        value={selectedCompanyId}
-                        onChange={e => setSelectedCompanyId(e.target.value)}
-                        style={{ minWidth: '200px' }}
-                    >
-                        <option value="">All Companies</option>
-                        {companies.map(c => (
-                            <option key={c.companyId} value={c.companyId}>{c.name}</option>
-                        ))}
-                    </select>
-                </div>
+                <select
+                    className="filter-select"
+                    value={selectedCompanyId}
+                    onChange={e => setSelectedCompanyId(e.target.value)}
+                    style={{ flex: '1 1 200px', minWidth: 0 }}
+                >
+                    <option value="">All Companies</option>
+                    {companies.map(c => (
+                        <option key={c.companyId} value={c.companyId}>{c.name}</option>
+                    ))}
+                </select>
             </div>
 
             <div className="pipeline-board">

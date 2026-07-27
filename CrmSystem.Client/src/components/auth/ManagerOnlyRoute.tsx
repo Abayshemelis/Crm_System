@@ -7,10 +7,10 @@ interface ManagerOnlyRouteProps {
 }
 
 export const ManagerOnlyRoute: React.FC<ManagerOnlyRouteProps> = ({ children }) => {
-    const { token, isManagerOrAbove } = useAuth();
+    const { token, user, isManagerOrAbove } = useAuth();
     const location = useLocation();
 
-    if (!token) {
+    if (!token || !user) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 

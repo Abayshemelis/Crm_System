@@ -1692,22 +1692,121 @@ html.dark .pricing-card:hover {
   font-size: 0.875rem;
 }
 
-/* Responsive adjustments for new sections */
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE LANDING PAGE SYSTEM (320px – 1920px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Tablet & Smaller Laptops (900px – 1023px) */
 @media (max-width: 900px) {
+  .hero-container {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 2.5rem;
+  }
+
+  .hero-content h1 {
+    font-size: clamp(2rem, 5vw, 2.75rem);
+  }
+
+  .hero-buttons {
+    justify-content: center;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .testimonials-grid {
-    grid-template-columns: 1fr;
-  }
-
+  .testimonials-grid,
   .pricing-grid {
     grid-template-columns: 1fr;
   }
 }
 
+/* Tablet & Mobile Breakpoint (768px) */
+@media (max-width: 768px) {
+  .nav-container {
+    padding: 0.875rem 1.25rem;
+  }
+
+  .nav-links {
+    position: fixed;
+    top: 65px;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    flex-direction: column;
+    padding: 2rem 1.5rem;
+    gap: 1.25rem;
+    border-bottom: 1px solid var(--card-border);
+    transform: translateY(-120%);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-lg);
+    z-index: 99;
+  }
+
+  .nav-links.open {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .nav-actions .btn-primary,
+  .nav-actions .btn-secondary {
+    display: none;
+  }
+
+  .preview-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .preview-middle-section {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-pipeline-stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .pipeline-stage {
+    flex: 1 1 calc(33.33% - 0.4rem);
+    min-width: 65px;
+  }
+}
+
+/* Mobile Viewports (< 600px) */
 @media (max-width: 600px) {
+  .hero-section {
+    padding: 80px 16px 40px;
+  }
+
+  .hero-content h1 {
+    font-size: clamp(1.75rem, 6.5vw, 2.25rem);
+    line-height: 1.2;
+  }
+
+  .hero-buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .hero-buttons .btn-primary,
+  .hero-buttons .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    min-height: 48px;
+  }
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
@@ -1719,5 +1818,286 @@ html.dark .pricing-card:hover {
 
   .newsletter-form {
     flex-direction: column;
+    gap: 0.5rem;
   }
+
+  .newsletter-form button {
+    width: 100%;
+  }
+
+  .faq-question {
+    padding: 1rem;
+  }
+
+  .faq-question h4 {
+    font-size: 0.925rem;
+  }
+}
+
+/* Small Mobile Viewports (< 480px) */
+@media (max-width: 479px) {
+  .nav-logo {
+    font-size: 1.25rem;
+  }
+
+  .preview-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-stage {
+    flex: 1 1 calc(50% - 0.4rem);
+  }
+
+  .section-header h2 {
+    font-size: 1.65rem;
+  }
+
+  .form-success {
+    padding: 1.5rem 1rem;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DISTINCT CONTACT & FOOTER SEPARATION (LIGHT & DARK THEMES)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* --- 1. Contact Section --- */
+.landing-contact-section {
+  padding: 120px 24px 100px;
+  margin-top: 3rem;
+  position: relative;
+  transition: background 0.3s ease;
+}
+
+/* Light Theme Contact: Soft Slate / Soft Indigo Light Surface */
+html:not([data-theme="dark"]) .landing-contact-section {
+  background: linear-gradient(180deg, var(--bg-alt) 0%, #e2e8f0 100%);
+  color: var(--fg);
+}
+
+html:not([data-theme="dark"]) .landing-contact-section .contact-card {
+  background: #ffffff;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  color: var(--fg);
+}
+
+html:not([data-theme="dark"]) .landing-contact-section .contact-icon {
+  color: var(--accent);
+}
+
+html:not([data-theme="dark"]) .landing-contact-section .connect-heading {
+  color: var(--accent);
+}
+
+/* Base Social Links Layout & Spacing */
+.connect-heading {
+  margin-bottom: 1rem;
+}
+
+.social-links-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+  align-items: center;
+}
+
+.social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.social-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+html:not([data-theme="dark"]) .landing-contact-section .social-btn {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+}
+
+html:not([data-theme="dark"]) .landing-contact-section .social-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* Dark Theme Contact: Deep Slate Overlay */
+html[data-theme="dark"] .landing-contact-section {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] .landing-contact-section .contact-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .landing-contact-section .contact-icon {
+  color: #818cf8;
+}
+
+html[data-theme="dark"] .landing-contact-section .connect-heading {
+  color: #a5b4fc;
+}
+
+html[data-theme="dark"] .landing-contact-section .social-btn {
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+html[data-theme="dark"] .landing-contact-section .social-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* --- 2. Smooth Transition Divider Band --- */
+.section-divider-band {
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  opacity: 0.6;
+}
+
+/* --- 3. Footer Section --- */
+.landing-footer-section {
+  padding: 4rem 2rem 2rem;
+  position: relative;
+  transition: background 0.3s ease;
+}
+
+/* Light Theme Footer: High-contrast Dark Slate / Corporate Blue Band */
+html:not([data-theme="dark"]) .landing-footer-section {
+  background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+  color: #f8fafc;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-brand-text {
+  color: #ffffff;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-description {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-column-title {
+  color: #f8fafc;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-links-list a {
+  color: #cbd5e1;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-links-list a:hover {
+  color: #818cf8;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .social-icon-btn {
+  background: rgba(30, 41, 59, 0.9);
+  color: #a5b4fc;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .social-icon-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+html:not([data-theme="dark"]) .landing-footer-section .footer-copyright-bar {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
+/* Dark Theme Footer: Ultra-Deep Obsidian Void (#020617 / #000000) */
+html[data-theme="dark"] .landing-footer-section {
+  background: linear-gradient(180deg, #040711 0%, #000000 100%);
+  color: #f8fafc;
+  border-top: 1px solid rgba(129, 140, 248, 0.25);
+  box-shadow: inset 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-brand-text {
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-description {
+  color: #8892aa;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-column-title {
+  color: #f8fafc;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-links-list a {
+  color: #94a3b8;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-links-list a:hover {
+  color: #818cf8;
+}
+
+html[data-theme="dark"] .landing-footer-section .social-icon-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #a5b4fc;
+  border: 1px solid rgba(129, 140, 248, 0.25);
+}
+
+html[data-theme="dark"] .landing-footer-section .social-icon-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .landing-footer-section .footer-copyright-bar {
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  padding-top: 1.5rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.8rem;
 }

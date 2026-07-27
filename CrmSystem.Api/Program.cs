@@ -31,22 +31,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5173", "http://127.0.0.1:5173",
-                "http://localhost:5174", "http://127.0.0.1:5174",
-                "http://localhost:5175", "http://127.0.0.1:5175",
-                "http://localhost:5176", "http://127.0.0.1:5176",
-                "http://172.25.64.1:5173", "http://172.25.64.1:5174", "http://172.25.64.1:5175", "http://172.25.64.1:5176",
-                "http://172.31.224.1:5173", "http://172.31.224.1:5174", "http://172.31.224.1:5175", "http://172.31.224.1:5176",
-                "http://192.168.78.1:5173", "http://192.168.78.1:5174", "http://192.168.78.1:5175", "http://192.168.78.1:5176",
-                "http://192.168.111.1:5173", "http://192.168.111.1:5174", "http://192.168.111.1:5175", "http://192.168.111.1:5176",
-                "http://192.168.123.12:5173", "http://192.168.123.12:5174", "http://192.168.123.12:5175", "http://192.168.123.12:5176",
-                "http://192.168.91.12:5173", "http://192.168.91.12:5174", "http://192.168.91.12:5175", "http://192.168.91.12:5176",
-                "http://192.168.242.12:5173", "http://192.168.242.12:5174", "http://192.168.242.12:5175", "http://192.168.242.12:5176",
-                "http://192.168.195.12:5173", "http://192.168.195.12:5174", "http://192.168.195.12:5175", "http://192.168.195.12:5176",
-                "http://172.24.96.1:5173", "http://172.24.96.1:5174", "http://172.24.96.1:5175", "http://172.24.96.1:5176")
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -76,6 +64,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
 builder.Services.AddScoped<IOpportunityService, OpportunityService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IAuditService, AuditService>();
@@ -131,9 +120,16 @@ var app = builder.Build();
 // Apply pending migrations on startup
 if (!useInMemoryDatabase)
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Could not apply database migrations on startup. Ensure SQL Server or LocalDB is running if UseInMemoryDatabase is false.");
+    }
 }
 
 // Configure the HTTP request pipeline.

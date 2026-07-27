@@ -272,6 +272,17 @@ export const OpportunityDetailScreen: React.FC = () => {
     window.dispatchEvent(event);
   };
 
+  const deleteOpportunity = async () => {
+    if (!opportunity || !window.confirm(`Are you sure you want to delete opportunity "${opportunity.title}"?`)) return;
+    try {
+      await api.delete(`/api/opportunities/${opportunity.opportunityId}`);
+      triggerToast('Opportunity deleted successfully', 'success');
+      navigate('/opportunities');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to delete opportunity', 'error');
+    }
+  };
+
   const calculatedTotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
 
   const groupedTasks = (() => {
@@ -341,6 +352,9 @@ export const OpportunityDetailScreen: React.FC = () => {
           </Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save Details'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={deleteOpportunity} style={{ color: 'var(--accent-red, #ef4444)' }}>
+            <Trash2 size={16} style={{ marginRight: 4 }} /> Delete
           </Button>
         </div>
       </div>
@@ -573,7 +587,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               {/* Audit History Tab */}
               {activeTab === 'audit' && (
-                <AuditHistoryTable entityType="opportunities" entityId={opportunity.opportunityId} />
+                <AuditHistoryTable entityType="opportunities" entityId={opportunity.opportunityId} entityName={opportunity.title} />
               )}
             </Card.Content>
           </Card>

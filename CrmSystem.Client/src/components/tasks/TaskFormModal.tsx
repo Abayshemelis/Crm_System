@@ -198,7 +198,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+      <div className="modal-content glass-panel" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{isEditing ? 'Edit Task' : 'Create New Task'}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Close modal">
@@ -421,12 +421,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
           {errors.submit && <div className="form-error" style={{ marginTop: '1rem', display: 'block' }}>{errors.submit}</div>}
 
-          <div className="modal-footer" style={{ display: 'flex', justifyContent: isEditing && onDeleted ? 'space-between' : 'flex-end', gap: '0.5rem', width: '100%', padding: '1rem 0 0', marginTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
-            {isEditing && onDeleted && (
-              <Button type="button" variant="danger" onClick={handleDelete} disabled={deleting || saving} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Trash2 size={15} /> Delete Task
-              </Button>
-            )}
+          <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', width: '100%', padding: '1rem 0 0', marginTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
               <button 

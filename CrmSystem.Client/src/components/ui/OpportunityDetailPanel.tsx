@@ -6,7 +6,7 @@ import { DatePicker } from './DatePicker';
 import { SelectDown } from './SelectDown';
 import { api } from '../../lib/api';
 import { X, Plus, Trash2, Check, XCircle, History } from 'lucide-react';
-import { AuditHistory } from '../audit/AuditHistory';
+import { AuditHistoryTable } from '../audit/AuditHistoryTable';
 import '../../screens/screens.css';
 
 interface Opportunity {
@@ -518,7 +518,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                         {activeTab === 'audit' && (
                             <Card className="glass-panel card-detail-section">
                                 <Card.Content>
-                                    <AuditHistory entityType="opportunity" entityId={opportunityId} refreshTrigger={auditRefreshTrigger} />
+                                    <AuditHistoryTable entityType="opportunities" entityId={opportunityId} refreshTrigger={auditRefreshTrigger} entityName={opportunity?.title} />
                                 </Card.Content>
                             </Card>
                         )}

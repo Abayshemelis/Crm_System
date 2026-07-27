@@ -222,35 +222,30 @@ export const UsersScreen: React.FC = () => {
             {users.map(user => (
               <div
                 key={user.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)'
-                }}
+                className="user-row-card animate-fade-in"
               >
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  background: 'var(--bg-tertiary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  <User size={20} style={{ color: 'var(--text-secondary)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: '1 1 200px', minWidth: 0 }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: 'var(--bg-tertiary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <User size={18} style={{ color: 'var(--text-secondary)' }} />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ fontWeight: 500, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</p>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 500, margin: 0 }}>{user.name}</p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0 }}>{user.email}</p>
-                </div>
+
                 {editingUserId === user.id && isManagerOrAboveSelected ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                       {roles.map(role => (
                         <label key={role.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <input
@@ -273,7 +268,7 @@ export const UsersScreen: React.FC = () => {
                     </Button>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     {user.roles && user.roles.length > 0 ? (
                       user.roles.map(r => (
                         <RoleBadge key={r} role={r} />
@@ -290,13 +285,14 @@ export const UsersScreen: React.FC = () => {
                     fontSize: '0.75rem',
                     fontWeight: 500,
                     background: user.isActive ? '#dcfce7' : '#fee2e2',
-                    color: user.isActive ? '#16a34a' : '#dc2626'
+                    color: user.isActive ? '#16a34a' : '#dc2626',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   {user.isActive ? 'Active' : 'Inactive'}
                 </span>
                 {isManagerOrAboveSelected && (
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
                     {/* Only Admin can edit Manager roles */}
                     {(selectedRole === 'Admin' || user.role !== 'Manager') && (
                       <Button variant="ghost" size="sm" onClick={() => {

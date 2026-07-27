@@ -127,12 +127,12 @@ export const CustomerDetailScreen: React.FC = () => {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [cust, tags] = await Promise.all([
+      const [cust, tagsData] = await Promise.all([
         api.get<Customer>(`/api/customers/${id}`),
-        api.get<TagItem[]>('/api/tags')
+        api.get<any[]>('/api/tags')
       ]);
       setCustomer(cust);
-      setAllTags(tags ?? []);
+      setAllTags((tagsData ?? []).map((t: any) => ({ tagId: t.tagId ?? t.id, name: t.name })));
       setEditForm({
         firstName: cust.firstName,
         lastName: cust.lastName,
@@ -395,7 +395,7 @@ export const CustomerDetailScreen: React.FC = () => {
                 {customer.tags && customer.tags.length > 0 && (
                   <div style={{ marginTop: '1.5rem' }}>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>TAGS</p>
-                    <div className="tag-list">{customer.tags.map(tag => <span key={tag.tagId} className="tag-badge">{tag.name}</span>)}</div>
+                    <div className="tag-list">{customer.tags.map((tag, idx) => <span key={tag.tagId ?? tag.name ?? `cust-tag-${idx}`} className="tag-badge">{tag.name}</span>)}</div>
                   </div>
                 )}
               </>
@@ -439,10 +439,10 @@ export const CustomerDetailScreen: React.FC = () => {
                   <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.875rem' }}>Current tags</p>
                   <div className="tag-list" style={{ marginBottom: '1.5rem' }}>
                     {customer.tags && customer.tags.length > 0
-                      ? customer.tags.map(tag => {
+                      ? customer.tags.map((tag, idx) => {
                         const t = allTags.find(x => x.name === tag.name);
                         return (
-                          <span key={tag.tagId} className="tag-badge tag-badge-removable">
+                          <span key={tag.tagId ?? tag.name ?? `cur-tag-${idx}`} className="tag-badge tag-badge-removable">
                             {tag.name}
                             {t && <button onClick={() => removeTag(t.tagId)}><X size={10} /></button>}
                           </span>
@@ -455,8 +455,8 @@ export const CustomerDetailScreen: React.FC = () => {
                     <>
                       <p style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem', fontSize: '0.875rem' }}>Add a tag</p>
                       <div className="tag-list">
-                        {availableTags.map(t => (
-                          <button key={t.tagId} className="tag-add-btn" onClick={() => addTag(t.tagId)}>
+                        {availableTags.map((t, idx) => (
+                          <button key={t.tagId ?? t.name ?? `avail-tag-${idx}`} className="tag-add-btn" onClick={() => addTag(t.tagId)}>
                             <Plus size={12} /> {t.name}
                           </button>
                         ))}
@@ -509,7 +509,7 @@ export const CustomerDetailScreen: React.FC = () => {
 
               {/* Audit History Tab - using reusable component with refresh trigger */}
               {activeTab === 'audit' && (
-                <AuditHistoryTable entityType="customers" entityId={Number(id)} />
+                <AuditHistoryTable entityType="customers" entityId={Number(id)} entityName={`${customer.firstName} ${customer.lastName}`} />
               )}
             </Card.Content>
           </Card>

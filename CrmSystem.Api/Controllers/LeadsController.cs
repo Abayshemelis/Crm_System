@@ -35,6 +35,7 @@ public class LeadsController : ControllerBase
 
         var leads = _db.Leads
             .AsNoTracking()
+            .Where(l => !l.IsDeleted)
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
@@ -483,6 +484,14 @@ public class LeadsController : ControllerBase
             {
                 return BadRequest(new { message = "Company name is required when creating a company." });
             }
+
+            // Check if a company with matching name already exists to prevent duplicate companies
+            var existingCompany = await _db.Companies
+                .FirstOrDefaultAsync(c => c.Name.ToLower() == companyName.ToLower());
+            if (existingCompany is not null)
+            {
+                companyId = existingCompany.CompanyId;
+            }
         }
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -585,6 +594,7 @@ public class LeadsController : ControllerBase
                     changedById: _currentUser.UserId.Value);
             }
         }
+
         // Relink existing activities and tasks to the new Customer/Opportunity
         var leadActivities = await _db.Activities.Where(a => a.LeadId == lead.LeadId).ToListAsync();
         foreach (var act in leadActivities)

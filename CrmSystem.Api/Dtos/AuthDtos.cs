@@ -1,8 +1,10 @@
-﻿namespace CrmSystem.Api.Dtos;
+namespace CrmSystem.Api.Dtos;
 
 public record RegisterRequest(string Name, string Email, string Password);
 
 public record LoginRequest(string Email, string Password);
+
+public record GoogleLoginRequest(string IdToken);
 
 public record RefreshRequest(string RefreshToken);
 

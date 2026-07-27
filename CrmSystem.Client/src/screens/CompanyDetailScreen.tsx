@@ -405,7 +405,7 @@ export const CompanyDetailScreen: React.FC = () => {
               )}
 
               {activeTab === 'audit' && (
-                <AuditHistoryTable entityType="companies" entityId={Number(id)} />
+                <AuditHistoryTable entityType="companies" entityId={Number(id)} entityName={company.name} />
               )}
             </Card.Content>
           </Card>

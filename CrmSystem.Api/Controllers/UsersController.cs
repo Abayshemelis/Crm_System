@@ -298,12 +298,56 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
+        var currentUserId = GetCurrentUserId();
+
         // Prevent deleting the current user
-        if (user.IdentityId == GetCurrentUserId())
+        if (user.IdentityId == currentUserId)
         {
             return BadRequest(new { message = "Cannot delete your own account." });
         }
 
+        // 1. Remove child security records
+        var identityRoles = _db.IdentityRoles.Where(ir => ir.IdentityId == id);
+        _db.IdentityRoles.RemoveRange(identityRoles);
+
+        var refreshTokens = _db.RefreshTokens.Where(rt => rt.IdentityId == id);
+        _db.RefreshTokens.RemoveRange(refreshTokens);
+
+        var passwordResetTokens = _db.PasswordResetTokens.Where(prt => prt.IdentityId == id);
+        _db.PasswordResetTokens.RemoveRange(passwordResetTokens);
+
+        var notifications = _db.Notifications.Where(n => n.IdentityId == id);
+        _db.Notifications.RemoveRange(notifications);
+
+        // 2. Reassign domain entity references to current Admin user to avoid FK constraint violations
+        var customers = await _db.Customers.Where(c => c.AssignedRepId == id).ToListAsync();
+        foreach (var c in customers) c.AssignedRepId = currentUserId;
+
+        var companies = await _db.Companies.Where(c => c.AssignedRepId == id).ToListAsync();
+        foreach (var c in companies) c.AssignedRepId = currentUserId;
+
+        var leads = await _db.Leads.Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id).ToListAsync();
+        foreach (var l in leads)
+        {
+            if (l.AssignedRepId == id) l.AssignedRepId = currentUserId;
+            if (l.CreatedById == id) l.CreatedById = currentUserId;
+            if (l.ConvertedById == id) l.ConvertedById = currentUserId;
+        }
+
+        var opportunities = await _db.Opportunities.Where(o => o.OwnerId == id).ToListAsync();
+        foreach (var o in opportunities) o.OwnerId = currentUserId;
+
+        var tasks = await _db.CrmTasks.Where(t => t.AssignedToId == id || t.CreatedById == id).ToListAsync();
+        foreach (var t in tasks)
+        {
+            if (t.AssignedToId == id) t.AssignedToId = currentUserId;
+            if (t.CreatedById == id) t.CreatedById = currentUserId;
+        }
+
+        var activities = await _db.Activities.Where(a => a.CreatedById == id).ToListAsync();
+        foreach (var a in activities) a.CreatedById = currentUserId;
+
+        // 3. Remove user identity record
         _db.Identities.Remove(user);
         await _db.SaveChangesAsync();
 
