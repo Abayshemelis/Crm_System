@@ -84,16 +84,23 @@ namespace CrmSystem.Infrastructure.Services
                 query = query.Where(o => o.OpportunityStageId == opportunityStageId.Value);
 
             if (expectedCloseDateFrom.HasValue)
-                query = query.Where(o => o.ExpectedCloseDate >= expectedCloseDateFrom.Value);
+                query = query.Where(o => o.ExpectedCloseDate >= expectedCloseDateFrom.Value.Date);
 
             if (expectedCloseDateTo.HasValue)
-                query = query.Where(o => o.ExpectedCloseDate <= expectedCloseDateTo.Value);
+            {
+                var endOfClose = expectedCloseDateTo.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(o => o.ExpectedCloseDate <= endOfClose);
+            }
 
             if (createdDateFrom.HasValue)
-                query = query.Where(o => o.CreatedAt >= createdDateFrom.Value);
+                query = query.Where(o => o.CreatedAt >= createdDateFrom.Value.Date);
 
             if (createdDateTo.HasValue)
-                query = query.Where(o => o.CreatedAt <= createdDateTo.Value);
+            {
+                var endOfCreated = createdDateTo.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(o => o.CreatedAt <= endOfCreated);
+            }
+
 
             if (minValue.HasValue)
                 query = query.Where(o => o.EstimatedValue >= minValue.Value);
@@ -124,11 +131,25 @@ namespace CrmSystem.Infrastructure.Services
 
             if (dto.Title != null)                    opp.Title               = dto.Title;
             if (dto.Description != null)              opp.Description         = dto.Description;
-            if (dto.OpportunityStageId.HasValue)      opp.OpportunityStageId  = dto.OpportunityStageId.Value;
+            if (dto.OpportunityStageId.HasValue && dto.OpportunityStageId.Value != opp.OpportunityStageId)
+            {
+                opp.OpportunityStageId = dto.OpportunityStageId.Value;
+                var stage = await _context.OpportunityStages.FindAsync(dto.OpportunityStageId.Value);
+                if (stage != null && (stage.IsWon || stage.IsLost))
+                {
+                    opp.ActualCloseDate = DateTime.UtcNow;
+                }
+                else if (stage != null && !stage.IsWon && !stage.IsLost)
+                {
+                    opp.ActualCloseDate = null;
+                }
+            }
             if (dto.EstimatedValue.HasValue)          opp.EstimatedValue      = dto.EstimatedValue.Value;
             if (dto.ExpectedCloseDate.HasValue)       opp.ExpectedCloseDate   = dto.ExpectedCloseDate.Value;
             if (dto.ActualCloseDate.HasValue)         opp.ActualCloseDate     = dto.ActualCloseDate.Value;
             if (dto.OwnerId.HasValue)                 opp.OwnerId             = dto.OwnerId.Value;
+
+            opp.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             return true;
@@ -150,6 +171,7 @@ namespace CrmSystem.Infrastructure.Services
             _context.Opportunities
                 .Include(o => o.OpportunityStage)
                 .Include(o => o.Customer)
+                    .ThenInclude(c => c!.Company)
                 .Include(o => o.Owner);
 
         private static OpportunityReadDto MapToReadDto(Opportunity opp) => new()
@@ -170,6 +192,7 @@ namespace CrmSystem.Infrastructure.Services
             ActualCloseDate    = opp.ActualCloseDate,
             OwnerId            = opp.OwnerId,
             OwnerName          = opp.Owner?.Name ?? string.Empty,
+            CompanyName        = opp.Customer?.Company?.Name,
             CreatedAt          = opp.CreatedAt
         };
     }

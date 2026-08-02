@@ -26,8 +26,19 @@ public class Lead
     public Identity? ConvertedBy { get; set; }
     public int? ConvertedOpportunityId { get; set; }
     public Opportunity? ConvertedOpportunity { get; set; }
+    public string? Priority { get; set; } = "Medium";
+    public int LeadScore { get; set; } = 0;
+    public string? LostReason { get; set; }
+    public DateTime? NextFollowUpDate { get; set; }
+    public string? NextFollowUpType { get; set; }
+    public string? NextFollowUpNotes { get; set; }
+    public int? NextFollowUpAssignedToId { get; set; }
+    public Identity? NextFollowUpAssignedTo { get; set; }
+    public DateTime? LastActivityAt { get; set; }
+
     public bool IsDeleted { get; set; } = false;
 
     public ICollection<Activity> Activities { get; set; } = new List<Activity>();
     public ICollection<CrmTask> Tasks { get; set; } = new List<CrmTask>();
 }
+

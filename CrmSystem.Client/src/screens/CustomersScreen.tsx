@@ -5,6 +5,7 @@ import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
@@ -63,6 +64,8 @@ export const CustomersScreen: React.FC = () => {
   const [companyId, setCompanyId] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [tagIds, setTagIds] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [bulkLoading, setBulkLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [repId, setRepId] = useState('');
@@ -79,8 +82,10 @@ export const CustomersScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
+      const dateFromParam = startDate ? `&createdFrom=${startDate}` : '';
+      const dateToParam = endDate ? `&createdTo=${endDate}` : '';
       const [customerData, companyData, sourceData, tagData, userData] = await Promise.all([
-        api.get<{ data: CustomerApiResponse[] }>('/api/customers?page=1&pageSize=100'),
+        api.get<{ data: CustomerApiResponse[] }>(`/api/customers?page=1&pageSize=100${dateFromParam}${dateToParam}`),
         api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100'),
         api.get<{ id: number; name: string }[]>('/api/sources'),
         api.get<TagItem[]>('/api/tags'),
@@ -112,7 +117,7 @@ export const CustomersScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [isManagerOrAbove]);
+  }, [isManagerOrAbove, startDate, endDate]);
 
   useEffect(() => { load(); }, [load, location.key]);
 
@@ -186,20 +191,28 @@ export const CustomersScreen: React.FC = () => {
     const link = document.createElement('a'); link.href = url; link.download = 'customers.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
-  if (loading) return <Layout><div className="dashboard-header"><div className="dashboard-title"><h1>Customers</h1><p>Loading customers…</p></div></div><div className="table-skeleton">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} variant="rect" height={46} />)}</div></Layout>;
+  if (loading && !customers.length) return <Layout><div className="dashboard-header"><div className="dashboard-title"><h1>Customers</h1><p>Loading customers…</p></div></div><div className="table-skeleton">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} variant="rect" height={46} />)}</div></Layout>;
 
   return <Layout>
     <div className="dashboard-header animate-fade-in"><div className="dashboard-title"><h1>Customers</h1><p>{filtered.length} contacts found</p></div><Button onClick={() => navigate('/customers/new')}><Plus size={16} /> New Customer</Button></div>
     {error && <div className="error-banner">{error}</div>}
     {message && <div className="success-banner">{message}</div>}
-    <div className="filters-bar customer-filters">
+    <div className="filters-bar customer-filters" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
       <div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={16} className="filter-icon" /><input className="filter-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /></div>
       <select className="filter-select" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       <select className="filter-select" value={sourceId} onChange={e => setSourceId(e.target.value)}><option value="">All sources</option>{sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-      <div style={{ minWidth: 220 }}>
+      <div style={{ minWidth: 200 }}>
         <SearchableMultiSelect options={tags.map(t => ({ id: t.id, name: t.name }))} selectedIds={tagIds} onChange={setTagIds} placeholder="Filter tags…" />
       </div>
       {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map((r, index) => <option key={r.id != null ? `rep-${r.id}` : `rep-${index}`} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>}
+      <DateRangePicker
+        startDate={startDate}
+        endDate={endDate}
+        onApply={(s, e) => {
+          setStartDate(s);
+          setEndDate(e);
+        }}
+      />
     </div>
     {selected.size > 0 && <div className="bulk-panel"><span>{selected.size} selected</span>
       <select className="filter-select" disabled={bulkLoading} value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}><option value="">Add tag…</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>

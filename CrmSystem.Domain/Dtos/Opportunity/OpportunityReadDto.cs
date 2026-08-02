@@ -20,6 +20,7 @@ namespace CrmSystem.Domain.Dtos.Opportunity
         public DateTime? ActualCloseDate { get; set; }
         public int OwnerId { get; set; }
         public string OwnerName { get; set; } = string.Empty;
+        public string? CompanyName { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

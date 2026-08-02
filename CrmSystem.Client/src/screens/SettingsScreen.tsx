@@ -5,7 +5,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import {
   Palette, Plus, Trash2, Edit2, Check, X,
-  Layers, Tag, Globe, List, Bell, Activity, Package
+  Layers, Tag, Globe, List, Bell, Activity, Package,
+  Sparkles, Sun, Moon, Eye
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +39,11 @@ interface ProductStatus { id: number; name: string; isSelectable: boolean; }
 
 type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme';
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
+
+import { ThemePreset, ATTRACTIVE_THEMES, applyThemePreset } from '../lib/theme';
+export type { ThemePreset };
+
+// ── Generic inline-edit row ────────────────────────────────────────────────────
 
 // ── Generic inline-edit row ────────────────────────────────────────────────────
 interface RowProps {
@@ -121,60 +127,65 @@ export const SettingsScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTab>('pipeline');
   const [statusSubTab, setStatusSubTab] = useState<StatusSubTab>('lead');
 
-  // ── Theme state (preserved from original) ──
-  const PRESET_THEMES = [
-    { name: 'Cyan Ocean', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0a0e27,#1a1f3a,#0f172a)', accentColor: '#06b6d4' },
-    { name: 'Purple Galaxy', mode: 'dark' as const, bg: 'linear-gradient(135deg,#1a0033,#330066,#1a0033)', accentColor: '#a78bfa' },
-    { name: 'Emerald Forest', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0d2818,#1a4d2e,#0d2818)', accentColor: '#10b981' },
-    { name: 'Rose Gold', mode: 'dark' as const, bg: 'linear-gradient(135deg,#3d1a1a,#5a2a2a,#3d1a1a)', accentColor: '#f87171' },
-    { name: 'Slate Professional', mode: 'dark' as const, bg: 'linear-gradient(135deg,#0f172a,#1e293b,#0f172a)', accentColor: '#3b82f6' },
-    { name: 'Light Clean', mode: 'light' as const, bg: 'linear-gradient(135deg,#f8fafc,#e2e8f0,#f1f5f9)', accentColor: '#0284c7' },
-  ];
-  const [storedTheme, setStoredTheme] = useState<Record<string, any>>(() => {
+  // ── Theme State ──
+  const [activePreset, setActivePreset] = useState<ThemePreset>(() => {
     try {
-      const storedTheme = localStorage.getItem('crm-theme');
-      return storedTheme ? JSON.parse(storedTheme) : {};
-    } catch {
-      return {};
-    }
+      const p = localStorage.getItem('crm-theme-preset');
+      if (p) {
+        const parsed = JSON.parse(p);
+        if (parsed && parsed.id) return parsed;
+      }
+    } catch { /* ignore */ }
+    return ATTRACTIVE_THEMES[0];
   });
-  const [theme, setTheme] = useState<Record<string, any>>({});
-  const [customAccent, setCustomAccent] = useState(storedTheme.accentColor || '#06b6d4');
-  const [hasThemeChanged, setHasThemeChanged] = useState(false);
 
-  useEffect(() => {
-    if (!hasThemeChanged && storedTheme.accentColor) {
-      setCustomAccent(storedTheme.accentColor);
-    }
-  }, [storedTheme, hasThemeChanged]);
+  // ── Live Interactive Preview Controls ──
+  const [previewTimeframe, setPreviewTimeframe] = useState<'Q3 2026' | 'YTD 2026'>('Q3 2026');
+  const [previewActionCount, setPreviewActionCount] = useState(0);
 
-  useEffect(() => {
-    if (!hasThemeChanged || !theme || Object.keys(theme).length === 0) {
-      return;
-    }
+  const handlePrimaryActionDemo = () => {
+    setPreviewActionCount(prev => prev + 1);
+    toast('✨ Primary Action Triggered! Added +$12.5k sample deal');
+  };
 
-    const root = document.documentElement;
-    if (typeof theme.mode === 'string') {
-      root.setAttribute('data-theme', theme.mode);
-    }
-    if (typeof theme.accentColor === 'string') {
-      root.style.setProperty('--accent-primary', theme.accentColor);
-    }
-    if (typeof theme.background === 'string') {
-      root.style.setProperty('--page-background', theme.background);
-    }
+  const handleSecondaryFilterToggle = () => {
+    const nextTimeframe = previewTimeframe === 'Q3 2026' ? 'YTD 2026' : 'Q3 2026';
+    setPreviewTimeframe(nextTimeframe);
+    toast(`🔍 Secondary Filter Applied: Switched to ${nextTimeframe} View`);
+  };
 
-    const accentHex = typeof theme.accentColor === 'string'
-      ? theme.accentColor
-      : getComputedStyle(root).getPropertyValue('--accent-primary').trim() || '#06b6d4';
-    const r = parseInt(accentHex.slice(1, 3), 16);
-    const g = parseInt(accentHex.slice(3, 5), 16);
-    const b = parseInt(accentHex.slice(5, 7), 16);
-    root.style.setProperty('--accent-glow', `rgba(${r},${g},${b},0.5)`);
-    localStorage.setItem('crm-theme', JSON.stringify(theme));
-  }, [theme, hasThemeChanged]);
+  const [themeModeFilter, setThemeModeFilter] = useState<'all' | 'dark' | 'light'>('all');
 
-  const effectiveTheme = hasThemeChanged ? theme : storedTheme;
+  const filteredPresets = ATTRACTIVE_THEMES.filter(t => {
+    if (themeModeFilter === 'dark') return t.mode === 'dark';
+    if (themeModeFilter === 'light') return t.mode === 'light';
+    return true;
+  });
+
+  const handleAccentChange = (hexColor: string) => {
+    const updated: ThemePreset = {
+      ...activePreset,
+      accentPrimary: hexColor,
+      accentHover: hexColor,
+      accentGlow: hexColor + '66'
+    };
+    setActivePreset(updated);
+    applyThemePreset(updated);
+    toast(`Custom Accent Color applied: ${hexColor}`);
+  };
+
+  const handleResetTheme = () => {
+    const defaultPreset = ATTRACTIVE_THEMES[0];
+    setActivePreset(defaultPreset);
+    applyThemePreset(defaultPreset);
+    toast('Reset to Midnight Cyber default theme');
+  };
+
+  const selectTheme = (preset: ThemePreset) => {
+    setActivePreset(preset);
+    applyThemePreset(preset);
+    toast(`Theme activated: ${preset.name}`);
+  };
 
   // ── Pipeline Stages ──────────────────────────────────────────────────────────
   const stages = useLookup<Stage>('/api/opportunitystages');
@@ -924,54 +935,374 @@ export const SettingsScreen: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Theme ─────────────────────────────────────────────────────────────── */}
+      {/* ── Theme Studio ───────────────────────────────────────────────────────── */}
       {activeTab === 'theme' && (
-        <Card className="glass-panel p-6">
-          <Card.Content>
-            <Section title="Preset Themes">
-              <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
-                {PRESET_THEMES.map((p, i) => (
-                  <div key={i} onClick={() => { setTheme({ mode: p.mode, accentColor: p.accentColor, background: p.bg }); setHasThemeChanged(true); setCustomAccent(p.accentColor); }}
-                    style={{
-                      background: p.bg, cursor: 'pointer', borderRadius: 'var(--radius-lg)', padding: '1rem',
-                      border: effectiveTheme.accentColor === p.accentColor ? `2px solid ${p.accentColor}` : '2px solid transparent',
-                      transform: effectiveTheme.accentColor === p.accentColor ? 'scale(1.04)' : 'scale(1)',
-                      transition: 'all 0.2s',
-                    }}>
-                    <p style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem', marginBottom: 2 }}>{p.name}</p>
-                    <p style={{ color: '#fff', opacity: 0.7, fontSize: '0.75rem' }}>{p.mode} mode</p>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            <Section title="Mode">
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                {(['dark', 'light'] as const).map(m => (
-                  <button key={m} onClick={() => { setTheme((p: any) => ({ ...effectiveTheme, mode: m })); setHasThemeChanged(true); }}
-                    style={{ padding: '0.6rem 1.25rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.2s', color: 'var(--text-primary)', background: effectiveTheme.mode === m ? 'rgba(6,182,212,0.12)' : 'transparent', border: effectiveTheme.mode === m ? `2px solid ${effectiveTheme.accentColor || '#06b6d4'}` : '2px solid var(--border-color)' }}>
-                    {m.charAt(0).toUpperCase() + m.slice(1)} Mode
-                  </button>
-                ))}
-              </div>
-            </Section>
-
-            <Section title="Custom Accent Color">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <input type="color" value={customAccent} onChange={e => { setCustomAccent(e.target.value); setTheme((p: any) => ({ ...effectiveTheme, accentColor: e.target.value })); setHasThemeChanged(true); }}
-                  style={{ width: 64, height: 64, border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* 1. Theme Studio Header Banner */}
+          <Card className="glass-panel p-6">
+            <Card.Content>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                  <p style={{ fontWeight: 600 }}>Accent Color</p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Used for buttons, highlights and UI accents.</p>
-                  <p style={{ color: theme.accentColor, fontFamily: 'monospace', fontSize: '0.85rem', marginTop: 4 }}>{customAccent}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-primary)', marginBottom: '0.25rem' }}>
+                    <Sparkles size={18} />
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Enterprise UI Customizer</span>
+                  </div>
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Appearance & Theme Studio
+                  </h2>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', margin: '0.25rem 0 0 0' }}>
+                    Personalize your CRM system with high-contrast, modern glassmorphism aesthetic themes
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-secondary)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Theme:</span>
+                  <span className="rpt-badge-chip" style={{ background: activePreset.accentGlow, color: activePreset.accentPrimary, borderColor: activePreset.accentPrimary, fontWeight: 700 }}>
+                    {activePreset.name} ({activePreset.mode})
+                  </span>
                 </div>
               </div>
-              <Button variant="secondary" onClick={() => { setTheme({ mode: 'dark', accentColor: '#06b6d4', background: 'linear-gradient(135deg,#0a0e27,#1a1f3a,#0f172a)' }); setHasThemeChanged(true); setCustomAccent('#06b6d4'); }} style={{ marginTop: '1rem' }}>
-                Reset to Default
-              </Button>
-            </Section>
-          </Card.Content>
-        </Card>
+            </Card.Content>
+          </Card>
+
+          {/* 2. Theme Presets Grid */}
+          <Card className="glass-panel p-6">
+            <Card.Content>
+              <Section title="Curated Theme Collections">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+
+                  {/* Theme Mode Filter Pills */}
+                  <div style={{ display: 'flex', gap: '0.4rem', background: 'var(--bg-secondary)', padding: '4px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)' }}>
+                    <button
+                      onClick={() => setThemeModeFilter('all')}
+                      style={{
+                        padding: '0.4rem 0.85rem',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: themeModeFilter === 'all' ? 'var(--accent-primary)' : 'transparent',
+                        color: themeModeFilter === 'all' ? '#ffffff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      All Themes ({ATTRACTIVE_THEMES.length})
+                    </button>
+                    <button
+                      onClick={() => setThemeModeFilter('dark')}
+                      style={{
+                        padding: '0.4rem 0.85rem',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: themeModeFilter === 'dark' ? 'var(--accent-primary)' : 'transparent',
+                        color: themeModeFilter === 'dark' ? '#ffffff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <Moon size={12} /> Dark ({ATTRACTIVE_THEMES.filter(t => t.mode === 'dark').length})
+                    </button>
+                    <button
+                      onClick={() => setThemeModeFilter('light')}
+                      style={{
+                        padding: '0.4rem 0.85rem',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: themeModeFilter === 'light' ? 'var(--accent-primary)' : 'transparent',
+                        color: themeModeFilter === 'light' ? '#ffffff' : 'var(--text-secondary)',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <Sun size={12} /> Light ({ATTRACTIVE_THEMES.filter(t => t.mode === 'light').length})
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', marginBottom: '1.5rem' }}>
+                  {filteredPresets.map((preset) => {
+                    const isActive = activePreset.id === preset.id;
+                    const displayPreset = isActive ? activePreset : preset;
+                    return (
+                      <div
+                        key={preset.id}
+                        onClick={() => selectTheme(displayPreset)}
+                        style={{
+                          background: displayPreset.pageBg,
+                          borderRadius: 'var(--radius-xl)',
+                          border: isActive ? `2px solid ${displayPreset.accentPrimary}` : '1px solid var(--border-color)',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                          transform: isActive ? 'scale(1.02)' : 'scale(1)',
+                          boxShadow: isActive ? `0 8px 24px ${displayPreset.accentGlow}` : '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        {/* Gradient Header Banner */}
+                        <div style={{
+                          height: 70,
+                          background: displayPreset.previewGradient,
+                          padding: '0.75rem 1rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start'
+                        }}>
+                          <span style={{
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: 20,
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            background: 'rgba(0,0,0,0.4)',
+                            color: '#fff',
+                            backdropFilter: 'blur(4px)'
+                          }}>
+                            {displayPreset.badge}
+                          </span>
+
+                          {isActive && (
+                            <span style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: '50%',
+                              background: displayPreset.accentPrimary,
+                              color: '#fff',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                            }}>
+                              <Check size={14} />
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Card Content Body */}
+                        <div style={{ padding: '1rem', background: displayPreset.bgSecondary }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: displayPreset.textPrimary }}>
+                              {displayPreset.name}
+                            </h4>
+                            <span style={{ fontSize: '0.72rem', color: displayPreset.textMuted, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              {displayPreset.mode === 'dark' ? <Moon size={12} /> : <Sun size={12} />}
+                              {displayPreset.mode}
+                            </span>
+                          </div>
+
+                          <p style={{ margin: '0 0 1rem 0', fontSize: '0.78rem', color: displayPreset.textSecondary, lineHeight: 1.4, height: 32, overflow: 'hidden' }}>
+                            {displayPreset.tagline}
+                          </p>
+
+                          {/* Color Palette Swatches */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: '0.68rem', color: displayPreset.textMuted, textTransform: 'uppercase', fontWeight: 700, marginRight: 4 }}>Colors</span>
+                            <div style={{ width: 18, height: 18, borderRadius: '50%', background: displayPreset.pageBg, border: '1px solid rgba(255,255,255,0.2)' }} title="Background" />
+                            <div style={{ width: 18, height: 18, borderRadius: '50%', background: displayPreset.bgSecondary, border: '1px solid rgba(255,255,255,0.2)' }} title="Card Container" />
+
+                            {/* Interactive Accent Color Picker Swatch */}
+                            <label title="Click to customize Accent Color for this theme" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', position: 'relative' }}>
+                              <input
+                                type="color"
+                                value={displayPreset.accentPrimary}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const customHex = e.target.value;
+                                  const updatedPreset = {
+                                    ...displayPreset,
+                                    accentPrimary: customHex,
+                                    accentHover: customHex,
+                                    accentGlow: customHex + '66'
+                                  };
+                                  selectTheme(updatedPreset);
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  opacity: 0,
+                                  top: 0,
+                                  left: 0,
+                                  width: '100%',
+                                  height: '100%',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                              <div style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                background: displayPreset.accentPrimary,
+                                boxShadow: `0 0 10px ${displayPreset.accentGlow}`,
+                                border: '2px solid #ffffff'
+                              }} />
+                            </label>
+
+                            <div style={{ width: 18, height: 18, borderRadius: '50%', background: displayPreset.textPrimary, border: '1px solid rgba(255,255,255,0.2)' }} title="Text Header" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Color Overrider & Reset */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '1.25rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <input
+                      type="color"
+                      value={activePreset.accentPrimary}
+                      onChange={e => handleAccentChange(e.target.value)}
+                      style={{ width: 44, height: 44, border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: 'none' }}
+                    />
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>Custom Primary Accent Override</h4>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Fine-tune current preset accent color ({activePreset.accentPrimary})</span>
+                    </div>
+                  </div>
+
+                  <Button variant="secondary" size="sm" onClick={handleResetTheme}>
+                    Reset to Midnight Cyber Default
+                  </Button>
+                </div>
+              </Section>
+            </Card.Content>
+          </Card>
+
+          {/* 3. Live UI Theme Preview Box */}
+          <Card className="glass-panel p-6">
+            <Card.Content>
+              <Section title="Live Interactive UI Preview">
+                <div style={{
+                  background: activePreset.pageBg,
+                  borderRadius: 'var(--radius-xl)',
+                  padding: '1.5rem',
+                  border: `1px solid ${activePreset.borderColor}`,
+                  boxShadow: `0 12px 36px ${activePreset.accentGlow}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)', background: activePreset.accentPrimary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Eye size={20} />
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: activePreset.textPrimary }}>
+                          CRM Opportunity Preview ({previewTimeframe})
+                        </h4>
+                        <span style={{ fontSize: '0.78rem', color: activePreset.textSecondary }}>
+                          Live interactive test of {activePreset.name} components & controls
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{
+                        padding: '0.3rem 0.8rem',
+                        borderRadius: 20,
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        background: activePreset.accentGlow,
+                        color: activePreset.accentPrimary,
+                        border: `1px solid ${activePreset.accentPrimary}44`
+                      }}>
+                        Pipeline Active
+                      </span>
+                      {previewActionCount > 0 && (
+                        <span style={{
+                          padding: '0.3rem 0.8rem',
+                          borderRadius: 20,
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          color: '#10b981',
+                          border: '1px solid rgba(16, 185, 129, 0.4)'
+                        }}>
+                          +{previewActionCount} Test Deals
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                    <div style={{ background: activePreset.bgSecondary, padding: '1rem', borderRadius: 'var(--radius-lg)', border: `1px solid ${activePreset.borderColor}` }}>
+                      <span style={{ fontSize: '0.72rem', color: activePreset.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>Pipeline Capital</span>
+                      <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: activePreset.accentPrimary }}>
+                        ${((previewTimeframe === 'Q3 2026' ? 148500 : 482000) + previewActionCount * 12500).toLocaleString()}
+                      </h3>
+                    </div>
+                    <div style={{ background: activePreset.bgSecondary, padding: '1rem', borderRadius: 'var(--radius-lg)', border: `1px solid ${activePreset.borderColor}` }}>
+                      <span style={{ fontSize: '0.72rem', color: activePreset.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>Conversion Win Rate</span>
+                      <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>
+                        {previewTimeframe === 'Q3 2026' ? '68.4%' : '74.2%'}
+                      </h3>
+                    </div>
+                    <div style={{ background: activePreset.bgSecondary, padding: '1rem', borderRadius: 'var(--radius-lg)', border: `1px solid ${activePreset.borderColor}` }}>
+                      <span style={{ fontSize: '0.72rem', color: activePreset.textMuted, fontWeight: 600, textTransform: 'uppercase' }}>Deals In Pipeline</span>
+                      <h3 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem', fontWeight: 800, color: activePreset.textPrimary }}>
+                        {previewTimeframe === 'Q3 2026' ? 24 + previewActionCount : 86 + previewActionCount}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handlePrimaryActionDemo}
+                      style={{
+                        padding: '0.65rem 1.35rem',
+                        borderRadius: 'var(--radius-md)',
+                        background: activePreset.accentPrimary,
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        boxShadow: `0 4px 14px ${activePreset.accentGlow}`,
+                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <Sparkles size={16} />
+                      Primary Action (+1 Deal)
+                    </button>
+
+                    <button
+                      onClick={handleSecondaryFilterToggle}
+                      style={{
+                        padding: '0.65rem 1.35rem',
+                        borderRadius: 'var(--radius-md)',
+                        background: activePreset.bgTertiary,
+                        color: activePreset.textPrimary,
+                        border: `1px solid ${activePreset.borderColor}`,
+                        fontWeight: 600,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <Globe size={16} />
+                      Secondary Filter ({previewTimeframe})
+                    </button>
+                  </div>
+                </div>
+              </Section>
+            </Card.Content>
+          </Card>
+        </div>
       )}
     </Layout>
   );

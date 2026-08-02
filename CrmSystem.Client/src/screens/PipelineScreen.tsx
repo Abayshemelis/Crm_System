@@ -5,10 +5,11 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { DatePicker } from '../components/ui/DatePicker';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { OpportunityDetailPanel } from '../components/ui/OpportunityDetailPanel';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
-import { Plus, Filter } from 'lucide-react';
+import { Plus, Filter, Search, X, Calendar } from 'lucide-react';
 import './screens.css';
 
 interface Opportunity {
@@ -16,6 +17,7 @@ interface Opportunity {
     customerId: number;
     customerFirstName: string;
     customerLastName: string;
+    companyName?: string;
     title: string;
     opportunityStageId: number;
     stageName: string;
@@ -52,6 +54,11 @@ export const PipelineScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
+    const [dateFilterField, setDateFilterField] = useState<'created' | 'expectedClose'>('created');
+
+    const [search, setSearch] = useState('');
     const [draggedOpportunity, setDraggedOpportunity] = useState<Opportunity | null>(null);
     const [selectedOpportunity, setSelectedOpportunity] = useState<number | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -63,6 +70,14 @@ export const PipelineScreen: React.FC = () => {
             const params = new URLSearchParams();
             if (selectedCustomerId) params.append('customerId', selectedCustomerId);
             if (selectedCompanyId) params.append('companyId', selectedCompanyId);
+            if (startDate) {
+                if (dateFilterField === 'expectedClose') params.append('expectedCloseDateFrom', startDate);
+                else params.append('createdDateFrom', startDate);
+            }
+            if (endDate) {
+                if (dateFilterField === 'expectedClose') params.append('expectedCloseDateTo', endDate);
+                else params.append('createdDateTo', endDate);
+            }
 
             const queryString = params.toString();
             const url = queryString ? `/api/opportunities?${queryString}` : '/api/opportunities';
@@ -84,11 +99,33 @@ export const PipelineScreen: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedCustomerId, selectedCompanyId]);
+    }, [selectedCustomerId, selectedCompanyId, startDate, endDate, dateFilterField]);
 
     useEffect(() => {
         loadOpportunities();
     }, [loadOpportunities]);
+
+    const filteredOpportunities = opportunities.filter(opp => {
+        if (!search.trim()) return true;
+        const term = search.toLowerCase().trim();
+        const firstName = (opp.customerFirstName || '').toLowerCase();
+        const lastName = (opp.customerLastName || '').toLowerCase();
+        const fullName = `${firstName} ${lastName}`.trim();
+        const company = (opp.companyName || '').toLowerCase();
+        const title = (opp.title || '').toLowerCase();
+        const owner = (opp.ownerName || '').toLowerCase();
+        const stage = (opp.stageName || '').toLowerCase();
+
+        return (
+            fullName.includes(term) ||
+            firstName.includes(term) ||
+            lastName.includes(term) ||
+            company.includes(term) ||
+            title.includes(term) ||
+            owner.includes(term) ||
+            stage.includes(term)
+        );
+    });
 
     const handleStageChange = async (opportunityId: number, newStageId: number) => {
         try {
@@ -96,9 +133,7 @@ export const PipelineScreen: React.FC = () => {
             await loadOpportunities();
         } catch (error) {
             console.error('Failed to update stage:', error);
-            // Revert optimistic update on error
             await loadOpportunities();
-            // Show toast error
             const event = new CustomEvent('app:toast', {
                 detail: { message: 'Failed to update stage. Please try again.', type: 'error' as const }
             });
@@ -126,7 +161,6 @@ export const PipelineScreen: React.FC = () => {
             return;
         }
 
-        // Optimistic update
         const updatedOpportunities = opportunities.map(opp =>
             opp.opportunityId === draggedOpportunity.opportunityId
                 ? { ...opp, opportunityStageId: targetStageId }
@@ -134,7 +168,6 @@ export const PipelineScreen: React.FC = () => {
         );
         setOpportunities(updatedOpportunities);
 
-        // API call
         await handleStageChange(draggedOpportunity.opportunityId, targetStageId);
         setDraggedOpportunity(null);
     };
@@ -151,7 +184,7 @@ export const PipelineScreen: React.FC = () => {
     };
 
     const getOpportunitiesByStage = (stageId: number) => {
-        return opportunities.filter(opp => opp.opportunityStageId === stageId);
+        return filteredOpportunities.filter(opp => opp.opportunityStageId === stageId);
     };
 
     const getStageTotal = (stageId: number) => {
@@ -174,21 +207,39 @@ export const PipelineScreen: React.FC = () => {
             <div className="dashboard-header animate-fade-in">
                 <div className="dashboard-title">
                     <h1>Pipeline</h1>
-                    <p>{opportunities.length} opportunities</p>
+                    <p>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'}</p>
                 </div>
                 <Button onClick={() => setIsCreateModalOpen(true)}>
                     <Plus size={16} style={{ marginRight: 6 }} /> New Opportunity
                 </Button>
             </div>
 
-            <div className="filters-bar customer-filters animate-fade-in">
-                <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 0 }}>
+            <div className="filters-bar customer-filters animate-fade-in" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
+                    <Search size={16} className="filter-icon" />
+                    <input
+                        className="filter-input"
+                        placeholder="Search pipeline..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            onClick={() => setSearch('')}
+                            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 1 }}
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+                <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
                     <Filter size={16} className="filter-icon" />
                     <select
                         className="filter-select"
                         value={selectedCustomerId}
                         onChange={e => setSelectedCustomerId(e.target.value)}
-                        style={{ width: '100%' }}
+                        style={{ width: '100%', paddingLeft: '2.25rem' }}
                     >
                         <option value="">All Customers</option>
                         {customers.map(c => (
@@ -202,13 +253,34 @@ export const PipelineScreen: React.FC = () => {
                     className="filter-select"
                     value={selectedCompanyId}
                     onChange={e => setSelectedCompanyId(e.target.value)}
-                    style={{ flex: '1 1 200px', minWidth: 0 }}
+                    style={{ flex: '1 1 160px', minWidth: 0 }}
                 >
                     <option value="">All Companies</option>
                     {companies.map(c => (
                         <option key={c.companyId} value={c.companyId}>{c.name}</option>
                     ))}
                 </select>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <select
+                        className="filter-select"
+                        value={dateFilterField}
+                        onChange={e => setDateFilterField(e.target.value as any)}
+                        style={{ fontSize: '0.82rem', padding: '0.35rem 0.5rem' }}
+                    >
+                        <option value="expectedClose">Expected Close</option>
+                        <option value="created">Created Date</option>
+                    </select>
+
+                    <DateRangePicker
+                        startDate={startDate}
+                        endDate={endDate}
+                        onApply={(s, e) => {
+                            setStartDate(s);
+                            setEndDate(e);
+                        }}
+                    />
+                </div>
             </div>
 
             <div className="pipeline-board">

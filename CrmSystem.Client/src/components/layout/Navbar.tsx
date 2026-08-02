@@ -6,6 +6,7 @@ import { LogOut, User, Sun, Moon, ChevronDown, Menu, PanelLeftClose, PanelLeftOp
 import { NotificationBell } from '../notifications/NotificationBell';
 import { SearchDropdown } from './SearchDropdown';
 import { RoleBadge } from '../ui/RoleBadge';
+import { initTheme, applyThemePreset, ATTRACTIVE_THEMES } from '../../lib/theme';
 
 interface NavbarProps {
   collapsed?: boolean;
@@ -20,23 +21,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { user, userRole, selectedRole, switchRole, logout } = useAuth();
   const navigate = useNavigate();
-  const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
+    initTheme();
+    const mode = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+    setThemeMode(mode || 'dark');
   }, []);
 
   const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
+    const currentMode = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+    const targetPreset = currentMode === 'dark'
+      ? (ATTRACTIVE_THEMES.find(t => t.mode === 'light') || ATTRACTIVE_THEMES[6])
+      : (ATTRACTIVE_THEMES.find(t => t.id === 'cyber-midnight') || ATTRACTIVE_THEMES[0]);
+
+    applyThemePreset(targetPreset);
+    setThemeMode(targetPreset.mode);
   };
 
   // Close role dropdown when clicking outside
@@ -100,10 +102,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={toggleTheme}
               className="nav-icon-btn"
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              {theme === 'dark' ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
+              {themeMode === 'dark' ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
             </button>
 
             <NotificationBell />

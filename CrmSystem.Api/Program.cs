@@ -212,8 +212,10 @@ using (var scope = app.Services.CreateScope())
     // ── LeadStatuses ─────────────────────────────────────────────────────
     var leadStatusSeeds = new (string Name, int Order, bool Terminal)[] {
         ("New", 1, false), ("Contacted", 2, false), ("Qualified", 3, false),
-        ("Proposal Sent", 4, false), ("Converted", 5, true), ("Lost", 6, true)
+        ("Proposal Sent", 4, false), ("Negotiation", 5, false), ("Follow-up Scheduled", 6, false),
+        ("Converted", 7, true), ("Lost", 8, true), ("Closed", 9, true)
     };
+
     foreach (var (name, order, terminal) in leadStatusSeeds)
     {
         if (!await db.LeadStatuses.AnyAsync(x => x.Name == name))

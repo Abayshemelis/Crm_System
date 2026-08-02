@@ -560,13 +560,37 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<DateTime?>("LastActivityAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("LeadScore")
+                        .HasColumnType("int");
+
                     b.Property<int?>("LeadStatusId")
                         .HasColumnType("int");
+
+                    b.Property<string>("LostReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("NextFollowUpAssignedToId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NextFollowUpDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NextFollowUpNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("NextFollowUpType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
@@ -575,6 +599,10 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Priority")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<int?>("SourceId")
                         .HasColumnType("int");
@@ -592,6 +620,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("LeadStatusId");
+
+                    b.HasIndex("NextFollowUpAssignedToId");
 
                     b.HasIndex("SourceId");
 
@@ -1346,6 +1376,11 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("LeadStatusId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "NextFollowUpAssignedTo")
+                        .WithMany()
+                        .HasForeignKey("NextFollowUpAssignedToId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("CrmSystem.Domain.Entities.Source", "Source")
                         .WithMany()
                         .HasForeignKey("SourceId")
@@ -1362,6 +1397,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("LeadStatus");
+
+                    b.Navigation("NextFollowUpAssignedTo");
 
                     b.Navigation("Source");
                 });

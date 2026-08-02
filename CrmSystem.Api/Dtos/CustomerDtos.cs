@@ -106,4 +106,7 @@ public class CustomerListQuery : PaginationQuery
     public int? RepId { get; set; }
     public int? SourceId { get; set; }
     public List<int>? TagIds { get; set; }
+    public DateTime? CreatedFrom { get; set; }
+    public DateTime? CreatedTo { get; set; }
 }
+

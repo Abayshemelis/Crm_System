@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ManagerOnlyRoute } from './components/auth/ManagerOnlyRoute';
+import { initTheme } from './lib/theme';
 import { LoginScreen } from './screens/LoginScreen';
 import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './screens/ResetPasswordScreen';
@@ -81,39 +82,7 @@ function AppShell() {
   };
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('crm-theme');
-    if (savedTheme) {
-      try {
-        const theme = JSON.parse(savedTheme);
-        const root = document.documentElement;
-        root.style.setProperty('--page-background', theme.background ?? 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f172a 100%)');
-        root.style.setProperty('--accent-primary', theme.accentColor);
-
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(theme.accentColor);
-        if (result) {
-          const rgb = `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
-          root.style.setProperty('--accent-glow', `rgba(${rgb}, 0.5)`);
-        }
-
-        if (isLightBackground(theme.background)) {
-          root.setAttribute('data-theme', 'light');
-          root.style.setProperty('--text-primary', '#1f2937');
-          root.style.setProperty('--text-secondary', '#6b7280');
-          root.style.setProperty('--text-muted', '#9ca3af');
-          root.style.setProperty('--sidebar-text-primary', '#1f2937');
-          root.style.setProperty('--sidebar-text-secondary', '#6b7280');
-          root.style.setProperty('--glass-bg', '#ffffff');
-          root.style.setProperty('--glass-border', 'rgba(148, 163, 184, 0.3)');
-          root.style.setProperty('--border-color', '#e5e7eb');
-          root.style.setProperty('--bg-primary', '#ffffff');
-          root.style.setProperty('--bg-secondary', '#f9fafb');
-        } else {
-          root.removeAttribute('data-theme');
-        }
-      } catch (error) {
-        console.error('Failed to load theme:', error);
-      }
-    }
+    initTheme();
   }, []);
 
   useEffect(() => {

@@ -61,4 +61,7 @@ public class CompanyListQuery : PaginationQuery
 {
     public string? Search { get; set; }
     public int? RepId { get; set; }
+    public DateTime? CreatedFrom { get; set; }
+    public DateTime? CreatedTo { get; set; }
 }
+

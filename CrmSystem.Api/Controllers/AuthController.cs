@@ -124,82 +124,89 @@ public class AuthController : ControllerBase
     [HttpPost("google")]
     public async Task<ActionResult<AuthResponse>> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.IdToken))
+        try
         {
-            return BadRequest(new { message = "Google ID token is required." });
-        }
-
-        var googleUser = await _googleAuthService.ValidateIdTokenAsync(request.IdToken);
-        if (googleUser is null || !googleUser.IsEmailVerified)
-        {
-            return Unauthorized(new { message = "Invalid or unverified Google authentication token." });
-        }
-
-        var identity = await _db.Identities
-            .Include(i => i.Role)
-            .Include(i => i.IdentityRoles)
-                .ThenInclude(ir => ir.Role)
-            .SingleOrDefaultAsync(i => i.Email == googleUser.Email);
-
-        if (identity is null)
-        {
-            // Auto-register first-time Google user
-            var salesRepRole = await _db.Roles.SingleOrDefaultAsync(r => r.Name == "SalesRep");
-            if (salesRepRole is null)
+            if (string.IsNullOrWhiteSpace(request.IdToken))
             {
-                return BadRequest(new { message = "SalesRep role is not configured in the database." });
+                return BadRequest(new { message = "Google ID token is required." });
             }
 
-            identity = new Identity
+            var googleUser = await _googleAuthService.ValidateIdTokenAsync(request.IdToken);
+            if (googleUser is null || !googleUser.IsEmailVerified)
             {
-                Name = googleUser.Name,
-                Email = googleUser.Email,
-                PasswordHash = _passwordHasher.Hash(Guid.NewGuid().ToString("N")),
-                RoleId = salesRepRole.RoleId,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                return Unauthorized(new { message = "Invalid or unverified Google authentication token." });
+            }
+
+            var identity = await _db.Identities
+                .Include(i => i.Role)
+                .Include(i => i.IdentityRoles)
+                    .ThenInclude(ir => ir.Role)
+                .SingleOrDefaultAsync(i => i.Email == googleUser.Email);
+
+            if (identity is null)
+            {
+                // Auto-register first-time Google user
+                var salesRepRole = await _db.Roles.SingleOrDefaultAsync(r => r.Name == "SalesRep");
+                if (salesRepRole is null)
+                {
+                    return BadRequest(new { message = "SalesRep role is not configured in the database." });
+                }
+
+                identity = new Identity
+                {
+                    Name = googleUser.Name,
+                    Email = googleUser.Email,
+                    PasswordHash = _passwordHasher.Hash(Guid.NewGuid().ToString("N")),
+                    RoleId = salesRepRole.RoleId,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Identities.Add(identity);
+                await _db.SaveChangesAsync();
+
+                _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
+                await _db.SaveChangesAsync();
+
+                await SeedSampleDataForUserAsync(identity);
+
+                identity.Role = salesRepRole;
+                identity.IdentityRoles = new List<IdentityRole> { new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId, Role = salesRepRole } };
+            }
+            else
+            {
+                if (!identity.IsActive)
+                {
+                    return Unauthorized(new { message = "Account is deactivated. Please contact an administrator." });
+                }
+            }
+
+            var accessToken = _tokenService.GenerateAccessToken(identity);
+            var rawRefreshToken = _tokenService.GenerateRefreshToken();
+
+            var refreshTokenEntity = new RefreshToken
+            {
+                IdentityId = identity.IdentityId,
+                TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
+                ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
+                IsRevoked = false
             };
 
-            _db.Identities.Add(identity);
+            _db.RefreshTokens.Add(refreshTokenEntity);
             await _db.SaveChangesAsync();
 
-            _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
-            await _db.SaveChangesAsync();
-
-            await SeedSampleDataForUserAsync(identity);
-
-            identity.Role = salesRepRole;
-            identity.IdentityRoles = new List<IdentityRole> { new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId, Role = salesRepRole } };
-        }
-        else
-        {
-            if (!identity.IsActive)
+            var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
+            if (roles.Length == 0 && identity.Role != null)
             {
-                return Unauthorized(new { message = "Account is deactivated. Please contact an administrator." });
+                roles = new[] { identity.Role.Name };
             }
+
+            return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, accessToken, rawRefreshToken));
         }
-
-        var accessToken = _tokenService.GenerateAccessToken(identity);
-        var rawRefreshToken = _tokenService.GenerateRefreshToken();
-
-        var refreshTokenEntity = new RefreshToken
+        catch (Exception ex)
         {
-            IdentityId = identity.IdentityId,
-            TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
-            ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
-            IsRevoked = false
-        };
-
-        _db.RefreshTokens.Add(refreshTokenEntity);
-        await _db.SaveChangesAsync();
-
-        var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
-        if (roles.Length == 0 && identity.Role != null)
-        {
-            roles = new[] { identity.Role.Name };
+            return BadRequest(new { message = ex.Message });
         }
-
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, accessToken, rawRefreshToken));
     }
 
     [HttpPost("refresh")]

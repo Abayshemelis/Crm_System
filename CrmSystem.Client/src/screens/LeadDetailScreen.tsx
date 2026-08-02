@@ -5,10 +5,16 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { LeadConvertModal } from '../components/ui/LeadConvertModal';
+import { FollowUpModal } from '../components/ui/FollowUpModal';
+import { MarkLostModal } from '../components/ui/MarkLostModal';
+import { EmailComposerModal } from '../components/email/EmailComposerModal';
 import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle, History, MessageSquare, CheckSquare, Plus, Trash2 } from 'lucide-react';
+import {
+    ArrowLeft, Mail, Phone, Tag, ClipboardX, CheckCircle, History, MessageSquare,
+    CheckSquare, Plus, Trash2, Calendar, Clock, AlertTriangle, XCircle, UserCheck, ShieldAlert, Edit2
+} from 'lucide-react';
 import { TimelineList } from '../components/activities/TimelineList';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
@@ -24,8 +30,20 @@ interface LeadDetail {
     companyName?: string;
     jobTitle?: string;
     sourceName?: string;
+    sourceId?: number;
     leadStatusName: string;
     leadStatusId?: number;
+    assignedRepId?: number;
+    assignedRepName?: string;
+    priority?: string;
+    leadScore: number;
+    lostReason?: string;
+    nextFollowUpDate?: string;
+    nextFollowUpType?: string;
+    nextFollowUpNotes?: string;
+    nextFollowUpAssignedToId?: number;
+    nextFollowUpAssignedToName?: string;
+    lastActivityAt?: string;
     notes?: string;
     createdAt: string;
     createdById?: number;
@@ -44,6 +62,10 @@ export const LeadDetailScreen: React.FC = () => {
     const [lead, setLead] = useState<LeadDetail | null>(null);
     const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
     const [showConvertModal, setShowConvertModal] = useState(false);
+    const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+    const [showMarkLostModal, setShowMarkLostModal] = useState(false);
+    const [showEmailModal, setShowEmailModal] = useState(false);
+
     const [activeTab, setActiveTab] = useState<TabId>('details');
     const [isLoading, setIsLoading] = useState(true);
     const [isEditingStatus, setIsEditingStatus] = useState(false);
@@ -52,7 +74,6 @@ export const LeadDetailScreen: React.FC = () => {
 
     // Tasks & Activities states
     const [activities, setActivities] = useState<any[]>([]);
-    const [allActivities, setAllActivities] = useState<any[]>([]);
     const [activityTypes, setActivityTypes] = useState<any[]>([]);
     const [tasks, setTasks] = useState<TaskReadDto[]>([]);
     const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
@@ -65,7 +86,6 @@ export const LeadDetailScreen: React.FC = () => {
         try {
             const res = await api.get<any[]>(`/api/activities?leadId=${id}`);
             setActivities(res);
-            setAllActivities(res);
         } catch { }
     }, [id]);
 
@@ -90,14 +110,26 @@ export const LeadDetailScreen: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [id, navigate, fetchTasks, fetchActivities]);
+    }, [id, navigate]);
 
     useEffect(() => {
         if (!id) return;
         fetchLead();
         fetchActivities();
         fetchTasks();
-    }, [id]);
+    }, [id, fetchLead, fetchActivities, fetchTasks]);
+
+    useEffect(() => {
+        api.get<{ id: number; name: string }[]>('/api/leadstatuses')
+            .then(data => setStatuses(data))
+            .catch(() => setStatuses([]));
+
+        api.get<any[]>('/api/activitytypes').then(setActivityTypes).catch(() => { });
+        api.get<any[]>('/api/taskstatuses').then(setTaskStatuses).catch(() => { });
+        api.get<any[]>('/api/users').then(data => {
+            setUsers(data.map((u: any) => ({ id: u.id ?? u.identityId, name: u.name })));
+        }).catch(() => { });
+    }, []);
 
     const deleteLead = async () => {
         if (!id || !window.confirm('Are you sure you want to delete this lead?')) return;
@@ -115,9 +147,55 @@ export const LeadDetailScreen: React.FC = () => {
         navigate(`/customers/${customerId}`);
     };
 
-    const handleStatusUpdate = async () => {
+    const handleScheduleFollowUp = async (data: {
+        followUpDate: string;
+        followUpType: string;
+        notes?: string;
+        assignedToId?: number;
+    }) => {
+        if (!id) return;
+        try {
+            const updated = await api.post<LeadDetail>(`/api/leads/${id}/follow-up`, data);
+            setLead(updated);
+            showToast('Next follow-up scheduled successfully!', 'success');
+            fetchActivities();
+            fetchTasks();
+        } catch (err: any) {
+            showToast(err.message || 'Failed to schedule follow-up.', 'error');
+            throw err;
+        }
+    };
+
+    const handleCompleteFollowUp = async () => {
+        if (!id) return;
+        try {
+            const updated = await api.post<LeadDetail>(`/api/leads/${id}/complete-follow-up`, {});
+            setLead(updated);
+            showToast('Follow-up marked as completed!', 'success');
+            fetchActivities();
+            fetchTasks();
+        } catch (err: any) {
+            showToast(err.message || 'Failed to complete follow-up.', 'error');
+        }
+    };
+
+    const handleMarkLost = async (lostReason: string) => {
+        if (!id) return;
+        try {
+            const updated = await api.post<LeadDetail>(`/api/leads/${id}/lost`, { lostReason });
+            setLead(updated);
+            showToast('Lead marked as Lost.', 'success');
+            fetchActivities();
+        } catch (err: any) {
+            showToast(err.message || 'Failed to mark lead as lost.', 'error');
+            throw err;
+        }
+    };
+
+    const handleStatusUpdate = async (newStatusId?: string) => {
         if (!id || !lead) return;
         setStatusUpdateError(null);
+        const targetStatusId = newStatusId !== undefined ? newStatusId : editingStatusId;
         try {
             await api.put(`/api/leads/${id}`, {
                 firstName: lead.firstName,
@@ -126,31 +204,71 @@ export const LeadDetailScreen: React.FC = () => {
                 phone: lead.phone,
                 companyName: lead.companyName,
                 jobTitle: lead.jobTitle,
-                sourceId: null,
-                leadStatusId: editingStatusId ? Number(editingStatusId) : lead.leadStatusId,
-                notes: lead.notes
+                sourceId: lead.sourceId,
+                leadStatusId: targetStatusId ? Number(targetStatusId) : lead.leadStatusId,
+                assignedRepId: lead.assignedRepId,
+                notes: lead.notes,
+                priority: lead.priority,
+                leadScore: lead.leadScore
             });
             await fetchLead();
+            await fetchActivities();
             setIsEditingStatus(false);
+            showToast('Status updated successfully.', 'success');
         } catch (error: any) {
             setStatusUpdateError(error.message || 'Failed to update status');
         }
     };
 
-    useEffect(() => { fetchLead(); }, [fetchLead]);
+    const handlePriorityUpdate = async (newPriority: string) => {
+        if (!id || !lead) return;
+        try {
+            await api.put(`/api/leads/${id}`, {
+                firstName: lead.firstName,
+                lastName: lead.lastName,
+                email: lead.email,
+                phone: lead.phone,
+                companyName: lead.companyName,
+                jobTitle: lead.jobTitle,
+                sourceId: lead.sourceId,
+                leadStatusId: lead.leadStatusId,
+                assignedRepId: lead.assignedRepId,
+                notes: lead.notes,
+                priority: newPriority,
+                leadScore: lead.leadScore
+            });
+            await fetchLead();
+            await fetchActivities();
+            showToast('Priority updated successfully.', 'success');
+        } catch (error: any) {
+            showToast(error.message || 'Failed to update priority', 'error');
+        }
+    };
 
-    useEffect(() => {
-        api.get<{ id: number; name: string }[]>('/api/leadstatuses')
-            .then(data => setStatuses(data))
-            .catch(() => setStatuses([]));
-        
-        // Fetch lookups
-        api.get<any[]>('/api/activitytypes').then(setActivityTypes).catch(() => {});
-        api.get<any[]>('/api/taskstatuses').then(setTaskStatuses).catch(() => {});
-        api.get<any[]>('/api/users').then(data => {
-            setUsers(data.map(u => ({ id: u.id, name: u.name })));
-        }).catch(() => {});
-    }, []);
+    const handleRepUpdate = async (newRepId: string) => {
+        if (!id || !lead) return;
+        try {
+            await api.put(`/api/leads/${id}`, {
+                firstName: lead.firstName,
+                lastName: lead.lastName,
+                email: lead.email,
+                phone: lead.phone,
+                companyName: lead.companyName,
+                jobTitle: lead.jobTitle,
+                sourceId: lead.sourceId,
+                leadStatusId: lead.leadStatusId,
+                assignedRepId: newRepId ? Number(newRepId) : null,
+                notes: lead.notes,
+                priority: lead.priority,
+                leadScore: lead.leadScore
+            });
+            await fetchLead();
+            await fetchActivities();
+            showToast('Assigned Sales Rep updated successfully.', 'success');
+        } catch (error: any) {
+            showToast(error.message || 'Failed to update sales rep', 'error');
+        }
+    };
 
     const groupedTasks = React.useMemo(() => {
         const overdue: TaskReadDto[] = [];
@@ -179,16 +297,13 @@ export const LeadDetailScreen: React.FC = () => {
         return { overdue, dueToday, upcoming, completed };
     }, [tasks]);
 
-    const handleTaskComplete = async () => {
-        await fetchTasks();
-    };
+    const isFollowUpOverdue = lead?.nextFollowUpDate && lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && lead.leadStatusName !== 'Closed' && new Date(lead.nextFollowUpDate) < new Date();
+    const isFollowUpToday = lead?.nextFollowUpDate && new Date(lead.nextFollowUpDate).toDateString() === new Date().toDateString();
 
-    // Loading state with skeleton
     if (isLoading || !lead) {
         return (
             <Layout>
                 <div className="detail-skeleton">
-                    {/* Header skeleton */}
                     <div className="skeleton-header" style={{ marginBottom: 'var(--space-6)' }}>
                         <Skeleton variant="avatar" className="skeleton-avatar-large" />
                         <div className="skeleton-header-text">
@@ -196,248 +311,418 @@ export const LeadDetailScreen: React.FC = () => {
                             <Skeleton variant="text" className="skeleton-header-subtitle" />
                         </div>
                     </div>
-
-                    {/* Sidebar skeleton */}
-                    <Card className="glass-panel skeleton-sidebar">
-                        <Card.Content>
-                            <Skeleton variant="text" style={{ width: '60%', marginBottom: '1rem' }} />
-                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
-                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
-                            <Skeleton variant="text" style={{ marginBottom: '8px' }} />
-                        </Card.Content>
-                    </Card>
-
-                    {/* Main content skeleton */}
-                    <div className="skeleton-main">
-                        <Card className="glass-panel">
-                            <Card.Content>
-                                <Skeleton variant="text" style={{ width: '40%', marginBottom: '1rem' }} />
-                                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
-                                <Skeleton variant="text" style={{ marginBottom: '8px' }} />
-                                <Skeleton variant="text" style={{ width: '60%' }} />
-                            </Card.Content>
-                        </Card>
-                    </div>
                 </div>
             </Layout>
         );
     }
 
+    const initials = `${lead.firstName[0] || ''}${lead.lastName[0] || ''}`.toUpperCase();
+
     return (
         <Layout>
+            {/* Standard CRM Header */}
             <div className="detail-header animate-fade-in">
                 <Button variant="ghost" size="sm" onClick={() => navigate('/leads')}>
                     <ArrowLeft size={16} style={{ marginRight: 6 }} /> Back
                 </Button>
+
                 <div className="detail-header-info">
+                    <div className="customer-avatar large" style={{ background: 'linear-gradient(135deg, var(--accent-primary), #6366f1)', color: '#ffffff' }}>
+                        {initials}
+                    </div>
                     <div>
-                        <h1>{lead.firstName} {lead.lastName}</h1>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {isEditingStatus ? (
-                                <>
-                                    <select
-                                        className="filter-input"
-                                        value={editingStatusId}
-                                        onChange={e => setEditingStatusId(e.target.value)}
-                                        style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem', minWidth: '120px' }}
-                                    >
-                                        {statuses.filter(status => status.name !== 'Converted').map(status => (
-                                            <option key={status.id} value={status.id}>{status.name}</option>
-                                        ))}
-                                    </select>
-                                    <Button size="sm" onClick={handleStatusUpdate} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Save</Button>
-                                    <Button variant="ghost" size="sm" onClick={() => { setIsEditingStatus(false); setStatusUpdateError(null); }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Cancel</Button>
-                                </>
-                            ) : (
-                                <>
-                                    <span>{lead.leadStatusName}</span>
-                                    {lead.leadStatusName !== 'Converted' && (
-                                        <Button variant="ghost" size="sm" onClick={() => { setIsEditingStatus(true); setEditingStatusId(String(lead.leadStatusId || '')); setStatusUpdateError(null); }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Change</Button>
-                                    )}
-                                </>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <h1 style={{ margin: 0 }}>{lead.firstName} {lead.lastName}</h1>
+                            <span style={{
+                                padding: '0.2rem 0.6rem',
+                                borderRadius: '0.5rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                background: lead.priority === 'Urgent' ? 'rgba(239, 68, 68, 0.12)' : lead.priority === 'High' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                                color: lead.priority === 'Urgent' ? '#dc2626' : lead.priority === 'High' ? '#d97706' : '#2563eb',
+                                border: '1px solid rgba(0, 0, 0, 0.08)'
+                            }}>
+                                {lead.priority || 'Medium'} Priority
+                            </span>
+                            {lead.leadScore > 0 && (
+                                <span style={{
+                                    padding: '0.2rem 0.6rem',
+                                    borderRadius: '0.5rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    background: 'rgba(99, 102, 241, 0.12)',
+                                    color: '#4f46e5',
+                                    border: '1px solid rgba(99, 102, 241, 0.2)'
+                                }}>
+                                    Score {lead.leadScore}
+                                </span>
                             )}
-                            <span>·</span>
-                            <span>{lead.sourceName ?? 'No source'}</span>
                         </div>
-                        {statusUpdateError && <p style={{ color: 'var(--accent-red, #ef4444)', fontSize: '0.75rem', marginTop: '0.25rem' }}>{statusUpdateError}</p>}
+                        <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-secondary)' }}>
+                            {lead.companyName ?? 'Independent Prospect'} {lead.jobTitle ? `· ${lead.jobTitle}` : ''} · Assigned: <strong>{lead.assignedRepName || 'Unassigned'}</strong>
+                        </p>
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    {lead.leadStatusName === 'Qualified' && (
-                        <Button onClick={() => setShowConvertModal(true)} size="sm">
-                            <CheckCircle size={16} style={{ marginRight: 6 }} /> Convert
-                        </Button>
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && (
+                        <>
+                            {lead.email && (
+                                <Button size="sm" variant="secondary" onClick={() => setShowEmailModal(true)}>
+                                    <Mail size={14} style={{ marginRight: 4 }} /> Send Email
+                                </Button>
+                            )}
+                            <Button size="sm" variant="secondary" onClick={() => setShowFollowUpModal(true)}>
+                                <Calendar size={14} style={{ marginRight: 4 }} /> {lead.nextFollowUpDate ? 'Reschedule Follow-Up' : 'Plan Follow-Up'}
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => setShowMarkLostModal(true)} style={{ color: '#dc2626' }}>
+                                <XCircle size={14} style={{ marginRight: 4 }} /> Mark Lost
+                            </Button>
+                            <Button size="sm" variant="primary" onClick={() => setShowConvertModal(true)}>
+                                <CheckCircle size={14} style={{ marginRight: 4 }} /> Convert Lead
+                            </Button>
+                        </>
                     )}
                     {lead.leadStatusName !== 'Converted' && (
-                        <Button onClick={() => navigate(`/leads/${id}/edit`)} size="sm">Edit</Button>
+                        <Button variant="secondary" size="sm" onClick={() => navigate(`/leads/${id}/edit`)}>Edit</Button>
                     )}
-                    <Button variant="ghost" size="sm" onClick={deleteLead} style={{ color: 'var(--accent-red, #ef4444)' }}>
-                        <Trash2 size={16} style={{ marginRight: 6 }} /> Delete
-                    </Button>
+                    <Button variant="danger" size="sm" onClick={deleteLead}>Delete</Button>
                 </div>
             </div>
 
-            {lead.convertedAt && (
-                <div style={{
-                    background: 'rgba(59, 130, 246, 0.08)',
-                    border: '1px solid rgba(59, 130, 246, 0.25)',
-                    borderRadius: '10px',
-                    padding: '1rem 1.25rem',
-                    marginBottom: '1.25rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '1rem'
-                }}>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                            <CheckCircle size={18} color="var(--accent-blue, #3b82f6)" /> Converted Lead Record
+            {/* Next Follow-Up Banner */}
+            {lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && (
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        padding: '1rem 1.25rem',
+                        borderRadius: '1rem',
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '1rem',
+                        background: isFollowUpOverdue ? 'rgba(239, 68, 68, 0.08)' : isFollowUpToday ? 'rgba(245, 158, 11, 0.08)' : 'rgba(99, 102, 241, 0.06)',
+                        border: isFollowUpOverdue ? '1px solid rgba(239, 68, 68, 0.25)' : isFollowUpToday ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid rgba(99, 102, 241, 0.2)'
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{
+                            padding: '0.6rem',
+                            borderRadius: '0.75rem',
+                            background: isFollowUpOverdue ? '#fee2e2' : isFollowUpToday ? '#fef3c7' : '#e0e7ff',
+                            color: isFollowUpOverdue ? '#dc2626' : isFollowUpToday ? '#b45309' : '#4f46e5'
+                        }}>
+                            {isFollowUpOverdue ? <AlertTriangle size={20} /> : <Clock size={20} />}
                         </div>
-                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            Converted on {new Date(lead.convertedAt).toLocaleDateString()} {users.find(u => u.id === lead.convertedById)?.name ? `by ${users.find(u => u.id === lead.convertedById)?.name}` : ''}.
-                            All historical activities & tasks are preserved in this read-only lead record and linked to the converted entity.
-                        </p>
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                                    Next Follow-Up: {lead.nextFollowUpType || 'Phone Call'}
+                                </strong>
+                                {isFollowUpOverdue && <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', background: '#dc2626', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '1rem' }}>Overdue</span>}
+                                {isFollowUpToday && <span style={{ fontSize: '0.65rem', fontWeight: 800, textTransform: 'uppercase', background: '#d97706', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '1rem' }}>Due Today</span>}
+                            </div>
+                            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                {lead.nextFollowUpDate ? (
+                                    <>Scheduled for <strong>{new Date(lead.nextFollowUpDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong> {lead.nextFollowUpAssignedToName ? `(Assigned to ${lead.nextFollowUpAssignedToName})` : ''}</>
+                                ) : (
+                                    <span>No follow-up date scheduled. Best practice requires a planned next follow-up.</span>
+                                )}
+                            </p>
+                            {lead.nextFollowUpNotes && (
+                                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                    "{lead.nextFollowUpNotes}"
+                                </p>
+                            )}
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {lead.convertedCustomerId && (
-                            <Button size="sm" onClick={() => navigate(`/customers/${lead.convertedCustomerId}`)}>
-                                View Customer #{lead.convertedCustomerId}
+                    {lead.nextFollowUpDate ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <Button size="sm" variant="primary" style={{ background: '#16a34a', borderColor: '#15803d' }} onClick={handleCompleteFollowUp}>
+                                <CheckCircle size={14} style={{ marginRight: 4 }} /> Complete Follow-Up
                             </Button>
-                        )}
-                        {lead.convertedOpportunityId && (
-                            <Button size="sm" variant="secondary" onClick={() => navigate(`/opportunities/${lead.convertedOpportunityId}`)}>
-                                View Opportunity #{lead.convertedOpportunityId}
+                            <Button size="sm" variant="secondary" onClick={() => setShowFollowUpModal(true)}>
+                                <Calendar size={14} style={{ marginRight: 4 }} /> Reschedule
                             </Button>
-                        )}
+                        </div>
+                    ) : (
+                        <Button size="sm" variant="primary" onClick={() => setShowFollowUpModal(true)}>
+                            <Calendar size={14} style={{ marginRight: 4 }} /> Schedule Now
+                        </Button>
+                    )}
+                </div>
+            )}
+
+            {/* Lost Reason Banner */}
+            {lead.leadStatusName === 'Lost' && lead.lostReason && (
+                <div className="glass-panel animate-fade-in" style={{ padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                    <ShieldAlert size={20} style={{ color: '#dc2626', flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                        <strong style={{ color: '#991b1b', fontSize: '0.9rem' }}>Lead Marked as Lost</strong>
+                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#7f1d1d' }}><strong>Reason:</strong> {lead.lostReason}</p>
                     </div>
                 </div>
             )}
 
+            {/* Main Detail Grid Layout */}
             <div className="detail-layout animate-fade-in">
+                {/* Left Sidebar Info Card */}
                 <Card className="glass-panel detail-sidebar">
-                    <Card.Content>
-                        <div className="customer-details">
-                            {lead.email && <div className="detail-row"><Mail size={15} /><span>{lead.email}</span></div>}
-                            {lead.phone && <div className="detail-row"><Phone size={15} /><span>{lead.phone}</span></div>}
-                            {lead.companyName && <div className="detail-row"><ClipboardX size={15} /><span>{lead.companyName}</span></div>}
-                            {lead.jobTitle && <div className="detail-row"><Tag size={15} /><span>{lead.jobTitle}</span></div>}
+                    <Card.Content style={{ padding: '1.25rem' }}>
+                        {/* Status Change Section */}
+                        <div style={{ marginBottom: '1.25rem' }}>
+                            <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 0.5rem 0' }}>
+                                Lifecycle Status
+                            </h3>
+                            {isEditingStatus ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <select
+                                        className="filter-select"
+                                        style={{ width: '100%' }}
+                                        value={editingStatusId}
+                                        onChange={e => setEditingStatusId(e.target.value)}
+                                    >
+                                        {statuses.filter(s => s.name !== 'Converted').map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <Button size="sm" onClick={() => handleStatusUpdate()}>Save</Button>
+                                        <Button variant="ghost" size="sm" onClick={() => setIsEditingStatus(false)}>Cancel</Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                    <span style={{
+                                        padding: '0.3rem 0.75rem',
+                                        borderRadius: '0.5rem',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 700,
+                                        background: 'rgba(59, 130, 246, 0.12)',
+                                        color: '#2563eb',
+                                        border: '1px solid rgba(59, 130, 246, 0.25)'
+                                    }}>
+                                        {lead.leadStatusName}
+                                    </span>
+                                    {lead.leadStatusName !== 'Converted' && (
+                                        <Button variant="ghost" size="sm" onClick={() => { setIsEditingStatus(true); setEditingStatusId(String(lead.leadStatusId || '')); }}>
+                                            <Edit2 size={12} style={{ marginRight: 4 }} /> Change
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                            {statusUpdateError && <p style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem' }}>{statusUpdateError}</p>}
+                        </div>
+
+                        {/* Priority Quick Change */}
+                        <div style={{ marginBottom: '1.25rem' }}>
+                            <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 0.35rem 0' }}>
+                                Lead Priority
+                            </h3>
+                            <select
+                                className="filter-select"
+                                style={{ width: '100%', fontSize: '0.85rem' }}
+                                value={lead.priority || 'Medium'}
+                                onChange={e => handlePriorityUpdate(e.target.value)}
+                            >
+                                <option key="p-low" value="Low">Low Priority</option>
+                                <option key="p-medium" value="Medium">Medium Priority</option>
+                                <option key="p-high" value="High">High Priority</option>
+                                <option key="p-urgent" value="Urgent">Urgent Priority</option>
+                            </select>
+                        </div>
+
+                        {/* Sales Rep Quick Change */}
+                        {users.length > 0 && (
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 0.35rem 0' }}>
+                                    Assigned Sales Rep
+                                </h3>
+                                <select
+                                    className="filter-select"
+                                    style={{ width: '100%', fontSize: '0.85rem' }}
+                                    value={lead.assignedRepId ?? ''}
+                                    onChange={e => handleRepUpdate(e.target.value)}
+                                >
+                                    <option key="rep-none" value="">Unassigned</option>
+                                    {users.map(u => (
+                                        <option key={`rep-${u.id}`} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Contact Details List */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                            <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>
+                                Contact Details
+                            </h3>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', color: 'var(--text-primary)', wordBreak: 'break-all' }}>
+                                <Mail size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                <span>{lead.email || 'No email provided'}</span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                                <Phone size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                <span>{lead.phone || 'No phone number'}</span>
+                            </div>
+
+                            {lead.companyName && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                                    <ClipboardX size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                    <span>{lead.companyName}</span>
+                                </div>
+                            )}
+
+                            {lead.jobTitle && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                                    <Tag size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                    <span>{lead.jobTitle}</span>
+                                </div>
+                            )}
+
+                            {lead.sourceName && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                                    <Tag size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                    <span>Source: {lead.sourceName}</span>
+                                </div>
+                            )}
                         </div>
                     </Card.Content>
                 </Card>
 
+                {/* Right Tabbed Panel */}
                 <div className="detail-main">
                     <div className="tabs-bar">
                         {(['details', 'activities', 'tasks', 'audit'] as TabId[]).map(tab => (
                             <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
-                                {tab === 'details' && <span>Details</span>}
-                                {tab === 'activities' && <span><MessageSquare size={14} style={{ marginRight: 4 }} /> Activities ({activities.length})</span>}
-                                {tab === 'tasks' && <span><CheckSquare size={14} style={{ marginRight: 4 }} /> Tasks ({tasks.length})</span>}
+                                {tab === 'details' && <span>Overview & Details</span>}
+                                {tab === 'activities' && <span><MessageSquare size={14} style={{ marginRight: 4 }} /> Activity Timeline ({activities.length})</span>}
+                                {tab === 'tasks' && <span><CheckSquare size={14} style={{ marginRight: 4 }} /> Follow-Up Tasks ({tasks.length})</span>}
                                 {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
                             </button>
                         ))}
                     </div>
 
-                    <Card className="glass-panel">
-                        <Card.Content>
-                            {activeTab === 'details' ? (
-                                <>
-                                    <div className="profile-grid">
-                                        <div className="profile-field"><label>First Name</label><p>{lead.firstName}</p></div>
-                                        <div className="profile-field"><label>Last Name</label><p>{lead.lastName}</p></div>
-                                        <div className="profile-field"><label>Email</label><p>{lead.email || '—'}</p></div>
-                                        <div className="profile-field"><label>Phone</label><p>{lead.phone || '—'}</p></div>
-                                        <div className="profile-field"><label>Company</label><p>{lead.companyName || '—'}</p></div>
-                                        <div className="profile-field"><label>Job Title</label><p>{lead.jobTitle || '—'}</p></div>
-                                        <div className="profile-field"><label>Source</label><p>{lead.sourceName || '—'}</p></div>
-                                        <div className="profile-field"><label>Status</label><p>{lead.leadStatusName || '—'}</p></div>
-                                        <div className="profile-field"><label>Created At</label><p>{new Date(lead.createdAt).toLocaleDateString()}</p></div>
-                                        <div className="profile-field"><label>Created By</label><p>{users.find(u => u.id === lead.createdById)?.name || '—'}</p></div>
-                                        {lead.convertedAt && (
-                                            <>
-                                                <div className="profile-field"><label>Converted At</label><p>{new Date(lead.convertedAt).toLocaleDateString()}</p></div>
-                                                <div className="profile-field"><label>Converted By</label><p>{users.find(u => u.id === lead.convertedById)?.name || '—'}</p></div>
-                                            </>
-                                        )}
-                                        {lead.convertedCustomerId && (
-                                            <div className="profile-field">
-                                                <label>Converted Customer</label>
-                                                <p>
-                                                    <a href={`/customers/${lead.convertedCustomerId}`} onClick={(e) => { e.preventDefault(); navigate(`/customers/${lead.convertedCustomerId}`); }} style={{ color: 'var(--accent-blue, #3b82f6)', fontWeight: 500, textDecoration: 'underline' }}>
-                                                        Customer #{lead.convertedCustomerId}
-                                                    </a>
-                                                </p>
-                                            </div>
-                                        )}
-                                        {lead.convertedOpportunityId && (
-                                            <div className="profile-field">
-                                                <label>Converted Opportunity</label>
-                                                <p>
-                                                    <a href={`/opportunities/${lead.convertedOpportunityId}`} onClick={(e) => { e.preventDefault(); navigate(`/opportunities/${lead.convertedOpportunityId}`); }} style={{ color: 'var(--accent-blue, #3b82f6)', fontWeight: 500, textDecoration: 'underline' }}>
-                                                        Opportunity #{lead.convertedOpportunityId}
-                                                    </a>
-                                                </p>
-                                            </div>
-                                        )}
+                    {/* Tab 1: Overview & Details Grid */}
+                    {activeTab === 'details' && (
+                        <Card className="glass-panel">
+                            <Card.Content style={{ padding: '1.5rem' }}>
+                                <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lead Name</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.firstName} {lead.lastName}</div>
                                     </div>
-                                    <hr style={{ margin: '1.5rem 0', borderTop: '1px solid var(--border-color)' }} />
-                                    <h3>Notes</h3>
-                                    <p>{lead.notes ?? 'No notes yet.'}</p>
-                                </>
-                            ) : activeTab === 'activities' ? (
-                                <>
-                                    {lead.convertedAt && (
-                                        <div style={{ background: 'var(--accent-blue, #3b82f6)15', border: '1px solid var(--accent-blue, #3b82f6)40', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                            📋 This lead was converted. History is preserved as a read-only record.
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Email Address</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.email || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Phone Number</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.phone || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Company Name</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.companyName || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Job Title</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.jobTitle || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lead Source</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.sourceName || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Priority</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.priority || 'Medium'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lead Score</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.leadScore}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Assigned Sales Rep</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.assignedRepName || 'Unassigned'}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Next Follow-Up Date</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            {lead.nextFollowUpDate ? new Date(lead.nextFollowUpDate).toLocaleString() : '—'}
                                         </div>
-                                    )}
-                                    <TimelineList
-                                        activities={activities}
-                                        activityTypes={activityTypes}
-                                        leadId={Number(id)}
-                                        currentUserId={currentUser?.userId}
-                                        isAdmin={currentUser?.roles?.includes('Admin') ?? false}
-                                        readOnly={!!lead.convertedAt}
-                                        onActivityLogged={lead.convertedAt ? () => {} : (act) => setActivities(prev => [act, ...prev])}
-                                        onActivityDeleted={lead.convertedAt ? () => {} : (id) => setActivities(prev => prev.filter(a => a.activityId !== id))}
-                                    />
-                                </>
-                            ) : activeTab === 'tasks' ? (
-                                <div className="animate-fade-in">
-                                    {lead.convertedAt && (
-                                        <div style={{ background: 'var(--accent-blue, #3b82f6)15', border: '1px solid var(--accent-blue, #3b82f6)40', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                            📋 This lead was converted. Task history is preserved as a read-only record.
-                                        </div>
-                                    )}
-                                    {!lead.convertedAt && (
-                                        <div style={{ display: 'flex', justifySelf: 'end', marginBottom: '1rem' }}>
-                                            <button
-                                                type="button"
-                                                className="btn-outline-sm"
-                                                onClick={() => { setEditTask(null); setShowTaskModal(true); }}
-                                            >
-                                                <Plus size={14} /> New Task
-                                            </button>
-                                        </div>
-                                    )}
-                                    <TaskListGroup
-                                        overdue={groupedTasks.overdue}
-                                        dueToday={groupedTasks.dueToday}
-                                        upcoming={groupedTasks.upcoming}
-                                        completed={groupedTasks.completed}
-                                        onTaskComplete={handleTaskComplete}
-                                        onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
-                                    />
+                                    </div>
                                 </div>
-                            ) : (
-                                <AuditHistoryTable entityType="leads" entityId={Number(id)} entityName={`${lead.firstName} ${lead.lastName}`} />
-                            )}
-                        </Card.Content>
-                    </Card>
+
+                                {lead.notes && (
+                                    <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Lead Background & Notes</div>
+                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{lead.notes}</p>
+                                    </div>
+                                )}
+                            </Card.Content>
+                        </Card>
+                    )}
+
+                    {/* Tab 2: Activity Timeline */}
+                    {activeTab === 'activities' && (
+                        <Card className="glass-panel">
+                            <Card.Content style={{ padding: '1.5rem' }}>
+                                <TimelineList
+                                    activities={activities}
+                                    activityTypes={activityTypes}
+                                    leadId={Number(id)}
+                                    currentUserId={currentUser?.userId}
+                                    onActivityLogged={() => fetchActivities()}
+                                    onActivityDeleted={() => fetchActivities()}
+                                />
+                            </Card.Content>
+                        </Card>
+                    )}
+
+                    {/* Tab 3: Follow-Up Tasks */}
+                    {activeTab === 'tasks' && (
+                        <Card className="glass-panel">
+                            <Card.Content style={{ padding: '1.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Lead Tasks</h3>
+                                    <Button size="sm" onClick={() => { setEditTask(null); setShowTaskModal(true); }}>
+                                        <Plus size={14} style={{ marginRight: 4 }} /> Add Task
+                                    </Button>
+                                </div>
+                                <TaskListGroup
+                                    overdue={groupedTasks.overdue}
+                                    dueToday={groupedTasks.dueToday}
+                                    upcoming={groupedTasks.upcoming}
+                                    completed={groupedTasks.completed}
+                                    onTaskComplete={async (taskId: number) => {
+                                        const doneStatus = taskStatuses.find(s => s.isTerminal);
+                                        if (doneStatus) {
+                                            await api.put(`/api/tasks/${taskId}`, { crmTaskStatusId: doneStatus.crmTaskStatusId });
+                                            fetchTasks();
+                                        }
+                                    }}
+                                    onTaskClick={(t: TaskReadDto) => { setEditTask(t); setShowTaskModal(true); }}
+                                />
+                            </Card.Content>
+                        </Card>
+                    )}
+
+                    {/* Tab 4: Audit History */}
+                    {activeTab === 'audit' && (
+                        <Card className="glass-panel">
+                            <Card.Content style={{ padding: '1.5rem' }}>
+                                <AuditHistoryTable entityType="lead" entityId={Number(id)} />
+                            </Card.Content>
+                        </Card>
+                    )}
                 </div>
             </div>
 
-            {lead && (
+            {/* Modals */}
+            {showConvertModal && (
                 <LeadConvertModal
                     isOpen={showConvertModal}
                     leadId={lead.leadId}
@@ -452,27 +737,49 @@ export const LeadDetailScreen: React.FC = () => {
                     onConverted={handleConvert}
                 />
             )}
-            
+
+            {showFollowUpModal && (
+                <FollowUpModal
+                    isOpen={showFollowUpModal}
+                    onClose={() => setShowFollowUpModal(false)}
+                    onSchedule={handleScheduleFollowUp}
+                    users={users}
+                    currentAssignedRepId={lead.assignedRepId}
+                    initialType={lead.nextFollowUpType}
+                    initialNotes={lead.nextFollowUpNotes}
+                    initialDate={lead.nextFollowUpDate}
+                />
+            )}
+
+            {showMarkLostModal && (
+                <MarkLostModal
+                    isOpen={showMarkLostModal}
+                    leadName={`${lead.firstName} ${lead.lastName}`}
+                    onClose={() => setShowMarkLostModal(false)}
+                    onConfirm={handleMarkLost}
+                />
+            )}
+
             {showTaskModal && (
                 <TaskFormModal
                     task={editTask}
                     leadId={Number(id)}
                     currentUserId={currentUser?.userId ?? 0}
-                    users={users.length > 0 ? users : (currentUser ? [{ id: currentUser.userId, name: currentUser.name }] : [])}
-                    activities={allActivities.map(a => ({ id: a.activityId, name: a.subject }))}
-                    activityTypes={activityTypes.map(at => ({ id: at.id, name: at.name }))}
                     statuses={taskStatuses}
-                    onSaved={() => {
-                        setShowTaskModal(false);
-                        setEditTask(null);
-                        fetchTasks();
-                    }}
-                    onDeleted={() => {
-                        setShowTaskModal(false);
-                        setEditTask(null);
-                        fetchTasks();
-                    }}
+                    users={users}
+                    onSaved={() => { fetchTasks(); setShowTaskModal(false); setEditTask(null); }}
                     onClose={() => { setShowTaskModal(false); setEditTask(null); }}
+                />
+            )}
+
+            {showEmailModal && lead && (
+                <EmailComposerModal
+                    isOpen={showEmailModal}
+                    onClose={() => setShowEmailModal(false)}
+                    defaultRecipient={lead.email || ''}
+                    recipientName={`${lead.firstName} ${lead.lastName}`}
+                    leadId={lead.leadId}
+                    onEmailSent={() => { fetchActivities(); }}
                 />
             )}
         </Layout>

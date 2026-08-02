@@ -130,6 +130,8 @@ export const DashboardScreen: React.FC = () => {
     const [taskGroups, setTaskGroups] = useState<TaskGroupedDto>({ overdue: [], dueToday: [], upcoming: [] });
     const [isLoading, setIsLoading] = useState(true);
     const [selectedKpiCard, setSelectedKpiCard] = useState<StatCard | null>(null);
+    const [slaData, setSlaData] = useState<{ totalActive: number; scheduledCount: number; dueTodayCount: number; overdueCount: number; unscheduledCount: number; scheduledPercentage: number } | null>(null);
+    const [priorityData, setPriorityData] = useState<Array<{ priority: string; total: number; active: number; converted: number; lost: number; avgScore: number }>>([]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,6 +152,10 @@ export const DashboardScreen: React.FC = () => {
         }
         const fetchStats = async () => {
             try {
+                // Fetch SLA and Priority report stats
+                api.get<any>('/api/reports/followup-sla').then(setSlaData).catch(() => {});
+                api.get<any[]>('/api/reports/lead-priority').then(setPriorityData).catch(() => {});
+
                 // Fetch filtered stats for SalesRep, Manager, and Admin (for widgets)
                 if (selectedRole === 'SalesRep' || selectedRole === 'Manager' || isAdmin) {
                     try {
@@ -669,6 +675,77 @@ export const DashboardScreen: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Lead Follow-Up SLA & Priority Insights (New Widget Row) */}
+            <div className="dashboard-grid animate-fade-in" style={{ marginTop: '1.5rem' }}>
+                {slaData && (
+                    <Card className="glass-panel">
+                        <Card.Content>
+                            <div className="dashboard-panel-header">
+                                <div>
+                                    <h2>Follow-Up SLA Health</h2>
+                                    <p className="dashboard-panel-subtitle">Scheduled vs overdue prospect follow-ups.</p>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
+                                    View Report <ArrowRight size={14} style={{ marginLeft: 4 }} />
+                                </Button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+                                <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Scheduled %</span>
+                                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#10b981', fontSize: '1.25rem' }}>{slaData.scheduledPercentage}%</h3>
+                                </div>
+                                <div style={{ background: 'rgba(245, 158, 11, 0.08)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Due Today</span>
+                                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#f59e0b', fontSize: '1.25rem' }}>{slaData.dueTodayCount}</h3>
+                                </div>
+                                <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Overdue</span>
+                                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#ef4444', fontSize: '1.25rem' }}>{slaData.overdueCount}</h3>
+                                </div>
+                                <div style={{ background: 'rgba(99, 102, 241, 0.08)', padding: '0.85rem', borderRadius: '0.75rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Unscheduled</span>
+                                    <h3 style={{ margin: '0.25rem 0 0 0', color: '#6366f1', fontSize: '1.25rem' }}>{slaData.unscheduledCount}</h3>
+                                </div>
+                            </div>
+                        </Card.Content>
+                    </Card>
+                )}
+
+                {priorityData && priorityData.length > 0 && (
+                    <Card className="glass-panel">
+                        <Card.Content>
+                            <div className="dashboard-panel-header">
+                                <div>
+                                    <h2>Lead Priority Breakdown</h2>
+                                    <p className="dashboard-panel-subtitle">Prospect distribution by priority level.</p>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => navigate('/leads')}>
+                                    All Leads <ArrowRight size={14} style={{ marginLeft: 4 }} />
+                                </Button>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1rem' }}>
+                                {priorityData.map(p => (
+                                    <div key={p.priority} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px dashed var(--border-color)' }}>
+                                        <span style={{
+                                            padding: '0.15rem 0.5rem', borderRadius: '0.35rem', fontSize: '0.75rem', fontWeight: 700,
+                                            background: p.priority === 'Urgent' ? 'rgba(239, 68, 68, 0.12)' : p.priority === 'High' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                                            color: p.priority === 'Urgent' ? '#dc2626' : p.priority === 'High' ? '#d97706' : '#2563eb'
+                                        }}>
+                                            {p.priority} Priority
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem' }}>
+                                            <span><strong>{p.total}</strong> total</span>
+                                            <span style={{ color: '#10b981' }}><strong>{p.converted}</strong> converted</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card.Content>
+                    </Card>
+                )}
+            </div>
+
             {/* Standard Detail Modal Popup */}
             {selectedKpiCard && (
                 <div className="modal-overlay" onClick={() => setSelectedKpiCard(null)}>

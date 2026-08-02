@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
+import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { api } from '../lib/api';
 import { Building2, Globe, MapPin, Briefcase, Plus, Building, Search, X, Trash2 } from 'lucide-react';
 import { showToast } from '../lib/toast';
@@ -65,15 +66,19 @@ export const CompaniesScreen: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [search, setSearch] = useState('');
   const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
+  const loadCompanies = useCallback(() => {
     setIsLoading(true);
     setLoadError(null);
-    api.get<CompanyApiEnvelope>('/api/companies?page=1&pageSize=100')
+    const dateFromParam = startDate ? `&createdFrom=${startDate}` : '';
+    const dateToParam = endDate ? `&createdTo=${endDate}` : '';
+    api.get<CompanyApiEnvelope>(`/api/companies?page=1&pageSize=100${dateFromParam}${dateToParam}`)
       .then((d) => {
         const items = (d.data ?? d.Data ?? []).map(company => ({
           companyId: company.companyId ?? company.CompanyId ?? 0,
@@ -95,7 +100,11 @@ export const CompaniesScreen: React.FC = () => {
       })
       .catch(() => setLoadError('Failed to load companies. Please try again.'))
       .finally(() => setIsLoading(false));
-  }, [location.key]);
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    loadCompanies();
+  }, [loadCompanies, location.key]);
 
   const industries = useMemo(() => {
     const list = Array.from(new Set(companies.map(c => c.industry).filter(Boolean))) as string[];
@@ -116,8 +125,7 @@ export const CompaniesScreen: React.FC = () => {
     });
   }, [companies, search, selectedIndustry]);
 
-  // Loading state with skeleton cards
-  if (isLoading) {
+  if (isLoading && !companies.length) {
     return (
       <Layout>
         <div className="dashboard-header animate-fade-in">
@@ -153,8 +161,8 @@ export const CompaniesScreen: React.FC = () => {
       )}
 
       {/* Responsive Filter Bar */}
-      <div className="filters-bar customer-filters animate-fade-in" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 0 }}>
+      <div className="filters-bar customer-filters animate-fade-in" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
           <Search size={16} className="filter-icon" />
           <input
             className="filter-input"
@@ -171,12 +179,13 @@ export const CompaniesScreen: React.FC = () => {
             </button>
           )}
         </div>
+
         {industries.length > 0 && (
           <select
             className="filter-select"
             value={selectedIndustry}
             onChange={e => setSelectedIndustry(e.target.value)}
-            style={{ flex: '0 1 200px' }}
+            style={{ flex: '0 1 160px' }}
           >
             <option value="">All Industries</option>
             {industries.map(ind => (
@@ -184,9 +193,19 @@ export const CompaniesScreen: React.FC = () => {
             ))}
           </select>
         )}
+
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onApply={(s, e) => {
+            setStartDate(s);
+            setEndDate(e);
+          }}
+        />
       </div>
 
       <div className="customers-grid">
+
         {filteredCompanies.map((c, i) => (
           <Card
             key={c.companyId}

@@ -25,9 +25,12 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetPipelineByStage(
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
-        var query = _db.Opportunities.Include(o => o.OpportunityStage).Where(o => true);
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
+        var query = _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost));
         if (startDate.HasValue) query = query.Where(o => o.CreatedAt >= startDate.Value);
-        if (endDate.HasValue)   query = query.Where(o => o.CreatedAt <= endDate.Value);
+        if (end.HasValue)       query = query.Where(o => o.CreatedAt <= end.Value);
 
         var results = await query
             .GroupBy(o => new { o.OpportunityStageId, StageName = o.OpportunityStage != null ? o.OpportunityStage.Name : "No Stage" })
@@ -42,15 +45,16 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetWinRate(
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Where(o => o.OpportunityStage != null && (o.OpportunityStage!.IsWon || o.OpportunityStage!.IsLost));
 
-        if (startDate.HasValue) query = query.Where(o => (o.ActualCloseDate ?? o.CreatedAt) >= startDate.Value);
-        if (endDate.HasValue)   query = query.Where(o => (o.ActualCloseDate ?? o.CreatedAt) <= endDate.Value);
+        if (startDate.HasValue) query = query.Where(o => (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= startDate.Value);
+        if (end.HasValue)       query = query.Where(o => (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end.Value);
 
         var closedOpps = await query
-            .Select(o => new { Date = o.ActualCloseDate ?? o.CreatedAt, IsWon = o.OpportunityStage!.IsWon })
+            .Select(o => new { Date = o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt, IsWon = o.OpportunityStage!.IsWon })
             .ToListAsync();
 
         var groupedByMonth = closedOpps
@@ -77,6 +81,7 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetTimePerStage(
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.StageHistories
             .Include(sh => sh.OldStage)
             .Include(sh => sh.NewStage)
@@ -84,7 +89,7 @@ public class ReportsController : ControllerBase
             .AsQueryable();
 
         if (startDate.HasValue) query = query.Where(sh => sh.ChangedAt >= startDate.Value);
-        if (endDate.HasValue)   query = query.Where(sh => sh.ChangedAt <= endDate.Value);
+        if (end.HasValue)       query = query.Where(sh => sh.ChangedAt <= end.Value);
 
         var allHistories = await query
             .OrderBy(sh => sh.OpportunityId)
@@ -124,14 +129,30 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> GetLeadSourceBreakdown(
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
-        var query = _db.Leads.Include(l => l.Source).Where(l => !l.IsDeleted);
-        if (startDate.HasValue) query = query.Where(l => l.CreatedAt >= startDate.Value);
-        if (endDate.HasValue)   query = query.Where(l => l.CreatedAt <= endDate.Value);
+        var query = _db.Leads
+            .Include(l => l.Source)
+            .Include(l => l.ConvertedCustomer)
+            .ThenInclude(c => c!.Source)
+            .Where(l => !l.IsDeleted);
 
-        var results = await query
-            .GroupBy(l => new { l.SourceId, SourceName = l.Source != null ? l.Source.Name : "Unknown" })
-            .Select(g => new { Source = g.Key.SourceName, Count = g.Count() })
+        if (startDate.HasValue)
+        {
+            var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
+            query = query.Where(l => (l.CreatedAt >= startDate.Value && l.CreatedAt <= end) || (l.ConvertedAt.HasValue && l.ConvertedAt.Value >= startDate.Value && l.ConvertedAt.Value <= end));
+        }
+
+        var leadList = await query
+            .Select(l => new
+            {
+                SourceName = l.Source != null ? l.Source.Name : (l.ConvertedCustomer != null && l.ConvertedCustomer.Source != null ? l.ConvertedCustomer.Source.Name : "Unknown")
+            })
             .ToListAsync();
+
+        var results = leadList
+            .GroupBy(l => l.SourceName)
+            .Select(g => new { Source = g.Key, Count = g.Count() })
+            .OrderByDescending(g => g.Count)
+            .ToList();
 
         return Ok(results);
     }
@@ -142,7 +163,7 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
-        var end   = endDate   ?? DateTime.UtcNow;
+        var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         // All-time totals
         var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted).CountAsync();
@@ -172,8 +193,8 @@ public class ReportsController : ControllerBase
         var revenueInPeriod = (double)(await _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon
-                     && (o.ActualCloseDate ?? o.CreatedAt) >= start
-                     && (o.ActualCloseDate ?? o.CreatedAt) <= end)
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end)
             .SumAsync(o => (decimal?)o.EstimatedValue) ?? 0m);
 
         // Conversion rate in period
@@ -209,15 +230,15 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
-        var end   = endDate   ?? DateTime.UtcNow;
+        var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         // Won opportunities per rep in period
         var wonOpps = await _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Include(o => o.Owner)
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon
-                     && (o.ActualCloseDate ?? o.CreatedAt) >= start
-                     && (o.ActualCloseDate ?? o.CreatedAt) <= end)
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end)
             .Select(o => new { o.OwnerId, OwnerName = o.Owner.Name, o.EstimatedValue })
             .ToListAsync();
 
@@ -226,8 +247,8 @@ public class ReportsController : ControllerBase
             .Include(o => o.OpportunityStage)
             .Include(o => o.Owner)
             .Where(o => o.OpportunityStage != null && (o.OpportunityStage.IsWon || o.OpportunityStage.IsLost)
-                     && (o.ActualCloseDate ?? o.CreatedAt) >= start
-                     && (o.ActualCloseDate ?? o.CreatedAt) <= end)
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end)
             .Select(o => new { o.OwnerId, OwnerName = o.Owner.Name, IsWon = o.OpportunityStage!.IsWon })
             .ToListAsync();
 
@@ -252,6 +273,7 @@ public class ReportsController : ControllerBase
         var allRepIds = wonOpps.Select(x => x.OwnerId)
             .Union(closedOpps.Select(x => x.OwnerId))
             .Union(openPipeline.Select(x => x.OwnerId))
+            .Union(leadsAssigned.Where(x => x.RepId.HasValue).Select(x => x.RepId!.Value))
             .Distinct();
 
         var results = allRepIds.Select(repId =>
@@ -259,6 +281,7 @@ public class ReportsController : ControllerBase
             var name        = wonOpps.FirstOrDefault(x => x.OwnerId == repId)?.OwnerName
                            ?? closedOpps.FirstOrDefault(x => x.OwnerId == repId)?.OwnerName
                            ?? openPipeline.FirstOrDefault(x => x.OwnerId == repId)?.OwnerName
+                           ?? leadsAssigned.FirstOrDefault(x => x.RepId == repId)?.RepName
                            ?? "Unknown";
             var won         = wonOpps.Where(x => x.OwnerId == repId).Sum(x => (double)x.EstimatedValue);
             var dealsWon    = wonOpps.Count(x => x.OwnerId == repId);
@@ -280,17 +303,25 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
-        var end   = endDate   ?? DateTime.UtcNow;
+        var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         var leads = await _db.Leads
             .Include(l => l.LeadStatus)
-            .Where(l => !l.IsDeleted && l.CreatedAt >= start && l.CreatedAt <= end)
+            .Where(l => !l.IsDeleted && (l.CreatedAt >= start && l.CreatedAt <= end || (l.ConvertedAt.HasValue && l.ConvertedAt.Value >= start && l.ConvertedAt.Value <= end)))
             .Select(l => new { StatusName = l.LeadStatus != null ? l.LeadStatus.Name : "New", IsTerminal = l.LeadStatus != null && l.LeadStatus.IsTerminal })
             .ToListAsync();
 
+        var pipelineLostCount = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsLost
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
+                     && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end)
+            .CountAsync();
+
         var total     = leads.Count;
         var converted = leads.Count(l => l.StatusName == "Converted");
-        var lost      = leads.Count(l => l.IsTerminal && l.StatusName != "Converted");
+        var leadLost  = leads.Count(l => l.IsTerminal && l.StatusName != "Converted");
+        var lost      = leadLost + pipelineLostCount;
         var active    = leads.Count(l => !l.IsTerminal);
         var qualified = leads.Count(l => !l.IsTerminal && l.StatusName != "New");
 
@@ -301,6 +332,8 @@ public class ReportsController : ControllerBase
             qualified,
             converted,
             lost,
+            leadLost,
+            pipelineLost = pipelineLostCount
         });
     }
 
@@ -310,7 +343,7 @@ public class ReportsController : ControllerBase
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
-        var end   = endDate   ?? DateTime.UtcNow;
+        var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
         var now   = DateTime.UtcNow;
 
         // Activities logged in period
@@ -326,10 +359,10 @@ public class ReportsController : ControllerBase
             .Select(g => new { Type = g.Key, Count = g.Count() })
             .ToListAsync();
 
-        // Tasks
+        // Tasks (created or due in period)
         var allTasks = await _db.CrmTasks
             .Include(t => t.CrmTaskStatus)
-            .Where(t => t.CreatedAt >= start && t.CreatedAt <= end)
+            .Where(t => (t.CreatedAt >= start && t.CreatedAt <= end) || (t.DueDate.HasValue && t.DueDate.Value >= start && t.DueDate.Value <= end))
             .Select(t => new
             {
                 IsComplete = t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal,
@@ -349,6 +382,91 @@ public class ReportsController : ControllerBase
             completedTasks,
             pendingTasks,
             overdueTasks,
+        });
+    }
+
+    // ── 9. Lead Priority Breakdown ────────────────────────────────────────────
+    [HttpGet("lead-priority")]
+    public async Task<IActionResult> GetLeadPriorityBreakdown(
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+    {
+        var query = _db.Leads
+            .Include(l => l.LeadStatus)
+            .Where(l => !l.IsDeleted);
+
+        if (startDate.HasValue)
+        {
+            var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
+            query = query.Where(l => l.CreatedAt >= startDate.Value && l.CreatedAt <= end);
+        }
+
+        var leads = await query
+            .Select(l => new
+            {
+                Priority = string.IsNullOrWhiteSpace(l.Priority) ? "Medium" : l.Priority,
+                StatusName = l.LeadStatus != null ? l.LeadStatus.Name : "New",
+                Score = l.LeadScore
+            })
+            .ToListAsync();
+
+        var priorities = new[] { "Urgent", "High", "Medium", "Low" };
+        var results = priorities.Select(p =>
+        {
+            var pLeads = leads.Where(l => l.Priority.Equals(p, StringComparison.OrdinalIgnoreCase)).ToList();
+            var total = pLeads.Count;
+            var converted = pLeads.Count(l => l.StatusName == "Converted");
+            var lost = pLeads.Count(l => l.StatusName == "Lost");
+            var active = total - converted - lost;
+            var avgScore = total > 0 ? Math.Round(pLeads.Average(l => l.Score), 1) : 0;
+            return new { Priority = p, Total = total, Active = active, Converted = converted, Lost = lost, AvgScore = avgScore };
+        }).ToList();
+
+        return Ok(results);
+    }
+
+    // ── 10. Follow-Up SLA & Health ────────────────────────────────────────────
+    [HttpGet("followup-sla")]
+    public async Task<IActionResult> GetFollowUpSlaHealth(
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+    {
+        var now = DateTime.UtcNow;
+        var today = now.Date;
+
+        var query = _db.Leads
+            .Include(l => l.LeadStatus)
+            .Where(l => !l.IsDeleted && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+
+        if (startDate.HasValue)
+        {
+            var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
+            query = query.Where(l => l.CreatedAt >= startDate.Value && l.CreatedAt <= end);
+        }
+
+        var activeLeads = await query
+            .Select(l => new
+            {
+                l.LeadId,
+                l.NextFollowUpDate,
+                l.CreatedAt
+            })
+            .ToListAsync();
+
+        var totalActive = activeLeads.Count;
+        var scheduledCount = activeLeads.Count(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value >= now);
+        var dueTodayCount = activeLeads.Count(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value.Date == today);
+        var overdueCount = activeLeads.Count(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value < now);
+        var unscheduledCount = activeLeads.Count(l => !l.NextFollowUpDate.HasValue);
+
+        double scheduledPercentage = totalActive > 0 ? Math.Round((double)(scheduledCount + dueTodayCount) / totalActive * 100, 1) : 0;
+
+        return Ok(new
+        {
+            totalActive,
+            scheduledCount,
+            dueTodayCount,
+            overdueCount,
+            unscheduledCount,
+            scheduledPercentage
         });
     }
 }

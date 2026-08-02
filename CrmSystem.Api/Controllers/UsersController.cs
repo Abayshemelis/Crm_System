@@ -347,6 +347,15 @@ public class UsersController : ControllerBase
         var activities = await _db.Activities.Where(a => a.CreatedById == id).ToListAsync();
         foreach (var a in activities) a.CreatedById = currentUserId;
 
+        var auditLogs = await _db.AuditLogs.Where(a => a.ChangedById == id).ToListAsync();
+        foreach (var a in auditLogs) a.ChangedById = currentUserId;
+
+        var stageHistories = await _db.StageHistories.Where(s => s.ChangedById == id).ToListAsync();
+        foreach (var s in stageHistories) s.ChangedById = currentUserId;
+
+        var attachments = await _db.Attachments.Where(a => a.UploadedById == id).ToListAsync();
+        foreach (var a in attachments) a.UploadedById = currentUserId;
+
         // 3. Remove user identity record
         _db.Identities.Remove(user);
         await _db.SaveChangesAsync();

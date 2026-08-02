@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
+import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
 import './screens.css';
 
@@ -17,6 +18,9 @@ interface FormState {
     jobTitle: string;
     sourceId: string;
     leadStatusId: string;
+    assignedRepId: string;
+    priority: string;
+    leadScore: number;
     notes: string;
 }
 
@@ -32,6 +36,9 @@ export const LeadFormScreen: React.FC = () => {
         jobTitle: '',
         sourceId: '',
         leadStatusId: '',
+        assignedRepId: '',
+        priority: 'Medium',
+        leadScore: 0,
         notes: ''
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -39,16 +46,20 @@ export const LeadFormScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [sources, setSources] = useState<{ id: number; name: string }[]>([]);
     const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
+    const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
     const isEdit = Boolean(id);
 
     useEffect(() => {
         api.get<{ id: number; name: string }[]>('/api/sources')
             .then(data => setSources(data))
-            .catch(() => { /* non-critical */ });
+            .catch(() => { });
         api.get<{ id: number; name: string }[]>('/api/leadstatuses')
             .then(data => setStatuses(data))
             .catch(() => { });
-    }, [navigate]);
+        api.get<any[]>('/api/users')
+            .then(data => setUsers(data.map((u: any) => ({ id: u.id ?? u.identityId, name: u.name }))))
+            .catch(() => { });
+    }, []);
 
     useEffect(() => {
         if (!id) return;
@@ -64,6 +75,9 @@ export const LeadFormScreen: React.FC = () => {
                     jobTitle: lead.jobTitle ?? '',
                     sourceId: String(lead.sourceId ?? ''),
                     leadStatusId: String(lead.leadStatusId ?? ''),
+                    assignedRepId: String(lead.assignedRepId ?? ''),
+                    priority: lead.priority ?? 'Medium',
+                    leadScore: lead.leadScore ?? 0,
                     notes: lead.notes ?? ''
                 });
             })
@@ -71,7 +85,7 @@ export const LeadFormScreen: React.FC = () => {
             .finally(() => setIsLoading(false));
     }, [id, navigate]);
 
-    const handleChange = (field: keyof FormState, value: string) => {
+    const handleChange = (field: keyof FormState, value: any) => {
         setForm(prev => ({ ...prev, [field]: value }));
         if (errors[field]) {
             setErrors(prev => {
@@ -107,15 +121,19 @@ export const LeadFormScreen: React.FC = () => {
             companyName: form.companyName.trim() || null,
             jobTitle: form.jobTitle.trim() || null,
             sourceId: form.sourceId ? Number(form.sourceId) : null,
-            assignedRepId: null,
+            priority: form.priority,
+            leadScore: Number(form.leadScore) || 0,
+            assignedRepId: form.assignedRepId ? Number(form.assignedRepId) : null,
             notes: form.notes.trim() || null
         };
 
         try {
             if (isEdit) {
-                await api.put(`/api/leads/${id}`, { ...payload, leadStatusId: Number(form.leadStatusId) });
+                await api.put(`/api/leads/${id}`, { ...payload, leadStatusId: form.leadStatusId ? Number(form.leadStatusId) : null });
+                showToast('Lead updated successfully', 'success');
             } else {
                 await api.post('/api/leads', payload);
+                showToast('Lead created successfully', 'success');
             }
             navigate('/leads');
         } catch (error: any) {
@@ -137,7 +155,7 @@ export const LeadFormScreen: React.FC = () => {
                 <div className="detail-header-info">
                     <div>
                         <h1>{isEdit ? 'Edit Lead' : 'New Lead'}</h1>
-                        <p>{isEdit ? 'Update lead information' : 'Create a new lead'}</p>
+                        <p>{isEdit ? 'Update lead details & priority' : 'Create a new prospect lead'}</p>
                     </div>
                 </div>
             </div>
@@ -150,39 +168,68 @@ export const LeadFormScreen: React.FC = () => {
                         </div>
                     )}
                     <div className="form-grid">
-                        <Input label="First Name" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} error={errors.firstName} />
-                        <Input label="Last Name" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} error={errors.lastName} />
+                        <Input label="First Name *" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} error={errors.firstName} />
+                        <Input label="Last Name *" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} error={errors.lastName} />
                         <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
                         <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />
                         <Input label="Company" value={form.companyName} onChange={e => handleChange('companyName', e.target.value)} error={errors.companyName} />
                         <Input label="Job Title" value={form.jobTitle} onChange={e => handleChange('jobTitle', e.target.value)} error={errors.jobTitle} />
+
                         <div className="input-wrapper">
-                            <label className="input-label">Source</label>
-                            <select className="input-field" value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)}>
-                                <option value="">Select source</option>
-                                {sources.map(source => (
-                                    <option key={source.id} value={source.id}>{source.name}</option>
-                                ))}
+                            <label className="input-label">Priority</label>
+                            <select className="input-field" value={form.priority} onChange={e => handleChange('priority', e.target.value)}>
+                                <option key="priority-low" value="Low">Low</option>
+                                <option key="priority-medium" value="Medium">Medium</option>
+                                <option key="priority-high" value="High">High</option>
+                                <option key="priority-urgent" value="Urgent">Urgent</option>
                             </select>
                         </div>
-                        {isEdit && (
+
+                        <Input label="Lead Score (0-100)" type="number" min="0" max="100" value={String(form.leadScore)} onChange={e => handleChange('leadScore', e.target.value)} />
+
+                        {users.length > 0 && (
                             <div className="input-wrapper">
-                                <label className="input-label">Status</label>
-                                <select className="input-field" value={form.leadStatusId} onChange={e => handleChange('leadStatusId', e.target.value)}>
-                                    <option value="">Select status</option>
-                                    {statuses.map(status => (
-                                        <option key={status.id} value={status.id}>{status.name}</option>
+                                <label className="input-label">Assigned Sales Rep</label>
+                                <select className="input-field" value={form.assignedRepId} onChange={e => handleChange('assignedRepId', e.target.value)}>
+                                    <option key="rep-unassigned" value="">Unassigned</option>
+                                    {users.map(u => (
+                                        <option key={`rep-${u.id}`} value={u.id}>{u.name}</option>
                                     ))}
                                 </select>
                             </div>
                         )}
+
+                        <div className="input-wrapper">
+                            <label className="input-label">Source</label>
+                            <select className="input-field" value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)}>
+                                <option key="source-default" value="">Select source</option>
+                                {sources.map(source => (
+                                    <option key={`source-${source.id}`} value={source.id}>{source.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {isEdit && (
+                            <div className="input-wrapper">
+                                <label className="input-label">Status</label>
+                                <select className="input-field" value={form.leadStatusId} onChange={e => handleChange('leadStatusId', e.target.value)}>
+                                    <option key="status-default" value="">Select status</option>
+                                    {statuses.map(status => (
+                                        <option key={`status-${status.id}`} value={status.id}>{status.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="input-wrapper" style={{ gridColumn: '1 / -1' }}>
                             <label className="input-label">Notes</label>
-                            <textarea className="input-field" rows={5} value={form.notes} onChange={e => handleChange('notes', e.target.value)} />
+                            <textarea className="input-field" rows={5} value={form.notes} onChange={e => handleChange('notes', e.target.value)} placeholder="Add any background or notes for this prospect..." />
                         </div>
                     </div>
-                    <div style={{ marginTop: '1rem' }}>
-                        <Button onClick={handleSubmit}>{isEdit ? 'Save changes' : 'Create lead'}</Button>
+
+                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem' }}>
+                        <Button onClick={handleSubmit}>{isEdit ? 'Save Changes' : 'Create Lead'}</Button>
+                        <Button variant="ghost" onClick={() => navigate('/leads')}>Cancel</Button>
                     </div>
                 </Card.Content>
             </Card>

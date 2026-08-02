@@ -53,6 +53,18 @@ public class CompaniesController : ControllerBase
             companies = companies.Where(c => c.Name.Contains(search));
         }
 
+        if (query.CreatedFrom.HasValue)
+        {
+            companies = companies.Where(c => c.CreatedAt >= query.CreatedFrom.Value);
+        }
+
+        if (query.CreatedTo.HasValue)
+        {
+            var endOfDay = query.CreatedTo.Value.Date.AddDays(1).AddTicks(-1);
+            companies = companies.Where(c => c.CreatedAt <= endOfDay);
+        }
+
+
         var page = query.NormalizedPage;
         var pageSize = query.NormalizedPageSize;
         var totalCount = await companies.CountAsync();
@@ -416,7 +428,7 @@ public class CompaniesController : ControllerBase
 
         var repExists = await _db.Identities
             .Include(u => u.Role)
-            .AnyAsync(u => u.IdentityId == requestedRepId && u.Role != null && u.Role.Name != "Admin");
+            .AnyAsync(u => u.IdentityId == requestedRepId && u.Role != null);
         return repExists ? (true, requestedRepId) : (false, null);
     }
 

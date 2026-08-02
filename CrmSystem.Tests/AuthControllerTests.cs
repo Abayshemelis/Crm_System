@@ -17,6 +17,11 @@ public class MockEmailSender : IEmailSender
     {
         return Task.CompletedTask;
     }
+
+    public Task SendEmailAsync(string toEmail, string subject, string bodyHtml, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 public class MockGoogleAuthService : IGoogleAuthService

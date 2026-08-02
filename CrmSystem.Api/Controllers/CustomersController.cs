@@ -74,6 +74,18 @@ public class CustomersController : ControllerBase
             customers = customers.Where(c => query.TagIds.All(tagId => c.Tags.Any(tag => tag.TagId == tagId)));
         }
 
+        if (query.CreatedFrom.HasValue)
+        {
+            customers = customers.Where(c => c.CreatedAt >= query.CreatedFrom.Value);
+        }
+
+        if (query.CreatedTo.HasValue)
+        {
+            var endOfDay = query.CreatedTo.Value.Date.AddDays(1).AddTicks(-1);
+            customers = customers.Where(c => c.CreatedAt <= endOfDay);
+        }
+
+
         var page = query.NormalizedPage;
         var pageSize = query.NormalizedPageSize;
         var totalCount = await customers.CountAsync();
@@ -232,6 +244,9 @@ public class CustomersController : ControllerBase
         customer.CompanyId = request.CompanyId;
         customer.SourceId = request.SourceId;
         customer.AssignedRepId = assignedRepId.Value;
+
+        var convLead = await _db.Leads.FirstOrDefaultAsync(l => l.ConvertedCustomerId == customer.CustomerId);
+        if (convLead is not null) convLead.SourceId = request.SourceId;
 
         await _db.SaveChangesAsync();
 
@@ -676,7 +691,7 @@ public class CustomersController : ControllerBase
     {
         return await _db.Identities
             .Include(u => u.Role)
-            .AnyAsync(u => u.IdentityId == repId && u.Role != null && u.Role.Name != "Admin");
+            .AnyAsync(u => u.IdentityId == repId && u.Role != null);
     }
 
     private async Task<bool> CanAccessCustomerAsync(int customerId)

@@ -12,7 +12,10 @@ import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User } from 'lucide-react';
+import { QuoteModal } from '../components/opportunities/QuoteModal';
+import { EmailComposerModal } from '../components/email/EmailComposerModal';
+import { showToast } from '../lib/toast';
+import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send } from 'lucide-react';
 import './screens.css';
 
 interface Opportunity {
@@ -104,6 +107,11 @@ export const OpportunityDetailScreen: React.FC = () => {
     unitPrice: 0,
     discountPercent: 0
   });
+
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
+  const [showEmailComposer, setShowEmailComposer] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
 
   const [activeTab, setActiveTab] = useState<TabId>('details');
   const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
@@ -284,6 +292,28 @@ export const OpportunityDetailScreen: React.FC = () => {
   };
 
   const calculatedTotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+  const handleSyncEstimatedValue = async () => {
+    if (!id || !opportunity) return;
+    try {
+      await api.put(`/api/opportunities/${id}`, {
+        ...opportunity,
+        estimatedValue: calculatedTotal
+      });
+      setOpportunity(prev => prev ? ({ ...prev, estimatedValue: calculatedTotal }) : null);
+      setEditedOpportunity(prev => ({ ...prev, estimatedValue: calculatedTotal }));
+      showToast('Deal value synced with product line items');
+    } catch {
+      showToast('Failed to sync deal value', 'error');
+    }
+  };
+
+  const handleQuoteEmailSend = (summaryText: string) => {
+    setEmailSubject(`Proposal Quote: ${opportunity?.title || 'Commercial Quote'}`);
+    setEmailBody(summaryText);
+    setShowQuoteModal(false);
+    setShowEmailComposer(true);
+  };
 
   const groupedTasks = (() => {
     const now = new Date();
@@ -470,11 +500,19 @@ export const OpportunityDetailScreen: React.FC = () => {
               {/* Line Items Tab */}
               {activeTab === 'lineItems' && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Opportunity Products</h3>
-                    <strong style={{ fontSize: '1rem', color: 'var(--accent-primary)' }}>
-                      Total Value: ${calculatedTotal.toLocaleString()}
-                    </strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: '1rem', color: 'var(--accent-primary)', marginRight: '0.5rem' }}>
+                        Total Value: ${calculatedTotal.toLocaleString()}
+                      </strong>
+                      <Button variant="secondary" size="sm" onClick={handleSyncEstimatedValue}>
+                        <RefreshCw size={14} style={{ marginRight: 5 }} /> Sync Deal Value
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={() => setShowQuoteModal(true)}>
+                        <FileText size={14} style={{ marginRight: 5 }} /> Generate Proposal Quote
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="add-line-item" style={{ marginBottom: '1.5rem' }}>
@@ -610,6 +648,29 @@ export const OpportunityDetailScreen: React.FC = () => {
             loadData();
           }}
           onClose={() => { setShowTaskModal(false); setEditTask(null); }}
+        />
+      )}
+
+      {showQuoteModal && opportunity && (
+        <QuoteModal
+          opportunity={opportunity}
+          lineItems={lineItems}
+          onClose={() => setShowQuoteModal(false)}
+          onSendEmail={handleQuoteEmailSend}
+        />
+      )}
+
+      {showEmailComposer && opportunity && (
+        <EmailComposerModal
+          isOpen={showEmailComposer}
+          onClose={() => setShowEmailComposer(false)}
+          defaultRecipient={opportunity.customerEmail}
+          recipientName={`${opportunity.customerFirstName} ${opportunity.customerLastName}`}
+          initialSubject={emailSubject}
+          initialBody={emailBody}
+          opportunityId={opportunity.opportunityId}
+          customerId={opportunity.customerId}
+          onEmailSent={() => showToast('Proposal Quote sent via Email')}
         />
       )}
     </Layout>
