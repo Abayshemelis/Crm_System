@@ -17,12 +17,14 @@ public class LeadsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IAuditService _auditService;
+    private readonly ILeadScoringService _scoringService;
 
-    public LeadsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
+    public LeadsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService, ILeadScoringService scoringService)
     {
         _db = db;
         _currentUser = currentUser;
         _auditService = auditService;
+        _scoringService = scoringService;
     }
 
     [HttpGet]
@@ -166,6 +168,31 @@ public class LeadsController : ControllerBase
         }
 
         return Ok(ToDetailDto(lead));
+    }
+
+    [HttpGet("{id:int}/score-breakdown")]
+    public async Task<ActionResult<LeadScoreResultDto>> GetLeadScoreBreakdown(int id)
+    {
+        var lead = await _db.Leads
+            .Include(l => l.Source)
+            .Include(l => l.LeadStatus)
+            .Include(l => l.Activities)
+            .SingleOrDefaultAsync(l => l.LeadId == id);
+
+        if (lead is null)
+            return NotFound(new { message = "Lead not found." });
+
+        if (!_currentUser.CanAccessOwnedRecord(lead.AssignedRepId))
+            return Forbid();
+
+        var result = _scoringService.CalculateScore(lead);
+        if (lead.LeadScore != result.Score)
+        {
+            lead.LeadScore = result.Score;
+            await _db.SaveChangesAsync();
+        }
+
+        return Ok(result);
     }
 
     [HttpPost]

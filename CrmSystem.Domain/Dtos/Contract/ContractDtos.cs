@@ -1,0 +1,63 @@
+using System;
+
+namespace CrmSystem.Domain.Dtos.Contract;
+
+public class ContractReadDto
+{
+    public int ContractId { get; set; }
+    public string ContractNumber { get; set; } = string.Empty;
+    public int CustomerId { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerEmail { get; set; } = string.Empty;
+    public string? CompanyName { get; set; }
+
+    public int? OpportunityId { get; set; }
+    public string? OpportunityTitle { get; set; }
+
+    public string Title { get; set; } = string.Empty;
+    public decimal ContractValue { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public string Status { get; set; } = "Draft";
+
+    public string? SignatureDataUrl { get; set; }
+    public string? SignedByName { get; set; }
+    public DateTime? SignedAt { get; set; }
+
+    public string? TermsAndConditions { get; set; }
+    public string? Notes { get; set; }
+
+    public int CreatedById { get; set; }
+    public string CreatedByName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CreateContractDto
+{
+    public int CustomerId { get; set; }
+    public int? OpportunityId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public decimal ContractValue { get; set; }
+    public DateTime StartDate { get; set; } = DateTime.UtcNow;
+    public DateTime EndDate { get; set; } = DateTime.UtcNow.AddYears(1);
+    public string? TermsAndConditions { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class UpdateContractDto
+{
+    public string Title { get; set; } = string.Empty;
+    public decimal ContractValue { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+    public string Status { get; set; } = "Draft";
+    public int? OpportunityId { get; set; }
+    public string? TermsAndConditions { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class SignContractDto
+{
+    public string SignatureDataUrl { get; set; } = string.Empty;
+    public string SignedByName { get; set; } = string.Empty;
+}

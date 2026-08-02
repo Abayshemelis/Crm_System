@@ -3570,4 +3570,22 @@
     padding: 1px 3px;
   }
 }
+
+/* ── Contracts Screen Responsive ───────────────────────────────── */
+.contracts-table-wrap {
+  display: block;
+  overflow-x: auto;
+}
+.contracts-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .contracts-table-wrap {
+    display: none;
+  }
+  .contracts-mobile-list {
+    display: block;
+  }
+}
 

@@ -193,7 +193,8 @@ namespace CrmSystem.Infrastructure.Services
             OwnerId            = opp.OwnerId,
             OwnerName          = opp.Owner?.Name ?? string.Empty,
             CompanyName        = opp.Customer?.Company?.Name,
-            CreatedAt          = opp.CreatedAt
+            CreatedAt          = opp.CreatedAt,
+            UpdatedAt          = opp.UpdatedAt
         };
     }
 }

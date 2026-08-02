@@ -71,6 +71,7 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>

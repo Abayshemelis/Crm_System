@@ -99,12 +99,24 @@ export const LeadDetailScreen: React.FC = () => {
         }
     }, [id]);
 
+    const [scoreBreakdown, setScoreBreakdown] = useState<{
+        score: number;
+        rating: string;
+        slaStatus: string;
+        daysInactive: number;
+        scoreFactors: string[];
+    } | null>(null);
+
     const fetchLead = useCallback(async () => {
         if (!id) return;
         setIsLoading(true);
         try {
-            const data = await api.get<LeadDetail>(`/api/leads/${id}`);
+            const [data, scoreData] = await Promise.all([
+                api.get<LeadDetail>(`/api/leads/${id}`),
+                api.get<any>(`/api/leads/${id}/score-breakdown`).catch(() => null)
+            ]);
             setLead(data);
+            if (scoreData) setScoreBreakdown(scoreData);
         } catch {
             navigate('/leads');
         } finally {
@@ -389,6 +401,76 @@ export const LeadDetailScreen: React.FC = () => {
                     <Button variant="danger" size="sm" onClick={deleteLead}>Delete</Button>
                 </div>
             </div>
+
+            {/* Lead Score & SLA Intelligence Widget */}
+            {scoreBreakdown && (
+                <div className="glass-panel" style={{
+                    padding: '1rem 1.25rem',
+                    marginBottom: '1.5rem',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '1.25rem',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-lg)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{
+                            width: '52px',
+                            height: '52px',
+                            borderRadius: '50%',
+                            background: scoreBreakdown.rating === 'Hot' ? 'rgba(239, 68, 68, 0.15)' : scoreBreakdown.rating === 'Warm' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: scoreBreakdown.rating === 'Hot' ? '#ef4444' : scoreBreakdown.rating === 'Warm' ? '#f59e0b' : '#3b82f6',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.25rem',
+                            fontWeight: 800
+                        }}>
+                            {scoreBreakdown.score}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                                Lead Score Rating
+                            </div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {scoreBreakdown.rating === 'Hot' ? '🔥 Hot Prospect' : scoreBreakdown.rating === 'Warm' ? '⚡ Warm Lead' : '❄️ Cold Lead'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                            SLA Response Status
+                        </div>
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{
+                                padding: '0.2rem 0.6rem',
+                                borderRadius: '0.4rem',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                background: scoreBreakdown.slaStatus === 'OnTrack' ? 'rgba(16, 185, 129, 0.15)' : scoreBreakdown.slaStatus === 'Warning' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                color: scoreBreakdown.slaStatus === 'OnTrack' ? '#10b981' : scoreBreakdown.slaStatus === 'Warning' ? '#f59e0b' : '#ef4444'
+                            }}>
+                                {scoreBreakdown.slaStatus === 'OnTrack' ? '✅ SLA On Track' : scoreBreakdown.slaStatus === 'Warning' ? '⚠️ SLA Warning' : '🔴 SLA Breached'}
+                            </span>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                ({scoreBreakdown.daysInactive}d inactive)
+                            </span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>
+                            Top Scoring Factors
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {scoreBreakdown.scoreFactors.slice(0, 3).map((factor, idx) => (
+                                <div key={idx}>• {factor}</div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Next Follow-Up Banner */}
             {lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && (

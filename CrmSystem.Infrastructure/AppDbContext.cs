@@ -35,6 +35,7 @@ public class AppDbContext : DbContext
     public DbSet<Opportunity> Opportunities => Set<Opportunity>();
     public DbSet<OpportunityLineItem> OpportunityLineItems => Set<OpportunityLineItem>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<Contract> Contracts => Set<Contract>();
 
     // ── Activity & Tasks ───────────────────────────────────────────────────
     public DbSet<Activity> Activities => Set<Activity>();

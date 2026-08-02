@@ -24,6 +24,7 @@ import { ProductsScreen } from './screens/ProductsScreen';
 import { TasksScreen } from './screens/TasksScreen';
 import { OpportunityDetailScreen } from './screens/OpportunityDetailScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
+import { ContractsScreen } from './screens/ContractsScreen';
 import { Toast } from './components/ui/Toast';
 import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
@@ -58,6 +59,7 @@ function AppRoutes() {
         <Route path="/opportunities" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
         <Route path="/pipeline/products" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
         <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
+        <Route path="/contracts" element={<ProtectedRoute><ContractsScreen /></ProtectedRoute>} />
         <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
         <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />

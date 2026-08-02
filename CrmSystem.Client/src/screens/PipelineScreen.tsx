@@ -26,6 +26,7 @@ interface Opportunity {
     ownerId: number;
     ownerName: string;
     createdAt: string;
+    updatedAt?: string;
 }
 
 interface OpportunityStage {
@@ -319,7 +320,23 @@ export const PipelineScreen: React.FC = () => {
                                             }}
                                         >
                                             <Card.Content>
-                                                <h4>{opp.title}</h4>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <h4 style={{ margin: 0 }}>{opp.title}</h4>
+                                                    {!stage.isWon && !stage.isLost && (Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / (1000 * 60 * 60 * 24))) > 5 && (
+                                                        <span style={{
+                                                            fontSize: '0.65rem',
+                                                            fontWeight: 700,
+                                                            padding: '0.15rem 0.4rem',
+                                                            borderRadius: '0.3rem',
+                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                            color: '#ef4444',
+                                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                            whiteSpace: 'nowrap'
+                                                        }}>
+                                                            ⚠️ Stalled ({Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / (1000 * 60 * 60 * 24))}d)
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p>{opp.customerFirstName} {opp.customerLastName}</p>
                                                 <p className="opportunity-value">${opp.estimatedValue.toLocaleString()}</p>
                                                 <p className="opportunity-owner">{opp.ownerName}</p>

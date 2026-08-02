@@ -22,5 +22,6 @@ namespace CrmSystem.Domain.Dtos.Opportunity
         public string OwnerName { get; set; } = string.Empty;
         public string? CompanyName { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 }
