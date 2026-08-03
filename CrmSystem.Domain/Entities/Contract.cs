@@ -27,6 +27,9 @@ public class Contract
     public string? TermsAndConditions { get; set; }
     public string? Notes { get; set; }
 
+    public string? SigningToken { get; set; }
+    public DateTime? TokenExpiresAt { get; set; }
+
     public int CreatedById { get; set; }
     public Identity CreatedBy { get; set; } = null!;
 

@@ -26,6 +26,7 @@ public class ContractReadDto
 
     public string? TermsAndConditions { get; set; }
     public string? Notes { get; set; }
+    public string? SigningToken { get; set; }
 
     public int CreatedById { get; set; }
     public string CreatedByName { get; set; } = string.Empty;

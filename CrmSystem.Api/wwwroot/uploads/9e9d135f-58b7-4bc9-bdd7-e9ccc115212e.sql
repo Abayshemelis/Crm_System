@@ -1,5 +1,5 @@
 -- =====================================================================
--- CRM System — Database Schema (PostgreSQL)
+-- CRM System — Database Schema (sql server)
 -- Generated from: CRM Project Documentation, Section 4.3
 -- =====================================================================
 -- Run with:  psql -U <user> -d <database> -f crm_schema.sql

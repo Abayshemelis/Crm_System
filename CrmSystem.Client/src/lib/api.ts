@@ -31,6 +31,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Content-Type'] = 'application/json';
   }
 
+  // Bypass ngrok browser warning page for fetch API requests
+  headers['ngrok-skip-browser-warning'] = '69420';
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }

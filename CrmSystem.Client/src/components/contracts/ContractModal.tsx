@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { FileText, X, CheckCircle, Download, Printer, PenTool, RefreshCw } from 'lucide-react';
+import { FileText, X, CheckCircle, Download, Printer, PenTool, RefreshCw, Receipt } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { showToast } from '../../lib/toast';
+import html2pdf from 'html2pdf.js';
 
 export interface ContractItem {
   contractId: number;
@@ -31,9 +32,10 @@ interface ContractModalProps {
   contract: ContractItem;
   onClose: () => void;
   onUpdate: () => void;
+  onInvoice?: (contract: ContractItem) => void;
 }
 
-export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose, onUpdate }) => {
+export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose, onUpdate, onInvoice }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [signatoryName, setSignatoryName] = useState(contract.customerName || '');
@@ -134,24 +136,23 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
   const handleDownloadPDF = async () => {
     setDownloadingPdf(true);
     try {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      script.onload = async () => {
-        const element = document.getElementById('printable-contract-area');
-        if (!element) return;
-        const opt = {
-          margin: [0.4, 0.4, 0.4, 0.4],
-          filename: `Contract-${contract.contractNumber}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        await (window as any).html2pdf().set(opt).from(element).save();
-        setDownloadingPdf(false);
+      const element = document.getElementById('printable-contract-area');
+      if (!element) {
+        showToast('Printable contract area not found', 'error');
+        return;
+      }
+      const opt = {
+        margin: [0.4, 0.4, 0.4, 0.4],
+        filename: `Contract-${contract.contractNumber}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
-      document.body.appendChild(script);
+      await (html2pdf as any)().set(opt).from(element).save();
+      showToast(`Contract-${contract.contractNumber}.pdf downloaded!`);
     } catch {
       window.print();
+    } finally {
       setDownloadingPdf(false);
     }
   };
@@ -208,15 +209,29 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
                 fontWeight: 700,
                 padding: '0.15rem 0.5rem',
                 borderRadius: '0.3rem',
-                background: contract.status === 'Signed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: contract.status === 'Signed' ? '#10b981' : '#f59e0b'
+                background: (contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt) 
+                  ? 'rgba(16, 185, 129, 0.15)' 
+                  : 'rgba(245, 158, 11, 0.15)',
+                color: (contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt) 
+                  ? '#10b981' 
+                  : '#f59e0b'
               }}>
-                Status: {contract.status}
+                Status: {(contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt) ? 'Signed & Executed' : contract.status}
               </span>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {(contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt) && onInvoice && (
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={() => { onInvoice(contract); onClose(); }}
+                style={{ background: '#10b981', borderColor: '#10b981', color: '#ffffff' }}
+              >
+                <Receipt size={15} style={{ marginRight: 6 }} /> 🧾 Generate Invoice
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={handleDownloadPDF} disabled={downloadingPdf}>
               <Download size={15} style={{ marginRight: 6 }} /> {downloadingPdf ? 'Generating PDF…' : 'Download PDF'}
             </Button>

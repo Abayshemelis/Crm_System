@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
-  Kanban, CheckSquare, BarChart2, X,
+  Kanban, CheckSquare, BarChart2, X, Receipt,
   LayoutDashboard, Target, FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { to: '/leads',      label: 'Leads',      icon: Target,           authRequired: true,  managerOnly: false },
   { to: '/pipeline',   label: 'Pipeline',   icon: Kanban,           authRequired: true,  managerOnly: false },
   { to: '/contracts',  label: 'Contracts',  icon: FileText,         authRequired: true,  managerOnly: false },
+  { to: '/invoices',   label: 'Invoices',   icon: Receipt,          authRequired: true,  managerOnly: false },
   { to: '/tasks',      label: 'Tasks',      icon: CheckSquare,      authRequired: true,  managerOnly: false },
   { to: '/users',      label: 'Users',      icon: UserCircle,       authRequired: true,  managerOnly: true  },
 ] as const;

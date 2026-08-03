@@ -173,6 +173,30 @@ public class NotificationService : INotificationService
         await _db.SaveChangesAsync();
     }
 
+    public async Task CreateNotificationAsync(int identityId, string typeName, string message, int? taskId = null, int? opportunityId = null)
+    {
+        var type = await _db.NotificationTypes.FirstOrDefaultAsync(t => t.Name == typeName);
+        if (type == null)
+        {
+            type = await _db.NotificationTypes.FirstOrDefaultAsync();
+        }
+        if (type == null) return;
+
+        var notif = new Notification
+        {
+            IdentityId = identityId,
+            NotificationTypeId = type.NotificationTypeId,
+            Message = message,
+            RelatedTaskId = taskId,
+            RelatedOpportunityId = opportunityId,
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.Notifications.Add(notif);
+        await _db.SaveChangesAsync();
+    }
+
     private static NotificationReadDto MapToDto(Notification n) => new()
     {
         NotificationId = n.NotificationId,

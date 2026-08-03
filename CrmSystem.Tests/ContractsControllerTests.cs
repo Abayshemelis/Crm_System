@@ -24,6 +24,21 @@ public class TestContractCurrentUserService : ICurrentUserService
     public bool CanAccessOwnedRecord(int? ownerRepId) => true;
 }
 
+public class TestEmailSender : IEmailSender
+{
+    public Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task SendEmailAsync(string toEmail, string subject, string bodyHtml, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+public class TestEmailTemplateService : IEmailTemplateService
+{
+    public string BuildContractSigningRequestHtml(string customerName, string contractTitle, string contractNumber, decimal value, string signUrl, DateTime expiresAt) => "<html></html>";
+    public string BuildContractSignedNotificationHtml(string repName, string customerName, string contractTitle, string contractNumber, decimal value, DateTime signedAt, string signedByName) => "<html></html>";
+    public string BuildInvoiceIssuedHtml(string customerName, string invoiceNumber, decimal amount, decimal totalAmount, DateTime issueDate, DateTime dueDate, string? contractNumber) => "<html></html>";
+    public string BuildInvoiceOverdueHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime dueDate) => "<html></html>";
+    public string BuildInvoicePaymentReceiptHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime paidAt, string paymentMethod) => "<html></html>";
+}
+
 public class ContractsControllerTests
 {
     private AppDbContext CreateDbContext()
@@ -41,6 +56,8 @@ public class ContractsControllerTests
         using var context = CreateDbContext();
         var currentUser = new TestContractCurrentUserService();
         var audit = new MockAuditService();
+        var emailSender = new TestEmailSender();
+        var templateService = new TestEmailTemplateService();
 
         // Seed a Role and Identity so the re-fetch Include(CreatedBy) succeeds
         var role = new Role { RoleId = 1, Name = "Admin" };
@@ -51,7 +68,7 @@ public class ContractsControllerTests
         context.Customers.Add(customer);
         await context.SaveChangesAsync();
 
-        var controller = new ContractsController(context, currentUser, audit);
+        var controller = new ContractsController(context, currentUser, audit, emailSender, templateService);
 
         var dto = new CreateContractDto
         {
@@ -94,7 +111,9 @@ public class ContractsControllerTests
         context.Contracts.Add(contract);
         await context.SaveChangesAsync();
 
-        var controller = new ContractsController(context, currentUser, audit);
+        var emailSender = new TestEmailSender();
+        var templateService = new TestEmailTemplateService();
+        var controller = new ContractsController(context, currentUser, audit, emailSender, templateService);
 
         var signDto = new SignContractDto
         {

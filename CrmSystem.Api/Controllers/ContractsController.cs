@@ -17,12 +17,21 @@ public class ContractsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IAuditService _auditService;
+    private readonly IEmailSender _emailSender;
+    private readonly IEmailTemplateService _templateService;
 
-    public ContractsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
+    public ContractsController(
+        AppDbContext db,
+        ICurrentUserService currentUser,
+        IAuditService auditService,
+        IEmailSender emailSender,
+        IEmailTemplateService templateService)
     {
         _db = db;
         _currentUser = currentUser;
         _auditService = auditService;
+        _emailSender = emailSender;
+        _templateService = templateService;
     }
 
     [HttpGet]
@@ -36,20 +45,38 @@ public class ContractsController : ControllerBase
                 .ThenInclude(cust => cust.Company)
             .Include(c => c.Opportunity)
             .Include(c => c.CreatedBy)
-            .AsNoTracking();
+            .AsQueryable();
 
         if (customerId.HasValue)
             query = query.Where(c => c.CustomerId == customerId.Value);
 
         if (!string.IsNullOrWhiteSpace(status) && status != "All")
-            query = query.Where(c => c.Status == status);
+        {
+            if (status.Equals("Draft", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(c => c.Status == "Draft" || c.Status == "SentForSignature");
+            else if (status.Equals("Signed", StringComparison.OrdinalIgnoreCase))
+                query = query.Where(c => c.Status == "Signed" || c.Status == "Active");
+            else
+                query = query.Where(c => c.Status == status);
+        }
 
         var list = await query
             .OrderByDescending(c => c.CreatedAt)
-            .Select(c => MapToReadDto(c))
             .ToListAsync();
 
-        return Ok(list);
+        bool hasChanges = false;
+        foreach (var item in list)
+        {
+            if (string.IsNullOrEmpty(item.SigningToken))
+            {
+                item.SigningToken = Guid.NewGuid().ToString("N");
+                hasChanges = true;
+            }
+        }
+        if (hasChanges) await _db.SaveChangesAsync();
+
+        var dtos = list.Select(c => MapToReadDto(c)).ToList();
+        return Ok(dtos);
     }
 
     [HttpGet("{id:int}")]
@@ -61,11 +88,16 @@ public class ContractsController : ControllerBase
                 .ThenInclude(cust => cust.Company)
             .Include(c => c.Opportunity)
             .Include(c => c.CreatedBy)
-            .AsNoTracking()
             .FirstOrDefaultAsync();
 
         if (contract == null)
             return NotFound(new { message = "Contract not found." });
+
+        if (string.IsNullOrEmpty(contract.SigningToken))
+        {
+            contract.SigningToken = Guid.NewGuid().ToString("N");
+            await _db.SaveChangesAsync();
+        }
 
         return Ok(MapToReadDto(contract));
     }
@@ -92,9 +124,11 @@ public class ContractsController : ControllerBase
             StartDate = dto.StartDate,
             EndDate = dto.EndDate,
             Status = "Draft",
+            SigningToken = Guid.NewGuid().ToString("N"),
+            TokenExpiresAt = DateTime.UtcNow.AddDays(90),
             TermsAndConditions = dto.TermsAndConditions ?? "Standard commercial terms apply. Payment Net 30 days.",
             Notes = dto.Notes,
-            CreatedById = _currentUser.UserId.Value,
+            CreatedById = _currentUser.UserId ?? 1,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -126,6 +160,7 @@ public class ContractsController : ControllerBase
         contract.OpportunityId = dto.OpportunityId;   // allow re-linking a deal
         if (dto.TermsAndConditions != null) contract.TermsAndConditions = dto.TermsAndConditions;
         if (dto.Notes != null) contract.Notes = dto.Notes;
+        if (string.IsNullOrEmpty(contract.SigningToken)) contract.SigningToken = Guid.NewGuid().ToString("N");
         contract.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -152,6 +187,77 @@ public class ContractsController : ControllerBase
         return Ok(new { message = "Contract digitally signed successfully!", signedAt = contract.SignedAt });
     }
 
+    [HttpPost("{id:int}/send-email")]
+    public async Task<IActionResult> SendSigningEmail(int id)
+    {
+        var contract = await _db.Contracts
+            .Include(c => c.Customer)
+            .FirstOrDefaultAsync(c => c.ContractId == id && !c.IsDeleted);
+
+        if (contract == null)
+            return NotFound(new { message = "Contract not found." });
+
+        var recipientEmail = contract.Customer?.Email;
+        if (string.IsNullOrWhiteSpace(recipientEmail))
+        {
+            recipientEmail = "abayshemelisshiferaw@gmail.com"; // Default fallback email
+        }
+
+        if (string.IsNullOrEmpty(contract.SigningToken))
+        {
+            contract.SigningToken = Guid.NewGuid().ToString("N");
+            await _db.SaveChangesAsync();
+        }
+
+        // Determine client frontend origin dynamically (handles localhost:5173 & ngrok tunnels)
+        string origin = Request.Headers["Origin"].FirstOrDefault();
+        if (string.IsNullOrEmpty(origin) && Request.Headers.TryGetValue("Referer", out var refererHeader))
+        {
+            var refStr = refererHeader.FirstOrDefault();
+            if (Uri.TryCreate(refStr, UriKind.Absolute, out var refUri))
+            {
+                origin = $"{refUri.Scheme}://{refUri.Authority}";
+            }
+        }
+        if (string.IsNullOrEmpty(origin) || origin.Contains(":5072"))
+        {
+            origin = "http://localhost:5173";
+        }
+
+        var signUrl = $"{origin}/sign/contract/{contract.SigningToken}";
+        var custName = contract.Customer != null 
+            ? $"{contract.Customer.FirstName} {contract.Customer.LastName}".Trim()
+            : "Valued Client";
+
+        var html = _templateService.BuildContractSigningRequestHtml(
+            custName,
+            contract.Title,
+            contract.ContractNumber,
+            contract.ContractValue,
+            signUrl,
+            contract.TokenExpiresAt ?? DateTime.UtcNow.AddDays(90)
+        );
+
+        try
+        {
+            await _emailSender.SendEmailAsync(
+                recipientEmail,
+                $"Contract Signature Request: {contract.Title} ({contract.ContractNumber})",
+                html
+            );
+
+            contract.Status = "SentForSignature";
+            contract.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = $"Contract signing invitation emailed to {recipientEmail}" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = $"Failed to send email: {ex.Message}" });
+        }
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
@@ -164,28 +270,35 @@ public class ContractsController : ControllerBase
         return NoContent();
     }
 
-    private static ContractReadDto MapToReadDto(Contract c) => new()
+    private static ContractReadDto MapToReadDto(Contract c)
     {
-        ContractId = c.ContractId,
-        ContractNumber = c.ContractNumber,
-        CustomerId = c.CustomerId,
-        CustomerName = c.Customer != null ? $"{c.Customer.FirstName} {c.Customer.LastName}".Trim() : "Unknown",
-        CustomerEmail = c.Customer?.Email ?? "",
-        CompanyName = c.Customer?.Company?.Name,
-        OpportunityId = c.OpportunityId,
-        OpportunityTitle = c.Opportunity?.Title,
-        Title = c.Title,
-        ContractValue = c.ContractValue,
-        StartDate = c.StartDate,
-        EndDate = c.EndDate,
-        Status = c.Status,
-        SignatureDataUrl = c.SignatureDataUrl,
-        SignedByName = c.SignedByName,
-        SignedAt = c.SignedAt,
-        TermsAndConditions = c.TermsAndConditions,
-        Notes = c.Notes,
-        CreatedById = c.CreatedById,
-        CreatedByName = c.CreatedBy?.Name ?? "System",
-        CreatedAt = c.CreatedAt
-    };
+        var token = c.SigningToken;
+        if (string.IsNullOrEmpty(token)) token = Guid.NewGuid().ToString("N");
+
+        return new ContractReadDto
+        {
+            ContractId = c.ContractId,
+            ContractNumber = c.ContractNumber,
+            CustomerId = c.CustomerId,
+            CustomerName = c.Customer != null ? $"{c.Customer.FirstName} {c.Customer.LastName}".Trim() : "Unknown",
+            CustomerEmail = c.Customer?.Email ?? "",
+            CompanyName = c.Customer?.Company?.Name,
+            OpportunityId = c.OpportunityId,
+            OpportunityTitle = c.Opportunity?.Title,
+            Title = c.Title,
+            ContractValue = c.ContractValue,
+            StartDate = c.StartDate,
+            EndDate = c.EndDate,
+            Status = c.Status,
+            SignatureDataUrl = c.SignatureDataUrl,
+            SignedByName = c.SignedByName,
+            SignedAt = c.SignedAt,
+            TermsAndConditions = c.TermsAndConditions,
+            Notes = c.Notes,
+            SigningToken = token,
+            CreatedById = c.CreatedById,
+            CreatedByName = c.CreatedBy?.Name ?? "",
+            CreatedAt = c.CreatedAt,
+        };
+    }
 }

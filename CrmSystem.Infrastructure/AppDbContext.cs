@@ -9,6 +9,12 @@ public class AppDbContext : DbContext
     {
     }
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    }
+
     // ── Auth ────────────────────────────────────────────────────────────
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Identity> Identities => Set<Identity>();
@@ -36,6 +42,7 @@ public class AppDbContext : DbContext
     public DbSet<OpportunityLineItem> OpportunityLineItems => Set<OpportunityLineItem>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Contract> Contracts => Set<Contract>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     // ── Activity & Tasks ───────────────────────────────────────────────────
     public DbSet<Activity> Activities => Set<Activity>();
@@ -512,6 +519,56 @@ public class AppDbContext : DbContext
              .HasForeignKey(al => al.ChangedById)
              .OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(al => !al.IsDeleted);
+        });
+
+        // ── Contract ────────────────────────────────────────────────────────
+        modelBuilder.Entity<Contract>(e =>
+        {
+            e.HasKey(c => c.ContractId);
+            e.Property(c => c.ContractNumber).HasMaxLength(50).IsRequired();
+            e.Property(c => c.Title).HasMaxLength(200).IsRequired();
+            e.Property(c => c.Status).HasMaxLength(30).IsRequired();
+            e.Property(c => c.SigningToken).HasMaxLength(100);
+            e.HasIndex(c => c.SigningToken);
+            e.Property(c => c.ContractValue).HasColumnType("decimal(18,2)");
+            e.HasQueryFilter(c => !c.IsDeleted);
+        });
+
+        // ── Invoice ─────────────────────────────────────────────────────────
+        modelBuilder.Entity<Invoice>(e =>
+        {
+            e.HasKey(i => i.InvoiceId);
+            e.Property(i => i.InvoiceNumber).HasMaxLength(50).IsRequired();
+            e.Property(i => i.Status).HasMaxLength(30).IsRequired();
+            e.Property(i => i.Amount).HasColumnType("decimal(18,2)");
+            e.Property(i => i.TaxRate).HasColumnType("decimal(18,2)");
+            e.Property(i => i.TaxAmount).HasColumnType("decimal(18,2)");
+            e.Property(i => i.TotalAmount).HasColumnType("decimal(18,2)");
+            e.Property(i => i.PaymentMethod).HasMaxLength(50);
+            e.Property(i => i.Notes).HasMaxLength(1000);
+            e.Property(i => i.Terms).HasMaxLength(2000);
+
+            e.HasOne(i => i.Customer)
+             .WithMany()
+             .HasForeignKey(i => i.CustomerId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(i => i.Contract)
+             .WithMany()
+             .HasForeignKey(i => i.ContractId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(i => i.Opportunity)
+             .WithMany()
+             .HasForeignKey(i => i.OpportunityId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(i => i.CreatedBy)
+             .WithMany()
+             .HasForeignKey(i => i.CreatedById)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasQueryFilter(i => !i.IsDeleted);
         });
     }
 }

@@ -33,7 +33,7 @@ export const NotificationBell: React.FC = () => {
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  // Poll unread count every 60 seconds
+  // Poll unread count every 8 seconds for responsive alerts
   const fetchCount = useCallback(async () => {
     try {
       const res = await api.get<{ unreadCount: number }>('/api/notifications/count');
@@ -43,7 +43,7 @@ export const NotificationBell: React.FC = () => {
 
   useEffect(() => {
     fetchCount();
-    const interval = setInterval(fetchCount, 60000);
+    const interval = setInterval(fetchCount, 8000);
     return () => clearInterval(interval);
   }, [fetchCount]);
 
@@ -92,8 +92,14 @@ export const NotificationBell: React.FC = () => {
   const handleNotifClick = async (n: NotificationDto) => {
     if (!n.isRead) await markRead(n.notificationId);
     setOpen(false);
-    if (n.relatedTaskId) navigate('/tasks');
-    else if (n.relatedOpportunityId) navigate(`/opportunities/${n.relatedOpportunityId}`);
+    const msg = n.message.toLowerCase();
+    if (msg.includes('contract')) navigate('/contracts');
+    else if (msg.includes('invoice') || msg.includes('payment')) navigate('/invoices');
+    else if (n.relatedTaskId || msg.includes('task')) navigate('/tasks');
+    else if (n.relatedOpportunityId || msg.includes('opportunity') || msg.includes('deal')) {
+      if (n.relatedOpportunityId) navigate(`/opportunities/${n.relatedOpportunityId}`);
+      else navigate('/opportunities');
+    }
   };
 
   return (

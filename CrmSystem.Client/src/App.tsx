@@ -25,6 +25,8 @@ import { TasksScreen } from './screens/TasksScreen';
 import { OpportunityDetailScreen } from './screens/OpportunityDetailScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { ContractsScreen } from './screens/ContractsScreen';
+import { InvoicesScreen } from './screens/InvoicesScreen';
+import { PublicContractSignScreen } from './screens/PublicContractSignScreen';
 import { Toast } from './components/ui/Toast';
 import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
@@ -38,6 +40,9 @@ function AppRoutes() {
         <Route path="/login" element={<LoginScreen />} />
         <Route path="/forgot-password" element={<ForgotPasswordScreen />} />
         <Route path="/reset-password" element={<ResetPasswordScreen />} />
+        <Route path="/sign/contract/:token" element={<PublicContractSignScreen />} />
+        <Route path="/contract/sign/:token" element={<PublicContractSignScreen />} />
+        <Route path="/contracts/sign/:token" element={<PublicContractSignScreen />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsScreen /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersScreen /></ProtectedRoute>} />
@@ -60,6 +65,7 @@ function AppRoutes() {
         <Route path="/pipeline/products" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
         <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
         <Route path="/contracts" element={<ProtectedRoute><ContractsScreen /></ProtectedRoute>} />
+        <Route path="/invoices" element={<ProtectedRoute><InvoicesScreen /></ProtectedRoute>} />
         <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
         <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
