@@ -6,6 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import { showToast } from '../lib/toast';
 import './screens.css';
 
 interface FormState {
@@ -24,6 +26,15 @@ interface Lookup {
     name: string;
 }
 
+interface CustomFieldDef {
+    customFieldDefinitionId: number;
+    entityType: string;
+    fieldName: string;
+    fieldType: string;
+    optionsJson: string | null;
+    sortOrder: number;
+}
+
 export const CompanyFormScreen: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -38,6 +49,8 @@ export const CompanyFormScreen: React.FC = () => {
         email: ''
     });
     const [sources, setSources] = useState<Lookup[]>([]);
+    const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([]);
+    const [customFields, setCustomFields] = useState<Record<string, string>>({});
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +60,10 @@ export const CompanyFormScreen: React.FC = () => {
         api.get<Lookup[]>('/api/sources')
             .then(setSources)
             .catch(() => setSources([]));
+
+        api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Company')
+            .then(setCustomFieldDefs)
+            .catch(() => setCustomFieldDefs([]));
 
         if (!id) return;
         setIsLoading(true);
@@ -62,6 +79,11 @@ export const CompanyFormScreen: React.FC = () => {
                     phone: company.phone ?? '',
                     email: company.email ?? ''
                 });
+                if (company.customFieldsJson) {
+                    try {
+                        setCustomFields(JSON.parse(company.customFieldsJson));
+                    } catch { /* ignore */ }
+                }
             })
             .catch(() => navigate('/companies'))
             .finally(() => setIsLoading(false));
@@ -103,14 +125,17 @@ export const CompanyFormScreen: React.FC = () => {
             phone: form.phone.trim() || null,
             email: form.email.trim() || null,
             sourceId: form.sourceId ? Number(form.sourceId) : null,
-            assignedRepId: null
+            assignedRepId: null,
+            customFieldsJson: Object.keys(customFields).length > 0 ? JSON.stringify(customFields) : null
         };
 
         try {
             if (isEdit) {
                 await api.put(`/api/companies/${id}`, payload);
+                showToast('Company updated successfully', 'success');
             } else {
                 await api.post('/api/companies', payload);
+                showToast('Company created successfully', 'success');
             }
             navigate('/companies');
         } catch (error: any) {
@@ -118,6 +143,30 @@ export const CompanyFormScreen: React.FC = () => {
             setApiError(error.message || 'An error occurred while saving the company record.');
         }
     };
+
+    if (isLoading) {
+        return (
+            <Layout>
+                <div className="detail-header animate-fade-in">
+                    <div className="detail-header-info">
+                        <div>
+                            <h1>{isEdit ? 'Edit Company' : 'New Company'}</h1>
+                            <p>Loading company details…</p>
+                        </div>
+                    </div>
+                </div>
+                <Card className="glass-panel">
+                    <Card.Content>
+                        <div className="form-grid">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <Skeleton key={i} variant="rect" height={60} style={{ borderRadius: '8px', animationDelay: `${i * 0.06}s` }} />
+                            ))}
+                        </div>
+                    </Card.Content>
+                </Card>
+            </Layout>
+        );
+    }
 
     return (
         <Layout>
@@ -157,6 +206,41 @@ export const CompanyFormScreen: React.FC = () => {
                         <Input label="Address" value={form.address} onChange={e => handleChange('address', e.target.value)} error={errors.address} />
                         <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />
                         <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
+
+                        {customFieldDefs.length > 0 && (
+                            <div style={{ gridColumn: '1 / -1', marginTop: '1rem', marginBottom: '0.5rem' }}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Additional Information</h3>
+                            </div>
+                        )}
+                        {customFieldDefs.map(def => {
+                            const val = customFields[def.fieldName] || '';
+                            const updateVal = (v: string) => setCustomFields(prev => ({ ...prev, [def.fieldName]: v }));
+                            if (def.fieldType === 'Boolean') {
+                                return (
+                                    <div key={def.customFieldDefinitionId} className="input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '100%' }}>
+                                        <input type="checkbox" checked={val === 'true'} onChange={e => updateVal(e.target.checked ? 'true' : 'false')} id={`cf-${def.customFieldDefinitionId}`} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                                        <label htmlFor={`cf-${def.customFieldDefinitionId}`} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>{def.fieldName}</label>
+                                    </div>
+                                );
+                            }
+                            if (def.fieldType === 'Select') {
+                                let options: string[] = [];
+                                try { options = JSON.parse(def.optionsJson || '[]'); } catch { }
+                                return (
+                                    <div key={def.customFieldDefinitionId} className="input-wrapper">
+                                        <label className="input-label">{def.fieldName}</label>
+                                        <select className="input-field" value={val} onChange={e => updateVal(e.target.value)}>
+                                            <option value="">Select...</option>
+                                            {options.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <Input key={def.customFieldDefinitionId} label={def.fieldName} type={def.fieldType === 'Number' ? 'number' : def.fieldType === 'Date' ? 'date' : 'text'} value={val} onChange={e => updateVal(e.target.value)} />
+                            );
+                        })}
+
                     </div>
                     <div style={{ marginTop: '1rem' }}>
                         <Button onClick={handleSubmit}>{isEdit ? 'Save changes' : 'Create company'}</Button>

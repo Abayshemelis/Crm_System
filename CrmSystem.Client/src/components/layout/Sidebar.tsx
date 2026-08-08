@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
   Kanban, CheckSquare, BarChart2, X, Receipt,
-  LayoutDashboard, Target, FileText
+  LayoutDashboard, Target, FileText, UploadCloud
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
@@ -18,6 +18,7 @@ interface SidebarProps {
 const NAV_ITEMS = [
   { to: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard, authRequired: false, managerOnly: false },
   { to: '/reports',    label: 'Reports',    icon: BarChart2,        authRequired: false, managerOnly: false },
+  { to: '/import',     label: 'Import Data',icon: UploadCloud,      authRequired: true,  managerOnly: false },
   { to: '/customers',  label: 'Customers',  icon: Users,            authRequired: true,  managerOnly: false },
   { to: '/companies',  label: 'Companies',  icon: Building2,        authRequired: true,  managerOnly: false },
   { to: '/leads',      label: 'Leads',      icon: Target,           authRequired: true,  managerOnly: false },

@@ -192,6 +192,18 @@ export const SearchDropdown: React.FC = () => {
             })
           )}
 
+          {/* See all results */}
+          {results.length > 0 && (
+            <div
+              className="gs-see-all"
+              onClick={() => { setIsOpen(false); navigate(`/search?q=${encodeURIComponent(query)}`); }}
+            >
+              <Search size={13} />
+              See all results for <strong>"{query}"</strong>
+              <ArrowRight size={13} />
+            </div>
+          )}
+
           {/* Footer */}
           <div className="gs-footer">
             <span><kbd className="gs-kbd-sm">↑↓</kbd> navigate</span>

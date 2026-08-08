@@ -16,5 +16,6 @@ public class Customer
     public Identity? AssignedRep { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; set; }
+    public string? CustomFieldsJson { get; set; }
     public ICollection<Tag> Tags { get; set; } = new List<Tag>();
 }

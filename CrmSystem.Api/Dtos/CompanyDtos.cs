@@ -11,7 +11,8 @@ public record CreateCompanyRequest(
     [MaxLength(30)] string? Phone,
     [EmailAddress][MaxLength(255)] string? Email,
     int? SourceId,
-    int? AssignedRepId);
+    int? AssignedRepId,
+    string? CustomFieldsJson = null);
 
 public record UpdateCompanyRequest(
     [Required][MaxLength(150)] string Name,
@@ -22,7 +23,8 @@ public record UpdateCompanyRequest(
     [MaxLength(30)] string? Phone,
     [EmailAddress][MaxLength(255)] string? Email,
     int? SourceId,
-    int? AssignedRepId);
+    int? AssignedRepId,
+    string? CustomFieldsJson = null);
 
 public record CompanySummaryDto(
     int CompanyId,
@@ -31,7 +33,8 @@ public record CompanySummaryDto(
     string? Website,
     int? AssignedRepId,
     string? AssignedRepName,
-    int ContactCount);
+    int ContactCount,
+    string? CustomFieldsJson = null);
 
 public record CompanyContactDto(
     int CustomerId,
@@ -55,7 +58,8 @@ public record CompanyDetailDto(
     string? AssignedRepName,
     string? AssignedRepEmail,
     decimal TotalOpenPipelineValue,
-    IReadOnlyList<CompanyContactDto> Contacts);
+    IReadOnlyList<CompanyContactDto> Contacts,
+    string? CustomFieldsJson = null);
 
 public class CompanyListQuery : PaginationQuery
 {

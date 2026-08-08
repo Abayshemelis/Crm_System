@@ -210,7 +210,7 @@ public class ContractsController : ControllerBase
         }
 
         // Determine client frontend origin dynamically (handles localhost:5173 & ngrok tunnels)
-        string origin = Request.Headers["Origin"].FirstOrDefault();
+        string? origin = Request.Headers["Origin"].FirstOrDefault();
         if (string.IsNullOrEmpty(origin) && Request.Headers.TryGetValue("Referer", out var refererHeader))
         {
             var refStr = refererHeader.FirstOrDefault();

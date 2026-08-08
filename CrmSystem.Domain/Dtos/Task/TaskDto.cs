@@ -38,6 +38,11 @@ public class TaskCancelDto
     public string? CancellationNote { get; set; }
 }
 
+public class TaskRescheduleDto
+{
+    public DateTime? DueDate { get; set; }
+}
+
 public class TaskReadDto
 {
     public int CrmTaskId { get; set; }

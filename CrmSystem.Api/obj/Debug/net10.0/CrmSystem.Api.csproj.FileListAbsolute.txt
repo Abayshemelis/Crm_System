@@ -168,3 +168,8 @@ C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.Enti
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.JsonPatch.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Microsoft.AspNetCore.Mvc.NewtonsoftJson.dll
 C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\Newtonsoft.Json.Bson.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\UglyToad.PdfPig.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\UglyToad.PdfPig.Core.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\UglyToad.PdfPig.Fonts.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\UglyToad.PdfPig.Tokenization.dll
+C:\Users\abays\Desktop\CRM_system\CrmSystem.Api\bin\Debug\net10.0\UglyToad.PdfPig.Tokens.dll

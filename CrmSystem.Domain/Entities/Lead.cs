@@ -37,6 +37,7 @@ public class Lead
     public DateTime? LastActivityAt { get; set; }
 
     public bool IsDeleted { get; set; } = false;
+    public string? CustomFieldsJson { get; set; }
 
     public ICollection<Activity> Activities { get; set; } = new List<Activity>();
     public ICollection<CrmTask> Tasks { get; set; } = new List<CrmTask>();

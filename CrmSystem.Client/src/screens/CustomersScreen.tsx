@@ -191,7 +191,24 @@ export const CustomersScreen: React.FC = () => {
     const link = document.createElement('a'); link.href = url; link.download = 'customers.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
-  if (loading && !customers.length) return <Layout><div className="dashboard-header"><div className="dashboard-title"><h1>Customers</h1><p>Loading customers…</p></div></div><div className="table-skeleton">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} variant="rect" height={46} />)}</div></Layout>;
+  if (loading && !customers.length) {
+    return (
+      <Layout>
+        <div className="dashboard-header animate-fade-in">
+          <div className="dashboard-title">
+            <h1>Customers</h1>
+            <p>Loading customer contacts...</p>
+          </div>
+          <Button disabled><Plus size={16} style={{ marginRight: 6 }} /> New Customer</Button>
+        </div>
+        <div className="table-skeleton animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} variant="rect" height={52} style={{ borderRadius: '8px', animationDelay: `${i * 0.05}s` }} />
+          ))}
+        </div>
+      </Layout>
+    );
+  }
 
   return <Layout>
     <div className="dashboard-header animate-fade-in"><div className="dashboard-title"><h1>Customers</h1><p>{filtered.length} contacts found</p></div><Button onClick={() => navigate('/customers/new')}><Plus size={16} /> New Customer</Button></div>

@@ -161,7 +161,8 @@ public class CustomersController : ControllerBase
             CompanyId = request.CompanyId,
             SourceId = request.SourceId,
             AssignedRepId = assignedRepId.Value,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            CustomFieldsJson = request.CustomFieldsJson
         };
 
         _db.Customers.Add(customer);
@@ -244,6 +245,7 @@ public class CustomersController : ControllerBase
         customer.CompanyId = request.CompanyId;
         customer.SourceId = request.SourceId;
         customer.AssignedRepId = assignedRepId.Value;
+        customer.CustomFieldsJson = request.CustomFieldsJson;
 
         var convLead = await _db.Leads.FirstOrDefaultAsync(l => l.ConvertedCustomerId == customer.CustomerId);
         if (convLead is not null) convLead.SourceId = request.SourceId;
@@ -715,7 +717,8 @@ public class CustomersController : ControllerBase
             customer.AssignedRepId,
             customer.AssignedRep?.Name ?? string.Empty,
             customer.CreatedAt,
-            ToTagDtos(customer));
+            ToTagDtos(customer),
+            customer.CustomFieldsJson);
 
     private static CustomerDetailDto ToDetailDto(Customer customer) =>
         new(
@@ -733,7 +736,8 @@ public class CustomersController : ControllerBase
             customer.AssignedRep?.Name ?? string.Empty,
             customer.AssignedRep?.Email ?? string.Empty,
             customer.CreatedAt,
-            ToTagDtos(customer));
+            ToTagDtos(customer),
+            customer.CustomFieldsJson);
 
     private static IReadOnlyList<CustomerTagDto> ToTagDtos(Customer customer) =>
         customer.Tags

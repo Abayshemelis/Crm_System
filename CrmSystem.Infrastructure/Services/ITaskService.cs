@@ -6,6 +6,7 @@ public interface ITaskService
 {
     Task<TaskGroupedDto> GetMyTasksAsync(int identityId);
     Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId);
+    Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int identityId, int take = 50);
     Task<IReadOnlyList<TaskReadDto>> GetByCustomerAsync(int customerId);
     Task<IReadOnlyList<TaskReadDto>> GetByOpportunityAsync(int opportunityId);
     Task<IReadOnlyList<TaskReadDto>> GetByLeadAsync(int leadId);
@@ -14,5 +15,6 @@ public interface ITaskService
     Task<TaskReadDto?> UpdateAsync(int id, TaskUpdateDto dto);
     Task<TaskReadDto?> CompleteAsync(int id, string? completionNote = null, int? completedById = null);
     Task<TaskReadDto?> CancelAsync(int id, string? cancellationNote = null);
+    Task<TaskReadDto?> RescheduleAsync(int id, DateTime? newDueDate);
     Task<bool> DeleteAsync(int id);
 }

@@ -233,16 +233,17 @@ export const CompaniesScreen: React.FC = () => {
             </Card.Content>
           </Card>
         ))}
-        {filteredCompanies.length === 0 && !loadError && (
-          <EmptyState
-            title="No companies found"
-            description="Adjust your search filters or add a new company to the CRM."
-            icon={Building}
-            actionText="New Company"
-            onActionClick={() => navigate('/companies/new')}
-          />
-        )}
       </div>
+
+      {filteredCompanies.length === 0 && !loadError && (
+        <EmptyState
+          title="No companies found"
+          description="Adjust your search filters or add a new company to the CRM."
+          icon={Building}
+          actionText="New Company"
+          onActionClick={() => navigate('/companies/new')}
+        />
+      )}
     </Layout>
   );
 };

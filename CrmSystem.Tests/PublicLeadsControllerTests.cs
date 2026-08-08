@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
+using CrmSystem.Api.Services;
+
 namespace CrmSystem.Tests;
 
 public class MockAuditService : IAuditService
@@ -46,7 +48,6 @@ public class PublicLeadsControllerTests
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-
         return new AppDbContext(options);
     }
 
@@ -60,7 +61,8 @@ public class PublicLeadsControllerTests
         await db.SaveChangesAsync();
 
         var mockAudit = new MockAuditService();
-        var controller = new PublicLeadsController(db, mockAudit);
+        var mockEmail = new MockEmailSender();
+        var controller = new PublicLeadsController(db, mockAudit, mockEmail);
 
         var dto = new PublicLeadCaptureDto
         {
@@ -91,7 +93,8 @@ public class PublicLeadsControllerTests
     {
         await using var db = CreateDbContext();
         var mockAudit = new MockAuditService();
-        var controller = new PublicLeadsController(db, mockAudit);
+        var mockEmail = new MockEmailSender();
+        var controller = new PublicLeadsController(db, mockAudit, mockEmail);
 
         var dto = new PublicLeadCaptureDto
         {

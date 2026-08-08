@@ -37,7 +37,7 @@ interface Product {
 interface ProductCategory { id: number; name: string; }
 interface ProductStatus { id: number; name: string; isSelectable: boolean; }
 
-type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme';
+type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme' | 'custom-fields';
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
 
 import { ThemePreset, ATTRACTIVE_THEMES, applyThemePreset } from '../lib/theme';
@@ -114,6 +114,154 @@ function useLookup<T extends { id: number; name: string }>(endpoint: string) {
   useEffect(() => { refresh(); }, [refresh]);
   return { items, loading, refresh };
 }
+
+// ── Custom Field Definition Hook ────────────────────────────────────────────────
+interface CustomFieldDef {
+  customFieldDefinitionId: number;
+  entityType: string;
+  fieldName: string;
+  fieldType: string;
+  optionsJson: string | null;
+  sortOrder: number;
+}
+function useCustomFieldDefs() {
+  const [items, setItems] = useState<CustomFieldDef[]>([]);
+  const [loading, setLoading] = useState(false);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get<CustomFieldDef[]>('/api/custom-field-definitions');
+      setItems(data || []);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  return { items, loading, refresh };
+}
+// ── CustomFieldsAdminTab ────────────────────────────────────────────────────────
+const CustomFieldsAdminTab: React.FC = () => {
+  const { isManagerOrAboveSelected } = useAuth();
+  const fields = useCustomFieldDefs();
+  const [form, setForm] = useState({ entityType: 'Customer', fieldName: '', fieldType: 'Text', sortOrder: '0', optionsJson: '' });
+  const [editingField, setEditingField] = useState<CustomFieldDef | null>(null);
+
+  const addField = async () => {
+    if (!form.fieldName.trim()) return toast('Field name is required', 'error');
+    try {
+      await api.post('/api/custom-field-definitions', {
+        entityType: form.entityType,
+        fieldName: form.fieldName.trim(),
+        fieldType: form.fieldType,
+        optionsJson: form.optionsJson.trim() || null,
+        sortOrder: Number(form.sortOrder)
+      });
+      setForm({ ...form, fieldName: '', optionsJson: '', sortOrder: '0' });
+      fields.refresh();
+      toast('Custom field added');
+    } catch (e: any) { toast(e?.message || 'Failed', 'error'); }
+  };
+
+  const saveField = async () => {
+    if (!editingField) return;
+    try {
+      await api.put(`/api/custom-field-definitions/${editingField.customFieldDefinitionId}`, {
+        fieldName: editingField.fieldName.trim(),
+        fieldType: editingField.fieldType,
+        optionsJson: editingField.optionsJson || null,
+        sortOrder: editingField.sortOrder
+      });
+      setEditingField(null);
+      fields.refresh();
+      toast('Custom field updated');
+    } catch (e: any) { toast(e?.message || 'Failed', 'error'); }
+  };
+
+  const deleteField = async (id: number) => {
+    if (!confirm('Delete this custom field? Existing data will not be removed from records, but the field will no longer appear in forms.')) return;
+    try {
+      await api.delete(`/api/custom-field-definitions/${id}`);
+      fields.refresh();
+      toast('Custom field deleted');
+    } catch (e: any) { toast(e?.message || 'Failed', 'error'); }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    flex: 1, padding: '0.5rem 0.75rem',
+    border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+    background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.875rem',
+    outline: 'none',
+  };
+
+  const entities = ['Customer', 'Lead', 'Company'];
+  const types = ['Text', 'Number', 'Date', 'Boolean', 'Select'];
+
+  return (
+    <Card className="glass-panel p-6">
+      <Card.Content>
+        <Section title="Custom Fields">
+          {isManagerOrAboveSelected && (
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <select style={{ ...inputStyle, flex: 'none', width: '120px' }} value={form.entityType} onChange={e => setForm({ ...form, entityType: e.target.value })}>
+                {entities.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              <input style={inputStyle} placeholder="Field Name" value={form.fieldName} onChange={e => setForm({ ...form, fieldName: e.target.value })} />
+              <select style={{ ...inputStyle, flex: 'none', width: '120px' }} value={form.fieldType} onChange={e => setForm({ ...form, fieldType: e.target.value })}>
+                {types.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {form.fieldType === 'Select' && (
+                <input style={inputStyle} placeholder='["Opt1", "Opt2"]' value={form.optionsJson} onChange={e => setForm({ ...form, optionsJson: e.target.value })} />
+              )}
+              <input style={{ ...inputStyle, width: 80, flex: 'none' }} type="number" placeholder="Order" value={form.sortOrder} onChange={e => setForm({ ...form, sortOrder: e.target.value })} />
+              <Button onClick={addField} size="sm"><Plus size={14} style={{ marginRight: 4 }} />Add</Button>
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {entities.map(entity => {
+              const entityFields = fields.items.filter(f => f.entityType === entity).sort((a, b) => a.sortOrder - b.sortOrder);
+              if (entityFields.length === 0) return null;
+              
+              return (
+                <div key={entity}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{entity} Fields</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    {entityFields.map(f => (
+                      editingField?.customFieldDefinitionId === f.customFieldDefinitionId ? (
+                        <div key={f.customFieldDefinitionId} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-primary)44', flexWrap: 'wrap' }}>
+                          <input style={inputStyle} value={editingField.fieldName} onChange={e => setEditingField({ ...editingField, fieldName: e.target.value })} />
+                          <select style={{ ...inputStyle, flex: 'none', width: '120px' }} value={editingField.fieldType} onChange={e => setEditingField({ ...editingField, fieldType: e.target.value })}>
+                            {types.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          {editingField.fieldType === 'Select' && (
+                            <input style={inputStyle} placeholder='["Opt1", "Opt2"]' value={editingField.optionsJson || ''} onChange={e => setEditingField({ ...editingField, optionsJson: e.target.value })} />
+                          )}
+                          <input style={{ ...inputStyle, width: 80, flex: 'none' }} type="number" value={editingField.sortOrder} onChange={e => setEditingField({ ...editingField, sortOrder: Number(e.target.value) })} />
+                          <Button size="sm" onClick={saveField}><Check size={14} /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingField(null)}><X size={14} /></Button>
+                        </div>
+                      ) : (
+                        <LookupRow key={f.customFieldDefinitionId} label={`${f.fieldName} (${f.fieldType})`}
+                          badge={<>
+                            <Badge label={`Order ${f.sortOrder}`} color="#a78bfa" />
+                            {f.fieldType === 'Select' && <Badge label={f.optionsJson || '[]'} color="#06b6d4" />}
+                          </>}
+                          onEdit={() => setEditingField(f)}
+                          onDelete={() => deleteField(f.customFieldDefinitionId)}
+                          canEdit={isManagerOrAboveSelected}
+                        />
+                      )
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {fields.items.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No custom fields defined.</p>}
+          </div>
+        </Section>
+      </Card.Content>
+    </Card>
+  );
+};
 
 // ── Toast helper ──────────────────────────────────────────────────────────────
 const toast = (message: string, type: 'success' | 'error' = 'success') =>
@@ -526,6 +674,7 @@ export const SettingsScreen: React.FC = () => {
     { id: 'sources', label: 'Sources', icon: <Globe size={15} /> },
     { id: 'statuses', label: 'Statuses & Types', icon: <List size={15} /> },
     { id: 'theme', label: 'Theme', icon: <Palette size={15} /> },
+    { id: 'custom-fields', label: 'Custom Fields', icon: <Layers size={15} /> },
   ];
 
   const STATUS_SUB_TABS: { id: StatusSubTab; label: string; icon: React.ReactNode }[] = [
@@ -1304,6 +1453,9 @@ export const SettingsScreen: React.FC = () => {
           </Card>
         </div>
       )}
+
+      {/* ── Custom Fields Admin ─────────────────────────────────────────────── */}
+      {activeTab === 'custom-fields' && <CustomFieldsAdminTab />}
     </Layout>
   );
 };

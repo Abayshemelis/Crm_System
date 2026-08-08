@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
 import './screens.css';
 
 interface FormState {
@@ -22,6 +23,15 @@ interface FormState {
     priority: string;
     leadScore: number;
     notes: string;
+}
+
+interface CustomFieldDef {
+    customFieldDefinitionId: number;
+    entityType: string;
+    fieldName: string;
+    fieldType: string;
+    optionsJson: string | null;
+    sortOrder: number;
 }
 
 export const LeadFormScreen: React.FC = () => {
@@ -44,6 +54,8 @@ export const LeadFormScreen: React.FC = () => {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([]);
+    const [customFields, setCustomFields] = useState<Record<string, string>>({});
     const [sources, setSources] = useState<{ id: number; name: string }[]>([]);
     const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
     const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
@@ -59,6 +71,9 @@ export const LeadFormScreen: React.FC = () => {
         api.get<any[]>('/api/users')
             .then(data => setUsers(data.map((u: any) => ({ id: u.id ?? u.identityId, name: u.name }))))
             .catch(() => { });
+        api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Lead')
+            .then(setCustomFieldDefs)
+            .catch(() => setCustomFieldDefs([]));
     }, []);
 
     useEffect(() => {
@@ -80,6 +95,11 @@ export const LeadFormScreen: React.FC = () => {
                     leadScore: lead.leadScore ?? 0,
                     notes: lead.notes ?? ''
                 });
+                if (lead.customFieldsJson) {
+                    try {
+                        setCustomFields(JSON.parse(lead.customFieldsJson));
+                    } catch { /* ignore */ }
+                }
             })
             .catch(() => navigate('/leads'))
             .finally(() => setIsLoading(false));
@@ -124,7 +144,8 @@ export const LeadFormScreen: React.FC = () => {
             priority: form.priority,
             leadScore: Number(form.leadScore) || 0,
             assignedRepId: form.assignedRepId ? Number(form.assignedRepId) : null,
-            notes: form.notes.trim() || null
+            notes: form.notes.trim() || null,
+            customFieldsJson: Object.keys(customFields).length > 0 ? JSON.stringify(customFields) : null
         };
 
         try {
@@ -143,7 +164,27 @@ export const LeadFormScreen: React.FC = () => {
     };
 
     if (isLoading) {
-        return <Layout><div className="loading-state"><div className="spinner" /><p>Loading lead...</p></div></Layout>;
+    return (
+        <Layout>
+            <div className="detail-header animate-fade-in">
+                <div className="detail-header-info">
+                    <div>
+                        <h1>{id ? 'Edit Lead' : 'New Lead'}</h1>
+                        <p>Loading lead details…</p>
+                    </div>
+                </div>
+            </div>
+            <Card className="glass-panel">
+                <Card.Content>
+                    <div className="form-grid">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <Skeleton key={i} variant="rect" height={60} style={{ borderRadius: '8px', animationDelay: `${i * 0.06}s` }} />
+                        ))}
+                    </div>
+                </Card.Content>
+            </Card>
+        </Layout>
+    );
     }
 
     return (
@@ -225,6 +266,41 @@ export const LeadFormScreen: React.FC = () => {
                             <label className="input-label">Notes</label>
                             <textarea className="input-field" rows={5} value={form.notes} onChange={e => handleChange('notes', e.target.value)} placeholder="Add any background or notes for this prospect..." />
                         </div>
+
+                        {customFieldDefs.length > 0 && (
+                            <div style={{ gridColumn: '1 / -1', marginTop: '1rem', marginBottom: '0.5rem' }}>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Additional Information</h3>
+                            </div>
+                        )}
+                        {customFieldDefs.map(def => {
+                            const val = customFields[def.fieldName] || '';
+                            const updateVal = (v: string) => setCustomFields(prev => ({ ...prev, [def.fieldName]: v }));
+                            if (def.fieldType === 'Boolean') {
+                                return (
+                                    <div key={def.customFieldDefinitionId} className="input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '100%' }}>
+                                        <input type="checkbox" checked={val === 'true'} onChange={e => updateVal(e.target.checked ? 'true' : 'false')} id={`cf-${def.customFieldDefinitionId}`} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                                        <label htmlFor={`cf-${def.customFieldDefinitionId}`} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>{def.fieldName}</label>
+                                    </div>
+                                );
+                            }
+                            if (def.fieldType === 'Select') {
+                                let options: string[] = [];
+                                try { options = JSON.parse(def.optionsJson || '[]'); } catch { }
+                                return (
+                                    <div key={def.customFieldDefinitionId} className="input-wrapper">
+                                        <label className="input-label">{def.fieldName}</label>
+                                        <select className="input-field" value={val} onChange={e => updateVal(e.target.value)}>
+                                            <option value="">Select...</option>
+                                            {options.map(o => <option key={o} value={o}>{o}</option>)}
+                                        </select>
+                                    </div>
+                                );
+                            }
+                            return (
+                                <Input key={def.customFieldDefinitionId} label={def.fieldName} type={def.fieldType === 'Number' ? 'number' : def.fieldType === 'Date' ? 'date' : 'text'} value={val} onChange={e => updateVal(e.target.value)} />
+                            );
+                        })}
+
                     </div>
 
                     <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.75rem' }}>

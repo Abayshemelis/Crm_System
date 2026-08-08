@@ -54,14 +54,16 @@ Start with customer CRUD because it already has the strongest frontend presence 
 ## UI/UX Improvements (Current Focus)
 - [x] Add favicon.svg for the application
 - [x] Enhance DashboardScreen with summary cards and quick stats
-- [ ] Improve empty states with better illustrations and CTAs
-- [ ] Add form validation feedback
-- [ ] Add loading skeletons for better perceived performance
+- [x] Improve empty states with better illustrations and CTAs
+- [x] Add form validation feedback
+- [x] Add loading skeletons for better perceived performance
 - [x] Add confirmation dialogs for destructive actions (ConfirmDialog component created)
-- [ ] Add better error handling and user feedback
+- [x] Add better error handling and user feedback
 
 ## Completed UI/UX Improvements
 - Enhanced DashboardScreen with interactive stat cards showing customer/company counts
 - Added quick action buttons for creating new customers and companies
 - Created reusable ConfirmDialog component with modal styling
-- Added CSS styles for stats grid, quick actions, and modal dialogs
+- Added skeleton loading screens to Customer, Company, and Lead forms & list views
+- Improved empty state card positioning and CTA buttons across list screens
+- Added toast notification feedback on save/update/delete operations across forms

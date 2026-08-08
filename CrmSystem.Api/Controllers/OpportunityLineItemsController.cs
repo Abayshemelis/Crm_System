@@ -144,7 +144,7 @@ public class OpportunityLineItemsController : ControllerBase
         if (lineItem == null)
             return NotFound(new { message = "Line item not found." });
 
-        if (!_currentUser.CanAccessOwnedRecord(lineItem.Opportunity.OwnerId))
+        if (!_currentUser.CanAccessOwnedRecord(lineItem.Opportunity!.OwnerId))
             return Forbid();
 
         var product = await _db.Products

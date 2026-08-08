@@ -12,7 +12,8 @@ public record CreateCustomerRequest(
     [MaxLength(100)] string? JobTitle,
     int? CompanyId,
     int? SourceId,
-    int? AssignedRepId);
+    int? AssignedRepId,
+    string? CustomFieldsJson = null);
 
 public record UpdateCustomerRequest(
     [Required][MaxLength(100)] string FirstName,
@@ -22,7 +23,8 @@ public record UpdateCustomerRequest(
     [MaxLength(100)] string? JobTitle,
     int? CompanyId,
     int? SourceId,
-    int? AssignedRepId);
+    int? AssignedRepId,
+    string? CustomFieldsJson = null);
 
 public record PatchCustomerRequest(
     [MaxLength(100)] string? FirstName,
@@ -31,7 +33,8 @@ public record PatchCustomerRequest(
     [MaxLength(30)] string? Phone,
     [MaxLength(100)] string? JobTitle,
     int? CompanyId,
-    int? SourceId);
+    int? SourceId,
+    string? CustomFieldsJson = null);
 
 public record CustomerSummaryDto(
     int CustomerId,
@@ -47,7 +50,8 @@ public record CustomerSummaryDto(
     int AssignedRepId,
     string AssignedRepName,
     DateTime CreatedAt,
-    IReadOnlyList<CustomerTagDto> Tags);
+    IReadOnlyList<CustomerTagDto> Tags,
+    string? CustomFieldsJson = null);
 
 public record CustomerDetailDto(
     int CustomerId,
@@ -64,7 +68,8 @@ public record CustomerDetailDto(
     string AssignedRepName,
     string AssignedRepEmail,
     DateTime CreatedAt,
-    IReadOnlyList<CustomerTagDto> Tags);
+    IReadOnlyList<CustomerTagDto> Tags,
+    string? CustomFieldsJson = null);
 
 public record BulkCustomerActionRequest(
     [Required] IEnumerable<int> CustomerIds,

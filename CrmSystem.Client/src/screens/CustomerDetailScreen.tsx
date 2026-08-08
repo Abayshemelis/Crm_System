@@ -23,6 +23,15 @@ interface Customer {
   companyId?: number; companyName?: string;
   assignedRepId: number;
   tags?: CustomerTag[];
+  customFieldsJson?: string;
+}
+interface CustomFieldDef {
+  customFieldDefinitionId: number;
+  entityType: string;
+  fieldName: string;
+  fieldType: string;
+  optionsJson: string | null;
+  sortOrder: number;
 }
 interface CustomerTag { tagId: number; name: string; }
 interface TagItem { tagId: number; name: string; }
@@ -71,6 +80,7 @@ export const CustomerDetailScreen: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [auditRefreshTrigger, setAuditRefreshTrigger] = useState(0);
   const [isOpportunityModalOpen, setIsOpportunityModalOpen] = useState(false);
+  const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([]);
 
   // Phase 4 states
   const [activities, setActivities] = useState<any[]>([]);
@@ -105,6 +115,7 @@ export const CustomerDetailScreen: React.FC = () => {
     api.get<any[]>('/api/taskstatuses').then(res => setTaskStatuses(res.map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })))).catch(() => { });
     api.get<any[]>('/api/users').then(res => setUsers(res.map(x => ({ id: x.id || x.identityId, name: x.name })))).catch(() => { });
     api.get<any[]>('/api/activities').then(res => setAllActivities(res)).catch(() => { });
+    api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Customer').then(setCustomFieldDefs).catch(() => { });
   }, []);
 
   const fetchActivities = useCallback(async () => {
@@ -430,6 +441,31 @@ export const CustomerDetailScreen: React.FC = () => {
                   <div className="profile-field"><label>Job Title</label><p>{customer.jobTitle ?? '—'}</p></div>
                   <div className="profile-field"><label>Source</label><p>{customer.sourceName ?? '—'}</p></div>
                   <div className="profile-field" style={{ gridColumn: '1 / -1' }}><label>Company</label><p>{customer.companyName ?? 'Individual (B2B)'}</p></div>
+                  
+                  {customFieldDefs.length > 0 && (
+                    <div style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
+                      <h4 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>Additional Information</h4>
+                    </div>
+                  )}
+                  {customFieldDefs.map(def => {
+                    let val = '';
+                    if (customer.customFieldsJson) {
+                      try {
+                        const parsed = JSON.parse(customer.customFieldsJson);
+                        val = parsed[def.fieldName] || '';
+                      } catch { }
+                    }
+                    if (!val) val = '—';
+                    if (def.fieldType === 'Boolean') {
+                      val = val === 'true' ? 'Yes' : (val === 'false' ? 'No' : '—');
+                    }
+                    return (
+                      <div key={def.customFieldDefinitionId} className="profile-field">
+                        <label>{def.fieldName}</label>
+                        <p>{val}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

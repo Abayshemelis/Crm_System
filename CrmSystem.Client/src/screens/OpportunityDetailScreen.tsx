@@ -16,6 +16,9 @@ import { QuoteModal } from '../components/opportunities/QuoteModal';
 import { EmailComposerModal } from '../components/email/EmailComposerModal';
 import { showToast } from '../lib/toast';
 import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import Attachments from '../components/attachments/Attachments';
+import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
 import './screens.css';
 
 interface Opportunity {
@@ -77,7 +80,7 @@ interface Product {
   price: number;
 }
 
-type TabId = 'details' | 'lineItems' | 'activities' | 'tasks' | 'audit';
+type TabId = 'details' | 'lineItems' | 'activities' | 'tasks' | 'attachments' | 'audit';
 
 export const OpportunityDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -349,9 +352,23 @@ export const OpportunityDetailScreen: React.FC = () => {
   if (isLoading || !opportunity) {
     return (
       <Layout>
-        <div className="loading-state">
-          <div className="spinner" />
-          <p>Loading opportunity...</p>
+        <div className="detail-header animate-fade-in">
+          <div className="detail-header-info">
+            <Skeleton variant="text" className="skeleton-header-title" />
+            <Skeleton variant="text" className="skeleton-header-subtitle" style={{ width: '50%' }} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} variant="rect" height={100} style={{ borderRadius: '10px', animationDelay: `${i * 0.08}s` }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} variant="rect" height={56} style={{ borderRadius: '8px', animationDelay: `${i * 0.07}s` }} />
+            ))}
+          </div>
         </div>
       </Layout>
     );
@@ -419,8 +436,13 @@ export const OpportunityDetailScreen: React.FC = () => {
 
         {/* Right Main Panel */}
         <div className="detail-main">
+          {/* AI Deal Win Forecast */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <AiOpportunityAssistant opportunityId={opportunity.opportunityId} />
+          </div>
+
           <div className="tabs-bar">
-            {(['details', 'lineItems', 'activities', 'tasks', 'audit'] as TabId[]).map(tab => (
+            {(['details', 'lineItems', 'activities', 'tasks', 'attachments', 'audit'] as TabId[]).map(tab => (
               <button
                 key={tab}
                 className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`}
@@ -430,6 +452,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                 {tab === 'lineItems' && <span>Line Items ({lineItems.length})</span>}
                 {tab === 'activities' && <span>Activities ({activities.length})</span>}
                 {tab === 'tasks' && <span>Tasks ({tasks.filter(t => !t.isTerminal).length})</span>}
+                {tab === 'attachments' && <span>📎 Attachments</span>}
                 {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
               </button>
             ))}
@@ -621,6 +644,11 @@ export const OpportunityDetailScreen: React.FC = () => {
                     onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
                   />
                 </div>
+              )}
+
+              {/* Attachments Tab */}
+              {activeTab === 'attachments' && (
+                <Attachments entity="opportunity" entityId={opportunity.opportunityId} canEdit={true} />
               )}
 
               {/* Audit History Tab */}

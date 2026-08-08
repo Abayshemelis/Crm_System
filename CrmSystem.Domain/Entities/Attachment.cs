@@ -20,6 +20,9 @@ public class Attachment
     public int? OpportunityId { get; set; }
     public Opportunity? Opportunity { get; set; }
 
+    public int? LeadId { get; set; }
+    public Lead? Lead { get; set; }
+
     public int UploadedById { get; set; }
     public Identity? UploadedBy { get; set; }
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;

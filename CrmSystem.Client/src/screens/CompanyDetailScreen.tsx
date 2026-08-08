@@ -25,6 +25,16 @@ interface CompanyDetail {
   assignedRepId?: number | null;
   totalOpenPipelineValue: number;
   contacts: Contact[];
+  customFieldsJson?: string;
+}
+
+interface CustomFieldDef {
+  customFieldDefinitionId: number;
+  entityType: string;
+  fieldName: string;
+  fieldType: string;
+  optionsJson: string | null;
+  sortOrder: number;
 }
 
 interface Contact {
@@ -75,6 +85,7 @@ export const CompanyDetailScreen: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [sources, setSources] = useState<Lookup[]>([]);
+  const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([]);
   const [editForm, setEditForm] = useState<EditFormState>({
     name: '',
     industry: '',
@@ -143,6 +154,7 @@ export const CompanyDetailScreen: React.FC = () => {
     fetchSources();
     fetchCompany();
     fetchAttachmentsCount();
+    api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Company').then(setCustomFieldDefs).catch(() => { });
   }, [fetchSources, fetchCompany, fetchAttachmentsCount]);
 
   const handleEditChange = (field: keyof EditFormState, value: string) => {
@@ -338,6 +350,33 @@ export const CompanyDetailScreen: React.FC = () => {
                   {company.phone && <div className="detail-row"><Phone size={15} /><span>{company.phone}</span></div>}
                   {company.email && <div className="detail-row"><Mail size={15} /><span>{company.email}</span></div>}
                   {company.address && <div className="detail-row"><MapPin size={15} /><span>{company.address}</span></div>}
+                  
+                  {customFieldDefs.length > 0 && (
+                    <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem', fontWeight: 600 }}>Additional Information</p>
+                      <div className="customer-details">
+                        {customFieldDefs.map(def => {
+                          let val = '';
+                          if (company.customFieldsJson) {
+                            try {
+                              const parsed = JSON.parse(company.customFieldsJson);
+                              val = parsed[def.fieldName] || '';
+                            } catch { }
+                          }
+                          if (!val) val = '—';
+                          if (def.fieldType === 'Boolean') {
+                            val = val === 'true' ? 'Yes' : (val === 'false' ? 'No' : '—');
+                          }
+                          return (
+                            <div key={def.customFieldDefinitionId} className="detail-row">
+                              <span style={{ fontWeight: 600, marginRight: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{def.fieldName}:</span>
+                              <span>{val}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'grid', gap: '0.75rem' }}>

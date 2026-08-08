@@ -28,6 +28,15 @@ public class TasksController : ControllerBase
         return Ok(await _service.GetMyTasksAsync(_currentUser.UserId.Value));
     }
 
+    /// <summary>GET /api/tasks/my/completed  — last 50 completed/cancelled tasks for current user</summary>
+    [HttpGet("my/completed")]
+    public async Task<ActionResult<IReadOnlyList<TaskReadDto>>> GetMyCompleted([FromQuery] int take = 50)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        return Ok(await _service.GetCompletedAsync(_currentUser.UserId.Value, take));
+    }
+
+
     /// <summary>GET /api/tasks/assignee/{id}  — grouped tasks for any user (managers)</summary>
     [HttpGet("assignee/{assigneeId:int}")]
     [Authorize(Policy = "ManagerOrAbove")]
@@ -102,6 +111,16 @@ public class TasksController : ControllerBase
     {
         if (!_currentUser.UserId.HasValue) return Unauthorized();
         var result = await _service.CancelAsync(id, dto?.CancellationNote);
+        if (result == null) return NotFound();
+        return Ok(result);
+    }
+
+    /// <summary>PATCH /api/tasks/{id}/reschedule</summary>
+    [HttpPatch("{id:int}/reschedule")]
+    public async Task<ActionResult<TaskReadDto>> Reschedule(int id, [FromBody] CrmSystem.Domain.Dtos.Task.TaskRescheduleDto dto)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        var result = await _service.RescheduleAsync(id, dto.DueDate);
         if (result == null) return NotFound();
         return Ok(result);
     }

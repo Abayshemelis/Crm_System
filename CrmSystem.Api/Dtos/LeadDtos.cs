@@ -19,7 +19,8 @@ public record CreateLeadRequest(
     DateTime? NextFollowUpDate = null,
     string? NextFollowUpType = null,
     string? NextFollowUpNotes = null,
-    int? NextFollowUpAssignedToId = null);
+    int? NextFollowUpAssignedToId = null,
+    string? CustomFieldsJson = null);
 
 public record UpdateLeadRequest(
     [Required][MaxLength(100)] string FirstName,
@@ -37,7 +38,8 @@ public record UpdateLeadRequest(
     DateTime? NextFollowUpDate = null,
     string? NextFollowUpType = null,
     string? NextFollowUpNotes = null,
-    int? NextFollowUpAssignedToId = null);
+    int? NextFollowUpAssignedToId = null,
+    string? CustomFieldsJson = null);
 
 public record ScheduleFollowUpRequest(
     [Required] DateTime FollowUpDate,
@@ -94,7 +96,8 @@ public record LeadSummaryDto(
     int? NextFollowUpAssignedToId,
     string? NextFollowUpAssignedToName,
     DateTime? LastActivityAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? CustomFieldsJson = null);
 
 public record LeadDetailDto(
     int LeadId,
@@ -125,7 +128,8 @@ public record LeadDetailDto(
     int? NextFollowUpAssignedToId,
     string? NextFollowUpAssignedToName,
     DateTime? LastActivityAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? CustomFieldsJson = null);
 
 public record ConvertLeadResponse(
     int LeadId,

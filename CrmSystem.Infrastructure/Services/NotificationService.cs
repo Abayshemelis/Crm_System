@@ -208,6 +208,6 @@ public class NotificationService : INotificationService
         RelatedTaskTitle = n.RelatedTask?.Title,
         RelatedOpportunityId = n.RelatedOpportunityId,
         RelatedOpportunityTitle = n.RelatedOpportunity?.Title,
-        CreatedAt = n.CreatedAt
+        CreatedAt = DateTime.SpecifyKind(n.CreatedAt, DateTimeKind.Utc)
     };
 }

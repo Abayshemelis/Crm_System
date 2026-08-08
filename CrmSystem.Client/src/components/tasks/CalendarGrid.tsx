@@ -17,6 +17,7 @@ interface CalendarGridProps {
   onNavigate: (year: number, month: number) => void;
   onTaskClick: (task: TaskReadDto) => void;
   onNewTask?: (date: string) => void; // ISO date string for pre-filled due date
+  onTaskDrop?: (taskId: number, newDate: string) => void;
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -27,7 +28,7 @@ const toISO = (y: number, m: number, d: number) =>
   `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
-  year, month, days, onNavigate, onTaskClick, onNewTask
+  year, month, days, onNavigate, onTaskClick, onNewTask, onTaskDrop
 }) => {
   const [viewMode, setViewMode] = useState<CalViewMode>('month');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -125,6 +126,25 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  // ── Drag & Drop Handlers ───────────────────────────────────────────────────
+  const handleDragStart = (e: React.DragEvent, taskId: number) => {
+    e.dataTransfer.setData('text/plain', taskId.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dateStr: string) => {
+    e.preventDefault();
+    const taskIdStr = e.dataTransfer.getData('text/plain');
+    if (taskIdStr && onTaskDrop) {
+      onTaskDrop(Number(taskIdStr), dateStr);
+    }
+  };
+
   // ── Month View ──────────────────────────────────────────────────────────────
   const renderMonth = () => {
     const firstDow = new Date(year, month - 1, 1).getDay();
@@ -152,6 +172,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 setSelectedDay(day);
                 if (count > 0) setPopover({ day, tasks });
               }}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, toISO(year, month, day))}
             >
               <span className="cal-day-num">{day}</span>
               {count > 0 && (
@@ -161,6 +183,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                       key={t.crmTaskId}
                       className="cal-task-pill"
                       title={t.title}
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, t.crmTaskId)}
                       onClick={e => { e.stopPropagation(); onTaskClick(t); }}
                     >
                       {t.title}
@@ -200,6 +224,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             key={dayNum + date.getMonth()}
             className={`cal-week-col${isT ? ' cal-cell-today' : ''}${isSel ? ' cal-cell-selected' : ''}`}
             onClick={() => inMonth && setSelectedDay(dayNum)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => inMonth && handleDrop(e, toISO(date.getFullYear(), date.getMonth() + 1, dayNum))}
           >
             <div className="cal-week-col-header">
               <span className="cal-week-dow">{WEEKDAYS[date.getDay()]}</span>
@@ -215,6 +241,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 <div
                   key={t.crmTaskId}
                   className="cal-week-task-row"
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, t.crmTaskId)}
                   onClick={e => { e.stopPropagation(); onTaskClick(t); }}
                   title={t.title}
                 >
@@ -245,7 +273,11 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
     const data = dayMap.get(focusedDay);
     const tasks = data?.tasks ?? [];
     return (
-      <div className="cal-day-view">
+      <div 
+        className="cal-day-view"
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, toISO(year, month, focusedDay))}
+      >
         <div className="cal-day-banner">
           <span>{tasks.length} task{tasks.length !== 1 ? 's' : ''} on this day</span>
           {onNewTask && (
@@ -278,6 +310,8 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
               <div
                 key={t.crmTaskId}
                 className="cal-day-task-card"
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, t.crmTaskId)}
                 onClick={() => onTaskClick(t)}
               >
                 <div className="cal-day-task-main">

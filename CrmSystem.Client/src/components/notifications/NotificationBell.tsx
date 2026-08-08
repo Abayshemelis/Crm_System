@@ -16,7 +16,11 @@ interface NotificationDto {
 }
 
 function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
+  if (!iso) return '';
+  const parsedIso = iso.endsWith('Z') || iso.includes('+') || (iso.includes('-') && iso.length > 19)
+    ? iso
+    : iso + 'Z';
+  const ms = Date.now() - new Date(parsedIso).getTime();
   const min = Math.floor(ms / 60000);
   if (min < 1) return 'just now';
   if (min < 60) return `${min}m ago`;
@@ -44,7 +48,18 @@ export const NotificationBell: React.FC = () => {
   useEffect(() => {
     fetchCount();
     const interval = setInterval(fetchCount, 8000);
-    return () => clearInterval(interval);
+
+    const onLiveNotif = () => {
+      fetchCount();
+      fetchNotifications();
+    };
+
+    window.addEventListener('app:notification', onLiveNotif);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('app:notification', onLiveNotif);
+    };
   }, [fetchCount]);
 
   const fetchNotifications = async () => {

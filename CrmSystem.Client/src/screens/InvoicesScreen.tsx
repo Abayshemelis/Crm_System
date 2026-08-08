@@ -6,6 +6,8 @@ import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import './screens.css';
 
 export interface InvoiceItem {
@@ -740,13 +742,19 @@ export const InvoicesScreen: React.FC = () => {
       <Card className="glass-panel animate-fade-in" style={{ borderRadius: '12px', overflow: 'hidden' }}>
         <Card.Content style={{ padding: 0 }}>
           {isLoading ? (
-            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading invoices database...</div>
-          ) : filteredInvoices.length === 0 ? (
-            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <Receipt size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-              <p style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>No invoices found matching your filters.</p>
-              <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.85rem' }}>Create an invoice above or clear search filters.</p>
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} variant="rect" height={52} style={{ borderRadius: '8px', animationDelay: `${i * 0.07}s` }} />
+              ))}
             </div>
+          ) : filteredInvoices.length === 0 ? (
+            <EmptyState
+              icon={Receipt}
+              title={searchTerm || statusFilter !== 'All' ? 'No invoices match your filters' : 'No invoices yet'}
+              description={searchTerm || statusFilter !== 'All' ? 'Try clearing your search or changing the status filter.' : 'Create your first invoice or generate one directly from a signed contract.'}
+              actionText={!searchTerm && statusFilter === 'All' ? 'Create Invoice' : undefined}
+              onActionClick={!searchTerm && statusFilter === 'All' ? handleOpenCreateModal : undefined}
+            />
           ) : (
             <>
               {/* Desktop Table View */}

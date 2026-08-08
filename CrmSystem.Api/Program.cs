@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using CrmSystem.Api.Hubs;
+using CrmSystem.Api.Middleware;
 using CrmSystem.Domain.Entities;
 using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
@@ -26,6 +28,7 @@ if (builder.Environment.IsEnvironment("Test"))
 
 // Note: keep System.Text.Json as the primary serializer.
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 builder.Services.AddCors(options =>
 {
@@ -73,6 +76,8 @@ builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();
+builder.Services.AddScoped<IImportService, ImportService>();
+builder.Services.AddScoped<IAiInsightService, AiInsightService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
@@ -102,6 +107,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSigningKey))
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -180,9 +198,12 @@ app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
         }
     }
 });
+
+app.UseMiddleware<IpRateLimitingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 using (var scope = app.Services.CreateScope())
 {

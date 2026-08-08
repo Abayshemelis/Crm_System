@@ -134,6 +134,9 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<int?>("LeadId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("OpportunityId")
                         .HasColumnType("int");
 
@@ -148,6 +151,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("LeadId");
 
                     b.HasIndex("OpportunityId");
 
@@ -247,6 +252,9 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
                         .HasMaxLength(255)
@@ -456,6 +464,44 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.ToTable("CrmTaskStatuses");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.CustomFieldDefinition", b =>
+                {
+                    b.Property<int>("CustomFieldDefinitionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CustomFieldDefinitionId"));
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FieldType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("OptionsJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("CustomFieldDefinitionId");
+
+                    b.HasIndex("EntityType", "FieldName")
+                        .IsUnique();
+
+                    b.ToTable("CustomFieldDefinitions");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Customer", b =>
                 {
                     b.Property<int>("CustomerId")
@@ -472,6 +518,9 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -713,6 +762,9 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.Property<int?>("CreatedById")
                         .HasColumnType("int");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
                         .HasMaxLength(255)
@@ -1341,6 +1393,10 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("CrmSystem.Domain.Entities.Lead", "Lead")
+                        .WithMany()
+                        .HasForeignKey("LeadId");
+
                     b.HasOne("CrmSystem.Domain.Entities.Opportunity", "Opportunity")
                         .WithMany()
                         .HasForeignKey("OpportunityId")
@@ -1355,6 +1411,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Lead");
 
                     b.Navigation("Opportunity");
 

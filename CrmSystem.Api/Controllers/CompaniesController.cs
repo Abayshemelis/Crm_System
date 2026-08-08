@@ -156,7 +156,8 @@ public class CompaniesController : ControllerBase
             Phone = request.Phone?.Trim(),
             Email = request.Email?.Trim(),
             SourceId = request.SourceId,
-            AssignedRepId = assignedRepId
+            AssignedRepId = assignedRepId,
+            CustomFieldsJson = request.CustomFieldsJson
         };
 
         _db.Companies.Add(company);
@@ -225,6 +226,7 @@ public class CompaniesController : ControllerBase
         company.Email = request.Email?.Trim();
         company.SourceId = request.SourceId;
         company.AssignedRepId = assignedRepId;
+        company.CustomFieldsJson = request.CustomFieldsJson;
 
         await _db.SaveChangesAsync();
 
@@ -440,7 +442,8 @@ public class CompaniesController : ControllerBase
             company.Website,
             company.AssignedRepId,
             company.AssignedRep?.Name,
-            contactCount);
+            contactCount,
+            company.CustomFieldsJson);
 
     private static CompanyDetailDto ToDetailDto(
         Company company,
@@ -461,7 +464,8 @@ public class CompaniesController : ControllerBase
             company.AssignedRep?.Name,
             company.AssignedRep?.Email,
             totalOpenPipelineValue,
-            contacts);
+            contacts,
+            company.CustomFieldsJson);
 
     private async Task<decimal> CalculateCompanyTotalOpenPipelineAsync(int companyId)
     {

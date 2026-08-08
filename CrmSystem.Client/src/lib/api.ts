@@ -55,9 +55,31 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const err = await res.text();
-    console.error(`API Error: ${err}`);
-    throw new Error(err || `HTTP ${res.status}`);
+    const text = await res.text();
+    console.error(`API Error: ${text}`);
+
+    // Try to parse structured error from ASP.NET ProblemDetails / validation response
+    let message = `HTTP ${res.status}`;
+    try {
+      const json = JSON.parse(text);
+      // ASP.NET validation problem: { errors: { Field: ["message"] } }
+      if (json.errors && typeof json.errors === 'object') {
+        const msgs = Object.values(json.errors).flat() as string[];
+        message = msgs.join(' ');
+      // ASP.NET ProblemDetails: { detail: "..." } or { title: "..." }
+      } else if (json.detail) {
+        message = json.detail;
+      } else if (json.title) {
+        message = json.title;
+      } else if (json.message) {
+        message = json.message;
+      }
+    } catch {
+      // plain text error body
+      if (text) message = text;
+    }
+
+    throw new Error(message);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -66,14 +88,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET', headers: authHeaders() }),
   post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }),
+    body instanceof FormData
+      ? request<T>(path, { method: 'POST', body })
+      : request<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) }),
+    body instanceof FormData
+      ? request<T>(path, { method: 'PUT', body })
+      : request<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE', headers: authHeaders() }),
   upload: <T>(path: string, form: FormData) =>
-    request<T>(path, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` }, body: form }),
+    request<T>(path, { method: 'POST', body: form }),
 };
 
 export function resolveUrl(path: string) {

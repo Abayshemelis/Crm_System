@@ -6,5 +6,6 @@ public sealed record AttachmentUploadDto(
     IFormFile? File,
     int? CustomerId,
     int? CompanyId,
-    int? OpportunityId
+    int? OpportunityId,
+    int? LeadId
 );

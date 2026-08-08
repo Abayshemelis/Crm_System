@@ -18,6 +18,8 @@ import {
 import { TimelineList } from '../components/activities/TimelineList';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { AiLeadAssistant } from '../components/ai/AiLeadAssistant';
+import Attachments from '../components/attachments/Attachments';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
@@ -51,9 +53,19 @@ interface LeadDetail {
     convertedById?: number;
     convertedCustomerId?: number;
     convertedOpportunityId?: number;
+    customFieldsJson?: string;
 }
 
-type TabId = 'details' | 'activities' | 'tasks' | 'audit';
+interface CustomFieldDef {
+    customFieldDefinitionId: number;
+    entityType: string;
+    fieldName: string;
+    fieldType: string;
+    optionsJson: string | null;
+    sortOrder: number;
+}
+
+type TabId = 'details' | 'activities' | 'tasks' | 'attachments' | 'audit';
 
 export const LeadDetailScreen: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -80,6 +92,8 @@ export const LeadDetailScreen: React.FC = () => {
     const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
+    const [attachmentCount, setAttachmentCount] = useState<number>(0);
+    const [customFieldDefs, setCustomFieldDefs] = useState<CustomFieldDef[]>([]);
 
     const fetchActivities = useCallback(async () => {
         if (!id) return;
@@ -141,6 +155,10 @@ export const LeadDetailScreen: React.FC = () => {
         api.get<any[]>('/api/users').then(data => {
             setUsers(data.map((u: any) => ({ id: u.id ?? u.identityId, name: u.name })));
         }).catch(() => { });
+
+        api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Lead')
+            .then(setCustomFieldDefs)
+            .catch(() => setCustomFieldDefs([]));
     }, []);
 
     const deleteLead = async () => {
@@ -472,6 +490,11 @@ export const LeadDetailScreen: React.FC = () => {
                 </div>
             )}
 
+            {/* AI Predictive Lead Insights */}
+            <div style={{ marginBottom: '1.5rem' }}>
+                <AiLeadAssistant leadId={lead.leadId} />
+            </div>
+
             {/* Next Follow-Up Banner */}
             {lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && (
                 <div
@@ -679,11 +702,12 @@ export const LeadDetailScreen: React.FC = () => {
                 {/* Right Tabbed Panel */}
                 <div className="detail-main">
                     <div className="tabs-bar">
-                        {(['details', 'activities', 'tasks', 'audit'] as TabId[]).map(tab => (
+                        {(['details', 'activities', 'tasks', 'attachments', 'audit'] as TabId[]).map(tab => (
                             <button key={tab} className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`} onClick={() => setActiveTab(tab)}>
                                 {tab === 'details' && <span>Overview & Details</span>}
                                 {tab === 'activities' && <span><MessageSquare size={14} style={{ marginRight: 4 }} /> Activity Timeline ({activities.length})</span>}
                                 {tab === 'tasks' && <span><CheckSquare size={14} style={{ marginRight: 4 }} /> Follow-Up Tasks ({tasks.length})</span>}
+                                {tab === 'attachments' && <span>📎 Attachments {attachmentCount > 0 ? `(${attachmentCount})` : ''}</span>}
                                 {tab === 'audit' && <span><History size={14} style={{ marginRight: 4 }} /> Audit History</span>}
                             </button>
                         ))}
@@ -737,6 +761,33 @@ export const LeadDetailScreen: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
+                                
+                                {customFieldDefs.length > 0 && (
+                                    <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Additional Information</div>
+                                        <div className="detail-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                                            {customFieldDefs.map(def => {
+                                                let val = '';
+                                                if (lead.customFieldsJson) {
+                                                    try {
+                                                        const parsed = JSON.parse(lead.customFieldsJson);
+                                                        val = parsed[def.fieldName] || '';
+                                                    } catch { }
+                                                }
+                                                if (!val) val = '—';
+                                                if (def.fieldType === 'Boolean') {
+                                                    val = val === 'true' ? 'Yes' : (val === 'false' ? 'No' : '—');
+                                                }
+                                                return (
+                                                    <div key={def.customFieldDefinitionId}>
+                                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{def.fieldName}</div>
+                                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{val}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {lead.notes && (
                                     <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
@@ -788,6 +839,15 @@ export const LeadDetailScreen: React.FC = () => {
                                     }}
                                     onTaskClick={(t: TaskReadDto) => { setEditTask(t); setShowTaskModal(true); }}
                                 />
+                            </Card.Content>
+                        </Card>
+                    )}
+
+                    {/* Tab 3.5: Attachments */}
+                    {activeTab === 'attachments' && (
+                        <Card className="glass-panel">
+                            <Card.Content style={{ padding: '1.5rem' }}>
+                                <Attachments entity="lead" entityId={Number(id)} canEdit={true} onCountChange={setAttachmentCount} />
                             </Card.Content>
                         </Card>
                     )}

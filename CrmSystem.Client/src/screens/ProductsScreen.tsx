@@ -3,7 +3,9 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Package } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
@@ -13,6 +15,8 @@ export const ProductsScreen: React.FC = () => {
   const [products, setProducts] = useState<{ id: number; name: string; sku: string; description: string | null; productCategoryId: number; productCategoryName: string; productStatusId: number; productStatusName: string; price: number; cost: number | null; stockQuantity: number }[]>([]);
   const [productCategories, setProductCategories] = useState<{ id: number; name: string }[]>([]);
   const [productStatuses, setProductStatuses] = useState<{ id: number; name: string; isSelectable: boolean }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   
   const [newProductName, setNewProductName] = useState('');
   const [newProductSku, setNewProductSku] = useState('');
@@ -35,6 +39,7 @@ export const ProductsScreen: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
+      setIsLoading(true);
       try {
         const [productsData, categoriesData, statusesData] = await Promise.all([
           api.get<any[]>('/api/products'),
@@ -46,6 +51,8 @@ export const ProductsScreen: React.FC = () => {
         setProductStatuses((statusesData ?? []).map(s => ({ ...s, id: s.id ?? s.productStatusId })));
       } catch (error) {
         console.error('Failed to load products data:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
@@ -349,7 +356,17 @@ export const ProductsScreen: React.FC = () => {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {products.map(product => (
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} variant="rect" height={58} style={{ borderRadius: '8px', animationDelay: `${i * 0.07}s` }} />
+              ))
+            ) : products.length === 0 ? (
+              <EmptyState
+                icon={Package}
+                title="No products yet"
+                description="Add your first product to the catalog using the form above."
+              />
+            ) : products.map(product => (
               <div
                 key={product.id}
                 style={{

@@ -20,12 +20,22 @@ public class TaskService : ITaskService
     public async Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId)
     {
         var now = DateTime.UtcNow;
-        var tasks = await GetActiveTasksQuery()
-            .Where(t => t.AssignedToId == assigneeId)
+        var tasks = await GetAllTasksQuery()
+            .Where(t => t.AssignedToId == assigneeId && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
             .OrderBy(t => t.DueDate)
             .ToListAsync();
 
         return GroupTasks(tasks, now);
+    }
+
+    public async Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int identityId, int take = 50)
+    {
+        var tasks = await GetAllTasksQuery()
+            .Where(t => t.AssignedToId == identityId && t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal)
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(take)
+            .ToListAsync();
+        return tasks.Select(MapToDto).ToList();
     }
 
     public async Task<IReadOnlyList<TaskReadDto>> GetByCustomerAsync(int customerId)
@@ -340,6 +350,16 @@ public class TaskService : ITaskService
                 result.Upcoming.Add(MapToDto(t));
         }
         return result;
+    }
+
+    public async Task<TaskReadDto?> RescheduleAsync(int id, DateTime? newDueDate)
+    {
+        var t = await _db.CrmTasks.FindAsync(id);
+        if (t == null) return null;
+
+        t.DueDate = newDueDate;
+        await _db.SaveChangesAsync();
+        return await ReloadDto(id);
     }
 
     private async Task<TaskReadDto> ReloadDto(int id)

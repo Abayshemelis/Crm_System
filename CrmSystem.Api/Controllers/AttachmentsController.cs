@@ -31,11 +31,11 @@ public class AttachmentsController : ControllerBase
     private bool IsSalesRep() => User.IsInRole("SalesRep");
 
     [HttpGet]
-    public async Task<IActionResult> GetAttachments([FromQuery] int? customerId, [FromQuery] int? companyId, [FromQuery] int? opportunityId)
+    public async Task<IActionResult> GetAttachments([FromQuery] int? customerId, [FromQuery] int? companyId, [FromQuery] int? opportunityId, [FromQuery] int? leadId)
     {
-        if (!customerId.HasValue && !companyId.HasValue && !opportunityId.HasValue)
+        if (!customerId.HasValue && !companyId.HasValue && !opportunityId.HasValue && !leadId.HasValue)
         {
-            return BadRequest(new { message = "customerId, companyId, or opportunityId is required." });
+            return BadRequest(new { message = "customerId, companyId, opportunityId, or leadId is required." });
         }
 
         var currentUserId = GetCurrentUserId();
@@ -54,12 +54,19 @@ public class AttachmentsController : ControllerBase
                 if (company is null) return NotFound(new { message = "Company not found." });
                 if (company.AssignedRepId != currentUserId) return Forbid();
             }
+            else if (leadId.HasValue)
+            {
+                var lead = await _context.Leads.FindAsync(leadId.Value);
+                if (lead is null) return NotFound(new { message = "Lead not found." });
+                if (lead.AssignedRepId != currentUserId) return Forbid();
+            }
         }
 
         var query = _context.Attachments.Include(a => a.UploadedBy).AsQueryable();
         if (customerId.HasValue) query = query.Where(a => a.CustomerId == customerId.Value);
         if (companyId.HasValue) query = query.Where(a => a.CompanyId == companyId.Value);
         if (opportunityId.HasValue) query = query.Where(a => a.OpportunityId == opportunityId.Value);
+        if (leadId.HasValue) query = query.Where(a => a.LeadId == leadId.Value);
 
         var attachments = await query
             .OrderByDescending(a => a.UploadedAt)
@@ -102,6 +109,11 @@ public class AttachmentsController : ControllerBase
                 var company = await _context.Companies.FindAsync(attachment.CompanyId.Value);
                 if (company is null || company.AssignedRepId != GetCurrentUserId()) return Forbid();
             }
+            else if (attachment.LeadId.HasValue)
+            {
+                var lead = await _context.Leads.FindAsync(attachment.LeadId.Value);
+                if (lead is null || lead.AssignedRepId != GetCurrentUserId()) return Forbid();
+            }
         }
 
         return Ok(new
@@ -124,9 +136,9 @@ public class AttachmentsController : ControllerBase
             return BadRequest(new { message = "File upload is required." });
         }
 
-        if (!request.CustomerId.HasValue && !request.CompanyId.HasValue && !request.OpportunityId.HasValue)
+        if (!request.CustomerId.HasValue && !request.CompanyId.HasValue && !request.OpportunityId.HasValue && !request.LeadId.HasValue)
         {
-            return BadRequest(new { message = "CustomerId, CompanyId, or OpportunityId is required." });
+            return BadRequest(new { message = "CustomerId, CompanyId, OpportunityId, or LeadId is required." });
         }
 
         var currentUserId = GetCurrentUserId();
@@ -144,6 +156,12 @@ public class AttachmentsController : ControllerBase
                 var company = await _context.Companies.FindAsync(request.CompanyId.Value);
                 if (company is null) return NotFound(new { message = "Company not found." });
                 if (company.AssignedRepId != currentUserId) return Forbid();
+            }
+            else if (request.LeadId.HasValue)
+            {
+                var lead = await _context.Leads.FindAsync(request.LeadId.Value);
+                if (lead is null) return NotFound(new { message = "Lead not found." });
+                if (lead.AssignedRepId != currentUserId) return Forbid();
             }
         }
 
@@ -169,6 +187,7 @@ public class AttachmentsController : ControllerBase
             CustomerId = request.CustomerId,
             CompanyId = request.CompanyId,
             OpportunityId = request.OpportunityId,
+            LeadId = request.LeadId,
             UploadedById = currentUserId
         };
 
@@ -198,6 +217,11 @@ public class AttachmentsController : ControllerBase
             {
                 var company = await _context.Companies.FindAsync(attachment.CompanyId.Value);
                 if (company is null || company.AssignedRepId != GetCurrentUserId()) return Forbid();
+            }
+            else if (attachment.LeadId.HasValue)
+            {
+                var lead = await _context.Leads.FindAsync(attachment.LeadId.Value);
+                if (lead is null || lead.AssignedRepId != GetCurrentUserId()) return Forbid();
             }
         }
 

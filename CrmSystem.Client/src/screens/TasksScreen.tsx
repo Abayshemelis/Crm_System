@@ -7,6 +7,8 @@ import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { List, Calendar, Plus, User } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import { showToast } from '../lib/toast';
 import './screens.css';
 
 interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; }
@@ -21,6 +23,7 @@ export const TasksScreen: React.FC = () => {
 
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [grouped, setGrouped] = useState<TaskGrouped>({ overdue: [], dueToday: [], upcoming: [] });
+  const [completedTasks, setCompletedTasks] = useState<TaskReadDto[]>([]);
   const [calDays, setCalDays] = useState<CalendarDay[]>([]);
   const [calDate, setCalDate] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [loading, setLoading] = useState(true);
@@ -41,13 +44,16 @@ export const TasksScreen: React.FC = () => {
     setLoading(true);
     try {
       const repId = (isManager && selectedRep !== 'me') ? selectedRep : 'me';
-      if (repId === 'me') {
-        const res = await api.get<TaskGrouped>('/api/tasks/my');
-        setGrouped(res);
-      } else {
-        const res = await api.get<TaskGrouped>(`/api/tasks/assignee/${repId}`);
-        setGrouped(res);
-      }
+      const [active, completed] = await Promise.all([
+        repId === 'me'
+          ? api.get<TaskGrouped>('/api/tasks/my')
+          : api.get<TaskGrouped>(`/api/tasks/assignee/${repId}`),
+        repId === 'me'
+          ? api.get<TaskReadDto[]>('/api/tasks/my/completed').catch(() => [] as TaskReadDto[])
+          : Promise.resolve([] as TaskReadDto[]),
+      ]);
+      setGrouped(active);
+      setCompletedTasks(completed);
     } catch { /* ignore */ } finally { setLoading(false); }
   }, [selectedRep, isManager]);
 
@@ -133,6 +139,17 @@ export const TasksScreen: React.FC = () => {
     setShowModal(true);
   };
 
+  const handleTaskDrop = async (taskId: number, newDateStr: string) => {
+    try {
+      await api.patch(`/api/tasks/${taskId}/reschedule`, { dueDate: newDateStr });
+      showToast('Task rescheduled successfully.', 'success');
+      fetchTasks();
+      if (view === 'calendar') fetchCalendar();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reschedule task', 'error');
+    }
+  };
+
   return (
     <Layout>
       <div className="tasks-screen">
@@ -177,13 +194,17 @@ export const TasksScreen: React.FC = () => {
 
         <Card>
           {loading ? (
-            <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>Loading tasks…</div>
+            <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} variant="rect" height={52} style={{ borderRadius: '8px', animationDelay: `${i * 0.07}s` }} />
+              ))}
+            </div>
           ) : view === 'list' ? (
             <TaskListGroup
               overdue={grouped.overdue}
               dueToday={grouped.dueToday}
               upcoming={grouped.upcoming}
-              completed={[]}
+              completed={completedTasks}
               onTaskComplete={handleTaskComplete}
               onTaskClick={handleTaskClick}
             />
@@ -195,6 +216,7 @@ export const TasksScreen: React.FC = () => {
               onNavigate={(y, m) => setCalDate({ year: y, month: m })}
               onTaskClick={handleTaskClick}
               onNewTask={handleNewTask}
+              onTaskDrop={handleTaskDrop}
             />
           )}
         </Card>

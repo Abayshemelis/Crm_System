@@ -242,7 +242,8 @@ public class LeadsController : ControllerBase
             NextFollowUpNotes = request.NextFollowUpNotes?.Trim(),
             NextFollowUpAssignedToId = request.NextFollowUpAssignedToId ?? assignedRepId,
             CreatedAt = DateTime.UtcNow,
-            CreatedById = _currentUser.UserId
+            CreatedById = _currentUser.UserId,
+            CustomFieldsJson = request.CustomFieldsJson
         };
 
         _db.Leads.Add(lead);
@@ -615,6 +616,7 @@ public class LeadsController : ControllerBase
         lead.Notes = request.Notes?.Trim();
         if (!string.IsNullOrWhiteSpace(request.Priority)) lead.Priority = request.Priority.Trim();
         lead.LeadScore = request.LeadScore;
+        lead.CustomFieldsJson = request.CustomFieldsJson;
 
         if (lead.ConvertedCustomerId.HasValue)
         {
@@ -1106,7 +1108,8 @@ public class LeadsController : ControllerBase
             lead.NextFollowUpAssignedToId,
             lead.NextFollowUpAssignedTo?.Name,
             lead.LastActivityAt,
-            lead.CreatedAt);
+            lead.CreatedAt,
+            lead.CustomFieldsJson);
 
     private static LeadDetailDto ToDetailDto(Lead lead) =>
         new(
@@ -1138,5 +1141,6 @@ public class LeadsController : ControllerBase
             lead.NextFollowUpAssignedToId,
             lead.NextFollowUpAssignedTo?.Name,
             lead.LastActivityAt,
-            lead.CreatedAt);
+            lead.CreatedAt,
+            lead.CustomFieldsJson);
 }

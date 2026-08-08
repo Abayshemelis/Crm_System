@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<ProductStatus> ProductStatuses => Set<ProductStatus>();
     public DbSet<EntityType> EntityTypes => Set<EntityType>();
     public DbSet<AuditActionType> AuditActionTypes => Set<AuditActionType>();
+    public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
 
     // ── Core operational entities ──────────────────────────────────────────
     public DbSet<Company> Companies => Set<Company>();
@@ -190,6 +191,17 @@ public class AppDbContext : DbContext
             e.HasKey(aat => aat.AuditActionTypeId);
             e.HasIndex(aat => aat.Name).IsUnique();
             e.Property(aat => aat.Name).HasMaxLength(50).IsRequired();
+        });
+
+        // ── CustomFieldDefinition ─────────────────────────────────────────
+        modelBuilder.Entity<CustomFieldDefinition>(e =>
+        {
+            e.HasKey(cf => cf.CustomFieldDefinitionId);
+            e.Property(cf => cf.EntityType).HasMaxLength(50).IsRequired();
+            e.Property(cf => cf.FieldName).HasMaxLength(100).IsRequired();
+            e.Property(cf => cf.FieldType).HasMaxLength(50).IsRequired();
+            e.Property(cf => cf.OptionsJson).HasMaxLength(2000);
+            e.HasIndex(cf => new { cf.EntityType, cf.FieldName }).IsUnique();
         });
 
         // ── Company ───────────────────────────────────────────────────────

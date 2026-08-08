@@ -10,6 +10,7 @@ import { OpportunityDetailPanel } from '../components/ui/OpportunityDetailPanel'
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
 import { Plus, Filter, Search, X, Calendar } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
 import './screens.css';
 
 interface Opportunity {
@@ -195,9 +196,18 @@ export const PipelineScreen: React.FC = () => {
     if (isLoading) {
         return (
             <Layout>
-                <div className="loading-state">
-                    <div className="spinner" />
-                    <p>Loading pipeline...</p>
+                <div className="dashboard-header animate-fade-in">
+                    <div className="dashboard-title"><h1>Pipeline</h1><p>Loading opportunities…</p></div>
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', paddingBottom: '1rem' }}>
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} style={{ minWidth: 260, flex: '0 0 260px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <Skeleton variant="rect" height={36} style={{ borderRadius: '8px', animationDelay: `${i * 0.08}s` }} />
+                            {Array.from({ length: 3 }).map((__, j) => (
+                                <Skeleton key={j} variant="card" style={{ animationDelay: `${(i + j) * 0.06}s` }} />
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </Layout>
         );

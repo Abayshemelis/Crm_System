@@ -15,7 +15,7 @@ interface Attachment {
 }
 
 interface Props {
-    entity: 'customer' | 'company' | 'opportunity';
+    entity: 'customer' | 'company' | 'opportunity' | 'lead';
     entityId: number;
     canEdit?: boolean;
     onCountChange?: (count: number) => void;
@@ -116,37 +116,61 @@ export const Attachments: React.FC<Props> = ({ entity, entityId, canEdit = true,
     const formatBytes = (b: number) => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
     return (
-        <div>
+        <div style={{ width: '100%', overflow: 'hidden' }}>
             {canEdit && (
                 <div className="upload-zone">
-                    <Upload size={20} style={{ marginBottom: 8 }} />
-                    <p style={{ marginBottom: 8, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{file ? file.name : 'Select a file to upload'}</p>
-                    <label className="upload-label">Browse
-                        <input type="file" style={{ display: 'none' }} onChange={e => handleFileSelect(e.target.files?.[0] ?? null)} />
-                    </label>
-                    {file && <button className="btn" style={{ marginLeft: 8 }} onClick={upload} disabled={uploading}>{uploading ? 'Uploading...' : 'Upload'}</button>}
+                    <Upload size={24} style={{ marginBottom: 8, color: 'var(--accent-primary)' }} />
+                    <p style={{ marginBottom: 12, color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{file ? file.name : 'Select a file to upload (Max 25 MB)'}</p>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <label className="upload-label">
+                            Browse
+                            <input type="file" style={{ display: 'none' }} onChange={e => handleFileSelect(e.target.files?.[0] ?? null)} />
+                        </label>
+                        {file && (
+                            <button className="btn btn-primary" onClick={upload} disabled={uploading}>
+                                {uploading ? 'Uploading...' : 'Upload File'}
+                            </button>
+                        )}
+                    </div>
                     {uploadError && <p style={{ marginTop: 8, color: 'var(--error)', fontSize: '0.75rem' }}>{uploadError}</p>}
                 </div>
             )}
 
             <div className="attachment-list">
-                {attachments.length === 0 && <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No attachments yet.</p>}
+                {attachments.length === 0 && (
+                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 1rem', margin: 0 }}>No attachments uploaded yet.</p>
+                )}
                 {attachments.map(att => (
                     <div key={att.attachmentId} className="attachment-row">
-                        <div style={{ width: 72, height: 56, marginRight: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <div className="attachment-icon">
                             {att.contentType && att.contentType.startsWith('image/') ? (
-                                <img src={resolveUrl(att.fileUrl)} alt={att.fileName} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 6, objectFit: 'cover', cursor: 'pointer' }} onClick={() => setPreviewAttachment({ ...att, fileUrl: resolveUrl(att.fileUrl) })} />
+                                <img
+                                    src={resolveUrl(att.fileUrl)}
+                                    alt={att.fileName}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                                    onClick={() => setPreviewAttachment({ ...att, fileUrl: resolveUrl(att.fileUrl) })}
+                                />
                             ) : (
-                                <div style={{ cursor: 'pointer' }} onClick={() => setPreviewAttachment({ ...att, fileUrl: resolveUrl(att.fileUrl) })}><Paperclip size={20} style={{ color: 'var(--accent-primary)' }} /></div>
+                                <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }} onClick={() => setPreviewAttachment({ ...att, fileUrl: resolveUrl(att.fileUrl) })}>
+                                    <Paperclip size={20} style={{ color: 'var(--accent-primary)' }} />
+                                </div>
                             )}
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <p style={{ fontWeight: 500, fontSize: '0.875rem', margin: 0 }}>{att.fileName}</p>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: 0 }}>{formatBytes(att.fileSizeBytes)} · Uploaded by {att.uploadedByName} · {new Date(att.uploadedAt).toLocaleDateString()}</p>
+                        <div className="attachment-info">
+                            <p className="attachment-filename" title={att.fileName}>{att.fileName}</p>
+                            <p className="attachment-meta">
+                                {formatBytes(att.fileSizeBytes)} · Uploaded by {att.uploadedByName} · {new Date(att.uploadedAt).toLocaleDateString()}
+                            </p>
                         </div>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <a className="btn-link" href={resolveUrl(att.fileUrl)} target="_blank" rel="noreferrer" download>Download</a>
-                            {canEdit && <button className="icon-btn danger" onClick={() => remove(att.attachmentId)} title="Delete"><Trash2 size={14} /></button>}
+                        <div className="attachment-actions">
+                            <a className="btn-link" href={resolveUrl(att.fileUrl)} target="_blank" rel="noreferrer" download>
+                                Download
+                            </a>
+                            {canEdit && (
+                                <button className="icon-btn danger" onClick={() => remove(att.attachmentId)} title="Delete Attachment">
+                                    <Trash2 size={14} />
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}

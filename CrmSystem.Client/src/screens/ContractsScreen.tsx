@@ -8,6 +8,8 @@ import { ContractModal, ContractItem } from '../components/contracts/ContractMod
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2 } from 'lucide-react';
+import { Skeleton } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
 import './screens.css';
 
 const ContractActionMenu: React.FC<{
@@ -661,13 +663,19 @@ export const ContractsScreen: React.FC = () => {
       <Card className="glass-panel animate-fade-in" style={{ borderRadius: '12px', overflow: 'hidden' }}>
         <Card.Content style={{ padding: 0 }}>
           {isLoading ? (
-            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading contracts database...</div>
-          ) : filteredContracts.length === 0 ? (
-            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <FileText size={40} style={{ opacity: 0.3, marginBottom: '1rem' }} />
-              <p style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>No contracts found matching your filters.</p>
-              <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.85rem' }}>Create a contract above or clear search filters.</p>
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} variant="rect" height={52} style={{ borderRadius: '8px', animationDelay: `${i * 0.07}s` }} />
+              ))}
             </div>
+          ) : filteredContracts.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title={searchTerm || statusFilter !== 'All' ? 'No contracts match your filters' : 'No contracts yet'}
+              description={searchTerm || statusFilter !== 'All' ? 'Try clearing your search or changing the status filter.' : 'Create your first commercial contract and share a signing link with your customer.'}
+              actionText={!searchTerm && statusFilter === 'All' ? 'Create Contract' : undefined}
+              onActionClick={!searchTerm && statusFilter === 'All' ? () => setShowCreateModal(true) : undefined}
+            />
           ) : (
             <>
               {/* Desktop Table View */}

@@ -27,9 +27,14 @@ import { ReportsScreen } from './screens/ReportsScreen';
 import { ContractsScreen } from './screens/ContractsScreen';
 import { InvoicesScreen } from './screens/InvoicesScreen';
 import { PublicContractSignScreen } from './screens/PublicContractSignScreen';
+import { PublicInvoicePayScreen } from './screens/PublicInvoicePayScreen';
+import { SignalRProvider } from './context/SignalRContext';
 import { Toast } from './components/ui/Toast';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
+import { SearchResultsScreen } from './screens/SearchResultsScreen';
+import { ImportWizardScreen } from './screens/ImportWizardScreen';
 
 function AppRoutes() {
   return (
@@ -43,8 +48,12 @@ function AppRoutes() {
         <Route path="/sign/contract/:token" element={<PublicContractSignScreen />} />
         <Route path="/contract/sign/:token" element={<PublicContractSignScreen />} />
         <Route path="/contracts/sign/:token" element={<PublicContractSignScreen />} />
+        <Route path="/public/invoices/:id" element={<PublicInvoicePayScreen />} />
+        <Route path="/invoice/pay/:id" element={<PublicInvoicePayScreen />} />
+        <Route path="/invoices/pay/:id" element={<PublicInvoicePayScreen />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsScreen /></ProtectedRoute>} />
+        <Route path="/import" element={<ProtectedRoute><ImportWizardScreen /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersScreen /></ProtectedRoute>} />
         <Route path="/customers/new" element={<ProtectedRoute><CustomerFormScreen /></ProtectedRoute>} />
         <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetailScreen /></ProtectedRoute>} />
@@ -69,6 +78,7 @@ function AppRoutes() {
         <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
         <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
+        <Route path="/search" element={<ProtectedRoute><SearchResultsScreen /></ProtectedRoute>} />
         <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />
       </Routes>
     </BrowserRouter>
@@ -104,17 +114,19 @@ function AppShell() {
   }, []);
 
   return (
-    <>
+    <ErrorBoundary>
       <AppRoutes />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </>
+    </ErrorBoundary>
   );
 }
 
 function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <SignalRProvider>
+        <AppShell />
+      </SignalRProvider>
     </AuthProvider>
   );
 }
