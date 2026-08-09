@@ -28,6 +28,8 @@ public class Invoice
     public DateTime? PaidAt { get; set; }
 
     public string? PaymentMethod { get; set; }
+    public string? StripeSessionId { get; set; }
+    public string? PaymentUrl { get; set; }
     public string? Notes { get; set; }
     public string? Terms { get; set; }
 

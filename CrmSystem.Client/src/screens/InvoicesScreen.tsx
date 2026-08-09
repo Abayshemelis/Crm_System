@@ -43,7 +43,8 @@ const InvoiceActionMenu: React.FC<{
   onPrint: (inv: InvoiceItem) => void;
   onEdit: (inv: InvoiceItem) => void;
   onDelete: (inv: InvoiceItem) => void;
-}> = ({ invoice, onPay, onPrint, onEdit, onDelete }) => {
+  onStripePay: (inv: InvoiceItem) => void;
+}> = ({ invoice, onPay, onPrint, onEdit, onDelete, onStripePay }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +138,22 @@ const InvoiceActionMenu: React.FC<{
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <CreditCard size={14} /> Record Payment
+            </button>
+          )}
+
+          {invoice.status !== 'Paid' && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onStripePay(invoice); setOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
+                borderRadius: '6px', border: 'none', background: 'transparent', color: '#6366f1',
+                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <CreditCard size={14} /> Pay via Stripe
             </button>
           )}
 
@@ -325,6 +342,18 @@ export const InvoicesScreen: React.FC = () => {
       showToast('Failed to record payment', 'error');
     } finally {
       setProcessingPayment(false);
+    }
+  };
+
+  const handleStripePay = async (invoice: InvoiceItem) => {
+    try {
+      const successUrl = `${window.location.origin}/invoices?paid_session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${window.location.origin}/invoices?cancel_session_id=true`;
+      
+      const res = await api.post<{url: string}>(`/api/invoices/${invoice.invoiceId}/stripe-checkout?successUrl=${encodeURIComponent(successUrl)}&cancelUrl=${encodeURIComponent(cancelUrl)}`, {});
+      window.location.href = res.url;
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate Stripe checkout session', 'error');
     }
   };
 
@@ -808,6 +837,7 @@ export const InvoicesScreen: React.FC = () => {
                             onPrint={printInvoicePDF}
                             onEdit={handleOpenEditModal}
                             onDelete={handleDeleteInvoice}
+                            onStripePay={handleStripePay}
                           />
                         </td>
                       </tr>
@@ -845,6 +875,7 @@ export const InvoicesScreen: React.FC = () => {
                         onPrint={printInvoicePDF}
                         onEdit={handleOpenEditModal}
                         onDelete={handleDeleteInvoice}
+                        onStripePay={handleStripePay}
                       />
                     </div>
                   </div>

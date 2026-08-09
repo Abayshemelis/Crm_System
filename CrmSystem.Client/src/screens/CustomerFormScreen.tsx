@@ -49,7 +49,7 @@ export const CustomerFormScreen: React.FC = () => {
         companyId: '',
         companyName: '',
         sourceId: '',
-        assignedRepId: ''
+        assignedRepId: user?.userId ? String(user.userId) : ''
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [apiError, setApiError] = useState<string | null>(null);
@@ -277,7 +277,12 @@ export const CustomerFormScreen: React.FC = () => {
                         {isManagerOrAbove && (
                             <div className="input-wrapper">
                                 <label className="input-label">Assigned Rep</label>
-                                <select value={form.assignedRepId} onChange={e => handleChange('assignedRepId', e.target.value)} className="input-field">
+                                <select 
+                                    value={form.assignedRepId} 
+                                    onChange={e => handleChange('assignedRepId', e.target.value)} 
+                                    className="input-field"
+                                    disabled={!isManagerOrAbove}
+                                >
                                     <option value="">Select rep</option>
                                     {reps.map((rep, index) => (
                                         <option key={rep.id != null ? `rep-${rep.id}` : `rep-${index}`} value={rep.id}>{rep.name}{rep.role ? ` (${rep.role})` : ''}</option>

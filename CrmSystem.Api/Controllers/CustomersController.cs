@@ -17,12 +17,14 @@ public class CustomersController : ControllerBase
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IAuditService _auditService;
+    private readonly IEmailTriggerService _emailTriggerService;
 
-    public CustomersController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService)
+    public CustomersController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService, IEmailTriggerService emailTriggerService)
     {
         _db = db;
         _currentUser = currentUser;
         _auditService = auditService;
+        _emailTriggerService = emailTriggerService;
     }
 
     [HttpGet]
@@ -359,6 +361,11 @@ public class CustomersController : ControllerBase
         await _db.Entry(customer).Reference(c => c.Company).LoadAsync();
         await _db.Entry(customer).Reference(c => c.AssignedRep).LoadAsync();
         await _db.Entry(customer).Reference(c => c.Source).LoadAsync();
+
+        if (oldAssignedRepId != customer.AssignedRepId && customer.AssignedRep != null)
+        {
+            await _emailTriggerService.SendCustomerAssignedEmailAsync(customer, customer.AssignedRep);
+        }
 
         return Ok(ToDetailDto(customer));
     }

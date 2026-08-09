@@ -71,6 +71,7 @@ builder.Services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
 builder.Services.AddScoped<IOpportunityService, OpportunityService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
+builder.Services.AddScoped<IEmailTriggerService, EmailTriggerService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
@@ -78,6 +79,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();
 builder.Services.AddScoped<IImportService, ImportService>();
 builder.Services.AddScoped<IAiInsightService, AiInsightService>();
+builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
 builder.Services.AddHostedService<NotificationBackgroundService>();
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>

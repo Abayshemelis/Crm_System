@@ -18,13 +18,15 @@ public class LeadsController : ControllerBase
     private readonly ICurrentUserService _currentUser;
     private readonly IAuditService _auditService;
     private readonly ILeadScoringService _scoringService;
+    private readonly IEmailTriggerService _emailTriggerService;
 
-    public LeadsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService, ILeadScoringService scoringService)
+    public LeadsController(AppDbContext db, ICurrentUserService currentUser, IAuditService auditService, ILeadScoringService scoringService, IEmailTriggerService emailTriggerService)
     {
         _db = db;
         _currentUser = currentUser;
         _auditService = auditService;
         _scoringService = scoringService;
+        _emailTriggerService = emailTriggerService;
     }
 
     [HttpGet]
@@ -252,6 +254,11 @@ public class LeadsController : ControllerBase
         await _db.Entry(lead).Reference(l => l.AssignedRep).LoadAsync();
         await _db.Entry(lead).Reference(l => l.Source).LoadAsync();
         await _db.Entry(lead).Reference(l => l.LeadStatus).LoadAsync();
+
+        if (lead.AssignedRep != null)
+        {
+            await _emailTriggerService.SendLeadAssignedEmailAsync(lead, lead.AssignedRep);
+        }
 
         return CreatedAtAction(nameof(GetLead), new { id = lead.LeadId }, ToDetailDto(lead));
     }
@@ -758,6 +765,11 @@ public class LeadsController : ControllerBase
         await _db.Entry(lead).Reference(l => l.Source).LoadAsync();
         await _db.Entry(lead).Reference(l => l.LeadStatus).LoadAsync();
         await _db.Entry(lead).Reference(l => l.NextFollowUpAssignedTo).LoadAsync();
+
+        if (oldAssignedRepId != lead.AssignedRepId && lead.AssignedRep != null)
+        {
+            await _emailTriggerService.SendLeadAssignedEmailAsync(lead, lead.AssignedRep);
+        }
 
         return Ok(ToDetailDto(lead));
     }

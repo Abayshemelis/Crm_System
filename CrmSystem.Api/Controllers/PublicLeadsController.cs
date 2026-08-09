@@ -27,13 +27,13 @@ public class PublicLeadsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IAuditService _auditService;
-    private readonly IEmailSender _emailSender;
+    private readonly IEmailTriggerService _emailTriggerService;
 
-    public PublicLeadsController(AppDbContext db, IAuditService auditService, IEmailSender emailSender)
+    public PublicLeadsController(AppDbContext db, IAuditService auditService, IEmailTriggerService emailTriggerService)
     {
         _db = db;
         _auditService = auditService;
-        _emailSender = emailSender;
+        _emailTriggerService = emailTriggerService;
     }
 
     /// <summary>
@@ -112,23 +112,7 @@ public class PublicLeadsController : ControllerBase
         // 6. Send Automated Welcome Email to Prospect
         if (!string.IsNullOrWhiteSpace(lead.Email))
         {
-            try
-            {
-                var subject = "Thank you for contacting us!";
-                var bodyHtml = $@"
-                    <div style='font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
-                        <h2 style='color: #6366f1;'>Hello {lead.FirstName},</h2>
-                        <p>Thank you for reaching out to us! We have received your inquiry and a sales representative will be in touch with you shortly.</p>
-                        <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;' />
-                        <p style='font-size: 0.85em; color: #64748b;'>This is an automated confirmation email from our CRM System.</p>
-                    </div>";
-
-                await _emailSender.SendEmailAsync(lead.Email, subject, bodyHtml, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[PublicLeads] Welcome email warning: {ex.Message}");
-            }
+            await _emailTriggerService.SendLeadWelcomeEmailAsync(lead, cancellationToken);
         }
 
         return Ok(new

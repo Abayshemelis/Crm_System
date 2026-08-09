@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
+import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
 interface FormState {
@@ -35,6 +36,7 @@ interface CustomFieldDef {
 }
 
 export const LeadFormScreen: React.FC = () => {
+    const { isManagerOrAboveSelected, user } = useAuth();
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [form, setForm] = useState<FormState>({
@@ -46,7 +48,7 @@ export const LeadFormScreen: React.FC = () => {
         jobTitle: '',
         sourceId: '',
         leadStatusId: '',
-        assignedRepId: '',
+        assignedRepId: user?.userId ? String(user.userId) : '',
         priority: 'Medium',
         leadScore: 0,
         notes: ''
@@ -231,7 +233,12 @@ export const LeadFormScreen: React.FC = () => {
                         {users.length > 0 && (
                             <div className="input-wrapper">
                                 <label className="input-label">Assigned Sales Rep</label>
-                                <select className="input-field" value={form.assignedRepId} onChange={e => handleChange('assignedRepId', e.target.value)}>
+                                <select 
+                                    className="input-field" 
+                                    value={form.assignedRepId} 
+                                    onChange={e => handleChange('assignedRepId', e.target.value)}
+                                    disabled={!isManagerOrAboveSelected}
+                                >
                                     <option key="rep-unassigned" value="">Unassigned</option>
                                     {users.map(u => (
                                         <option key={`rep-${u.id}`} value={u.id}>{u.name}</option>
