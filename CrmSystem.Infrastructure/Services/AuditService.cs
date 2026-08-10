@@ -9,7 +9,7 @@ public interface IAuditService
     Task LogFieldChangeAsync(int entityTypeId, int entityId, string fieldName, string? oldValue, string? newValue, string actionTypeName, int changedById);
     Task LogFieldChangesAsync(int entityTypeId, int entityId, IEnumerable<(string Field, string? OldValue, string? NewValue)> changes, string actionTypeName, int changedById);
     Task LogAssignmentAsync(int entityTypeId, int entityId, int? oldRepId, int? newRepId, int changedById);
-    Task LogDeletionAsync(int entityTypeId, int entityId, int changedById);
+    Task LogDeletionAsync(int entityTypeId, int entityId, int changedById, string? entitySummary = null);
     Task ClearHistoryAsync(int entityTypeId, int entityId, int changedById);
 }
 
@@ -102,7 +102,7 @@ public class AuditService : IAuditService
         await _db.SaveChangesAsync();
     }
 
-    public async Task LogDeletionAsync(int entityTypeId, int entityId, int changedById)
+    public async Task LogDeletionAsync(int entityTypeId, int entityId, int changedById, string? entitySummary = null)
     {
         var actionType = await _db.AuditActionTypes.FirstOrDefaultAsync(a => a.Name == "Delete");
         if (actionType is null)
@@ -116,7 +116,7 @@ public class AuditService : IAuditService
             EntityTypeId = entityTypeId,
             EntityId = entityId,
             FieldName = null,
-            OldValue = null,
+            OldValue = entitySummary,
             NewValue = null,
             AuditActionTypeId = actionType.AuditActionTypeId,
             ChangedById = changedById,

@@ -8,7 +8,8 @@ namespace CrmSystem.Api.Services;
 public interface IStripePaymentService
 {
     Task<string> CreateCheckoutSessionAsync(CrmSystem.Domain.Entities.Invoice invoice, string successUrl, string cancelUrl);
-    Task ProcessWebhookEventAsync(string json, string stripeSignatureHeader);
+    Task<int?> VerifyCheckoutSessionAsync(string sessionId);
+    Task<int?> ProcessWebhookEventAsync(string json, string stripeSignatureHeader);
 }
 
 public class StripePaymentService : IStripePaymentService
@@ -17,12 +18,20 @@ public class StripePaymentService : IStripePaymentService
 
     public StripePaymentService(IConfiguration configuration)
     {
-        StripeConfiguration.ApiKey = configuration["Stripe:SecretKey"] ?? "sk_test_default";
+        var apiKey = configuration["Stripe:SecretKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            apiKey = "sk_test_default";
+        }
+        StripeConfiguration.ApiKey = apiKey;
         _webhookSecret = configuration["Stripe:WebhookSecret"] ?? "whsec_default";
     }
 
     public async Task<string> CreateCheckoutSessionAsync(CrmSystem.Domain.Entities.Invoice invoice, string successUrl, string cancelUrl)
     {
+        var rawAmount = invoice.TotalAmount > 0 ? invoice.TotalAmount : invoice.Amount;
+        var amountInCents = (long)Math.Max(100, Math.Round(rawAmount * 100));
+
         var options = new SessionCreateOptions
         {
             PaymentMethodTypes = new List<string> { "card" },
@@ -32,7 +41,7 @@ public class StripePaymentService : IStripePaymentService
                 {
                     PriceData = new SessionLineItemPriceDataOptions
                     {
-                        UnitAmount = (long)(invoice.TotalAmount * 100), // Convert to cents
+                        UnitAmount = amountInCents,
                         Currency = "usd",
                         ProductData = new SessionLineItemPriceDataProductDataOptions
                         {
@@ -45,7 +54,12 @@ public class StripePaymentService : IStripePaymentService
             Mode = "payment",
             SuccessUrl = successUrl,
             CancelUrl = cancelUrl,
-            ClientReferenceId = invoice.InvoiceId.ToString()
+            ClientReferenceId = invoice.InvoiceId.ToString(),
+            Metadata = new Dictionary<string, string>
+            {
+                { "InvoiceId", invoice.InvoiceId.ToString() },
+                { "InvoiceNumber", invoice.InvoiceNumber }
+            }
         };
 
         var service = new SessionService();
@@ -54,20 +68,63 @@ public class StripePaymentService : IStripePaymentService
         return session.Url;
     }
 
-    public async Task ProcessWebhookEventAsync(string json, string stripeSignatureHeader)
+    public async Task<int?> VerifyCheckoutSessionAsync(string sessionId)
     {
-        var stripeEvent = EventUtility.ConstructEvent(json, stripeSignatureHeader, _webhookSecret);
+        if (string.IsNullOrWhiteSpace(sessionId)) return null;
 
-        if (stripeEvent.Type == EventTypes.CheckoutSessionCompleted)
+        try
         {
-            var session = stripeEvent.Data.Object as Session;
+            var service = new SessionService();
+            var session = await service.GetAsync(sessionId);
 
-            if (session != null && int.TryParse(session.ClientReferenceId, out int invoiceId))
+            if (session != null && (session.PaymentStatus == "paid" || session.Status == "complete"))
             {
-                // This will be picked up by the controller to mark the invoice as paid
-                // We'll throw an event or handle DB here.
-                // But typically, the Controller handles DB operations, so we might want to return the invoiceId.
+                if (!string.IsNullOrWhiteSpace(session.ClientReferenceId) && int.TryParse(session.ClientReferenceId, out int invId))
+                {
+                    return invId;
+                }
+                if (session.Metadata != null && session.Metadata.TryGetValue("InvoiceId", out var metaIdStr) && int.TryParse(metaIdStr, out int metaInvId))
+                {
+                    return metaInvId;
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Stripe] Error verifying checkout session: {ex.Message}");
+        }
+
+        return null;
+    }
+
+    public async Task<int?> ProcessWebhookEventAsync(string json, string stripeSignatureHeader)
+    {
+        try
+        {
+            var stripeEvent = EventUtility.ConstructEvent(json, stripeSignatureHeader, _webhookSecret);
+
+            if (stripeEvent.Type == EventTypes.CheckoutSessionCompleted)
+            {
+                var session = stripeEvent.Data.Object as Session;
+
+                if (session != null && (session.PaymentStatus == "paid" || session.Status == "complete"))
+                {
+                    if (!string.IsNullOrWhiteSpace(session.ClientReferenceId) && int.TryParse(session.ClientReferenceId, out int invId))
+                    {
+                        return invId;
+                    }
+                    if (session.Metadata != null && session.Metadata.TryGetValue("InvoiceId", out var metaIdStr) && int.TryParse(metaIdStr, out int metaInvId))
+                    {
+                        return metaInvId;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Stripe] Error processing webhook event: {ex.Message}");
+        }
+
+        return null;
     }
 }

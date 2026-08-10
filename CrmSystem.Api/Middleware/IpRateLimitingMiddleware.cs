@@ -9,7 +9,7 @@ namespace CrmSystem.Api.Middleware
     {
         private readonly RequestDelegate _next;
         private static readonly ConcurrentDictionary<string, (int Count, DateTime WindowStart)> _ipTrackers = new();
-        private const int MaxRequestsPerMinute = 120; // 120 reqs/min max
+        private const int MaxRequestsPerMinute = 300; // 300 reqs/min max for general API endpoints
 
         public IpRateLimitingMiddleware(RequestDelegate next)
         {
@@ -20,6 +20,13 @@ namespace CrmSystem.Api.Middleware
         {
             var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var path = context.Request.Path.Value?.ToLower() ?? string.Empty;
+
+            // Bypass rate limit for lightweight notification count heartbeats
+            if (path.Contains("/api/notifications/count"))
+            {
+                await _next(context);
+                return;
+            }
 
             // Strict rate limit on auth endpoints (15 login attempts/min)
             int limit = path.Contains("/api/auth/login") ? 15 : MaxRequestsPerMinute;

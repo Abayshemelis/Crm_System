@@ -37,7 +37,7 @@ export const NotificationBell: React.FC = () => {
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  // Poll unread count every 8 seconds for responsive alerts
+  // Poll unread count every 30 seconds for responsive alerts
   const fetchCount = useCallback(async () => {
     try {
       const res = await api.get<{ unreadCount: number }>('/api/notifications/count');
@@ -47,7 +47,7 @@ export const NotificationBell: React.FC = () => {
 
   useEffect(() => {
     fetchCount();
-    const interval = setInterval(fetchCount, 8000);
+    const interval = setInterval(fetchCount, 30000);
 
     const onLiveNotif = () => {
       fetchCount();

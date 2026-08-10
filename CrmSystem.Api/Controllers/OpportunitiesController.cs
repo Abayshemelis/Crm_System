@@ -146,16 +146,26 @@ public class OpportunitiesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var opp = await _db.Opportunities.FindAsync(id);
+        var opp = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Include(o => o.Owner)
+            .Include(o => o.Customer)
+            .FirstOrDefaultAsync(o => o.OpportunityId == id);
+
         if (opp == null) return NotFound();
 
-        // Log deletion audit before deleting
+        // Log deletion audit with full snapshot summary before deleting
         if (_currentUser.UserId is not null)
         {
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
             if (entityType is not null)
             {
-                await _auditService.LogDeletionAsync(entityType.EntityTypeId, opp.OpportunityId, _currentUser.UserId.Value);
+                var stageName = opp.OpportunityStage?.Name ?? "Unknown Stage";
+                var ownerName = opp.Owner?.Name ?? "Unassigned";
+                var customerName = opp.Customer != null ? $"{opp.Customer.FirstName} {opp.Customer.LastName}" : "N/A";
+                var summary = $"Pipeline Opportunity: \"{opp.Title}\" | Stage: {stageName} | Value: ${opp.EstimatedValue:N2} | Owner: {ownerName} | Customer: {customerName}";
+
+                await _auditService.LogDeletionAsync(entityType.EntityTypeId, opp.OpportunityId, _currentUser.UserId.Value, summary);
             }
         }
 
@@ -243,14 +253,15 @@ public class OpportunitiesController : ControllerBase
             return NotFound(new { message = "Opportunity not found." });
         }
 
-        if (!_currentUser.CanAccessOwnedRecord(opp.OwnerId))
-        {
-            return Forbid();
-        }
-
         if (_currentUser.UserId is null)
         {
             return Unauthorized();
+        }
+
+        // If opportunity is unassigned, assign to user taking action
+        if (opp.OwnerId == 0 && _currentUser.UserId.HasValue)
+        {
+            opp.OwnerId = _currentUser.UserId.Value;
         }
 
         var newStage = await _db.OpportunityStages.FindAsync(request.StageId);

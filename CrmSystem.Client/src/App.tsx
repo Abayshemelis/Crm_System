@@ -35,6 +35,7 @@ import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
 import { SearchResultsScreen } from './screens/SearchResultsScreen';
 import { ImportWizardScreen } from './screens/ImportWizardScreen';
+import { AuditLogsScreen } from './screens/AuditLogsScreen';
 
 function AppRoutes() {
   return (
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="/invoices" element={<ProtectedRoute><InvoicesScreen /></ProtectedRoute>} />
         <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
         <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
+        <Route path="/audit-logs" element={<ManagerOnlyRoute><AuditLogsScreen /></ManagerOnlyRoute>} />
         <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchResultsScreen /></ProtectedRoute>} />
         <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />

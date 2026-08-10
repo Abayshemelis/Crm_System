@@ -31,9 +31,6 @@ public class OpportunityLineItemsController : ControllerBase
         if (opportunity == null)
             return NotFound(new { message = "Opportunity not found." });
 
-        if (!_currentUser.CanAccessOwnedRecord(opportunity.OwnerId))
-            return Forbid();
-
         var lineItems = await _db.OpportunityLineItems
             .Include(li => li.Product)
             .ThenInclude(p => p!.ProductCategory)

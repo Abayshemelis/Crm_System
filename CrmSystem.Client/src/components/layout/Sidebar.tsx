@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
   Kanban, CheckSquare, BarChart2, X, Receipt,
-  LayoutDashboard, Target, FileText, UploadCloud
+  LayoutDashboard, Target, FileText, UploadCloud, History
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { to: '/contracts',  label: 'Contracts',  icon: FileText,         authRequired: true,  managerOnly: false },
   { to: '/invoices',   label: 'Invoices',   icon: Receipt,          authRequired: true,  managerOnly: false },
   { to: '/tasks',      label: 'Tasks',      icon: CheckSquare,      authRequired: true,  managerOnly: false },
+  { to: '/audit-logs', label: 'System History', icon: History,     authRequired: true,  managerOnly: true  },
   { to: '/users',      label: 'Users',      icon: UserCircle,       authRequired: true,  managerOnly: true  },
 ] as const;
 

@@ -145,6 +145,7 @@ public class LeadListQuery : PaginationQuery
     public int? SourceId { get; set; }
     public int? RepId { get; set; }
     public string? Priority { get; set; }
+    public string? Rating { get; set; }
     public string? FollowUpFilter { get; set; } // "today", "overdue", "upcoming"
     public string? Company { get; set; }
     public bool ShowConverted { get; set; }

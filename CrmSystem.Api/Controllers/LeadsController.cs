@@ -72,6 +72,23 @@ public class LeadsController : ControllerBase
             leads = leads.Where(l => l.Priority == query.Priority);
         }
 
+        if (!string.IsNullOrWhiteSpace(query.Rating))
+        {
+            var rating = query.Rating.Trim();
+            if (string.Equals(rating, "Hot", StringComparison.OrdinalIgnoreCase))
+            {
+                leads = leads.Where(l => l.LeadScore >= 70);
+            }
+            else if (string.Equals(rating, "Warm", StringComparison.OrdinalIgnoreCase))
+            {
+                leads = leads.Where(l => l.LeadScore >= 40 && l.LeadScore < 70);
+            }
+            else if (string.Equals(rating, "Cold", StringComparison.OrdinalIgnoreCase))
+            {
+                leads = leads.Where(l => l.LeadScore < 40);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(query.Company))
         {
             var comp = query.Company.Trim().ToLower();
@@ -188,7 +205,12 @@ public class LeadsController : ControllerBase
             return Forbid();
 
         var result = _scoringService.CalculateScore(lead);
-        if (lead.LeadScore != result.Score)
+        if (lead.IsManualScore)
+        {
+            result.Score = lead.LeadScore;
+            result.Rating = lead.LeadScore >= 70 ? "Hot" : lead.LeadScore >= 40 ? "Warm" : "Cold";
+        }
+        else if (lead.LeadScore != result.Score)
         {
             lead.LeadScore = result.Score;
             await _db.SaveChangesAsync();
@@ -247,6 +269,23 @@ public class LeadsController : ControllerBase
             CreatedById = _currentUser.UserId,
             CustomFieldsJson = request.CustomFieldsJson
         };
+
+        if (request.SourceId.HasValue)
+        {
+            lead.Source = await _db.Sources.FindAsync(request.SourceId.Value);
+        }
+
+        var scoreResult = _scoringService.CalculateScore(lead);
+        if (request.LeadScore > 0)
+        {
+            lead.LeadScore = request.LeadScore;
+            lead.IsManualScore = true;
+        }
+        else
+        {
+            lead.LeadScore = scoreResult.Score;
+            lead.IsManualScore = false;
+        }
 
         _db.Leads.Add(lead);
         await _db.SaveChangesAsync();
@@ -622,8 +661,24 @@ public class LeadsController : ControllerBase
         lead.AssignedRepId = targetAssignedRepId;
         lead.Notes = request.Notes?.Trim();
         if (!string.IsNullOrWhiteSpace(request.Priority)) lead.Priority = request.Priority.Trim();
-        lead.LeadScore = request.LeadScore;
         lead.CustomFieldsJson = request.CustomFieldsJson;
+
+        if (request.SourceId.HasValue && (lead.Source == null || lead.Source.SourceId != request.SourceId.Value))
+        {
+            lead.Source = await _db.Sources.FindAsync(request.SourceId.Value);
+        }
+
+        var scoreResult = _scoringService.CalculateScore(lead);
+        if (request.LeadScore > 0)
+        {
+            lead.LeadScore = request.LeadScore;
+            lead.IsManualScore = true;
+        }
+        else
+        {
+            lead.LeadScore = scoreResult.Score;
+            lead.IsManualScore = false;
+        }
 
         if (lead.ConvertedCustomerId.HasValue)
         {
@@ -863,7 +918,12 @@ public class LeadsController : ControllerBase
 
         if (lead.LeadStatus?.Name != "Qualified")
         {
-            return BadRequest(new { message = "Only qualified leads can be converted." });
+            var qualifiedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "Qualified");
+            if (qualifiedStatus != null)
+            {
+                lead.LeadStatusId = qualifiedStatus.LeadStatusId;
+                lead.LeadStatus = qualifiedStatus;
+            }
         }
 
         var firstName = (request.FirstName ?? lead.FirstName).Trim();
@@ -1071,7 +1131,8 @@ public class LeadsController : ControllerBase
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
             if (entityType is not null)
             {
-                await _auditService.LogDeletionAsync(entityType.EntityTypeId, lead.LeadId, _currentUser.UserId.Value);
+                var summary = $"Lead: \"{lead.FirstName} {lead.LastName}\" | Email: {lead.Email ?? "N/A"} | Company: {lead.CompanyName ?? "N/A"} | Status: {lead.LeadStatus?.Name ?? "N/A"}";
+                await _auditService.LogDeletionAsync(entityType.EntityTypeId, lead.LeadId, _currentUser.UserId.Value, summary);
             }
         }
 

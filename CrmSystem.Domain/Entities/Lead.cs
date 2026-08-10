@@ -28,6 +28,7 @@ public class Lead
     public Opportunity? ConvertedOpportunity { get; set; }
     public string? Priority { get; set; } = "Medium";
     public int LeadScore { get; set; } = 0;
+    public bool IsManualScore { get; set; } = false;
     public string? LostReason { get; set; }
     public DateTime? NextFollowUpDate { get; set; }
     public string? NextFollowUpType { get; set; }

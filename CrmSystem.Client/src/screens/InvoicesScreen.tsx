@@ -245,7 +245,22 @@ export const InvoicesScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchInvoices();
+    const urlParams = new URLSearchParams(window.location.search);
+    const paidSessionId = urlParams.get('paid_session_id');
+
+    if (paidSessionId) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      api.post<{ message: string; invoiceNumber?: string }>(`/api/invoices/verify-stripe-session?sessionId=${encodeURIComponent(paidSessionId)}`, {})
+        .then(res => {
+          showToast(`Payment received! Invoice #${res.invoiceNumber || ''} has been marked as Paid.`);
+          fetchInvoices();
+        })
+        .catch(() => {
+          fetchInvoices();
+        });
+    } else {
+      fetchInvoices();
+    }
   }, [fetchInvoices]);
 
   const loadCustomers = async () => {
@@ -426,7 +441,7 @@ export const InvoicesScreen: React.FC = () => {
     if (!matchesSearch) return false;
 
     if (statusFilter === 'Paid') return inv.status === 'Paid';
-    if (statusFilter === 'Sent') return inv.status === 'Sent';
+    if (statusFilter === 'Sent') return inv.status !== 'Paid' && inv.status !== 'Cancelled';
     if (statusFilter === 'Overdue') return inv.status === 'Overdue';
     if (statusFilter === 'Draft') return inv.status === 'Draft';
     return true;
@@ -716,7 +731,7 @@ export const InvoicesScreen: React.FC = () => {
               color: statusFilter === 'Sent' ? '#fff' : 'var(--text-muted)'
             }}
           >
-            📬 Sent / Pending ({invoices.filter(i => i.status === 'Sent').length})
+            📬 Sent / Pending ({invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').length})
           </button>
           <button
             type="button"
@@ -1009,6 +1024,31 @@ export const InvoicesScreen: React.FC = () => {
             </div>
 
             <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15))', borderRadius: 'var(--radius-md)', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', flexDirection: 'column', gap: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                  💳 Pay Online via Stripe
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Launch online checkout to pay by credit card or debit card instantly via Stripe.</div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    const inv = payingInvoice;
+                    setPayingInvoice(null);
+                    handleStripePay(inv);
+                  }}
+                  style={{ width: '100%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none', marginTop: '0.2rem', cursor: 'pointer' }}
+                >
+                  ⚡ Open Stripe Checkout Page
+                </Button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+                <span>OR RECORD MANUAL PAYMENT</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+              </div>
+
               <div>
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Payment Method</label>
                 <select

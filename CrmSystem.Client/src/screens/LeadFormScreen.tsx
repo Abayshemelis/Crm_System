@@ -228,7 +228,14 @@ export const LeadFormScreen: React.FC = () => {
                             </select>
                         </div>
 
-                        <Input label="Lead Score (0-100)" type="number" min="0" max="100" value={String(form.leadScore)} onChange={e => handleChange('leadScore', e.target.value)} />
+                        <Input 
+                            label="Lead Score (0-100 — Leave 0 for Auto-Calculate)" 
+                            type="number" 
+                            min="0" 
+                            max="100" 
+                            value={String(form.leadScore)} 
+                            onChange={e => handleChange('leadScore', e.target.value)} 
+                        />
 
                         {users.length > 0 && (
                             <div className="input-wrapper">

@@ -60,6 +60,6 @@ public class CurrentUserService : ICurrentUserService
             return true;
         }
 
-        return ownerRepId == UserId;
+        return ownerRepId == null || ownerRepId == UserId;
     }
 }

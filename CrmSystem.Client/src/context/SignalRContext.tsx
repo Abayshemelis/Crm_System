@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { useAuth } from './AuthContext';
 import { showToast } from '../lib/toast';
@@ -19,35 +19,44 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const { token, user } = useAuth();
     const [connected, setConnected] = useState<boolean>(false);
     const [unreadCount, setUnreadCount] = useState<number>(0);
+    const connectionRef = useRef<signalR.HubConnection | null>(null);
+
+    const userId = user?.userId;
 
     useEffect(() => {
-        if (!token || !user) {
+        // If user logged out, stop active connection
+        if (!token || !userId) {
             setConnected(false);
+            if (connectionRef.current) {
+                const conn = connectionRef.current;
+                connectionRef.current = null;
+                if (conn.state === signalR.HubConnectionState.Connected) {
+                    conn.stop().catch(() => {});
+                }
+            }
             return;
         }
 
-        const hubUrl = '/hubs/notifications';
+        // If connection already exists and is connecting, connected, or reconnecting, preserve it!
+        if (connectionRef.current && connectionRef.current.state !== signalR.HubConnectionState.Disconnected) {
+            return;
+        }
+
+        const apiHost = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:5072';
+        const hubUrl = `${apiHost}/hubs/notifications`;
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(hubUrl, {
                 accessTokenFactory: () => token,
                 skipNegotiation: false,
-                transport: signalR.HttpTransportType.LongPolling
+                transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
             })
             .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-            .configureLogging(signalR.LogLevel.Warning)
+            .configureLogging(signalR.LogLevel.None)
             .build();
 
-        connection.start()
-            .then(() => {
-                setConnected(true);
-                console.log('SignalR connected to /hubs/notifications');
-            })
-            .catch(err => {
-                console.warn('SignalR connection failed (will auto-retry):', err);
-                setConnected(false);
-            });
+        connectionRef.current = connection;
 
-        // Listen for live server notifications
+        // Attach event handlers
         connection.on('ReceiveNotification', (data: { title?: string; message: string; type?: string }) => {
             setUnreadCount(prev => prev + 1);
             showToast(data.message || data.title || 'New Notification Received', 'info');
@@ -66,11 +75,18 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         connection.onreconnecting(() => setConnected(false));
         connection.onreconnected(() => setConnected(true));
+        connection.onclose(() => setConnected(false));
 
-        return () => {
-            connection.stop();
-        };
-    }, [token, user]);
+        // Start connection safely
+        connection.start()
+            .then(() => {
+                setConnected(true);
+            })
+            .catch(() => {
+                setConnected(false);
+            });
+
+    }, [token, userId]);
 
     return (
         <SignalRContext.Provider value={{ connected, unreadCount, setUnreadCount }}>

@@ -126,31 +126,31 @@ export const OpportunityDetailScreen: React.FC = () => {
     try {
       const [oppData, lineItemsData, productsData, stagesData, usersData, actTypes, taskStats] = await Promise.all([
         api.get<Opportunity>(`/api/opportunities/${id}`),
-        api.get<OpportunityLineItem[]>(`/api/opportunitylineitems/${id}`),
-        api.get<Product[]>('/api/products'),
-        api.get<Stage[]>('/api/opportunitystages'),
-        api.get<UserLookup[]>('/api/users'),
-        api.get<any[]>('/api/activitytypes'),
-        api.get<any[]>('/api/taskstatuses')
+        api.get<OpportunityLineItem[]>(`/api/opportunitylineitems/${id}`).catch(() => []),
+        api.get<Product[]>('/api/products').catch(() => []),
+        api.get<Stage[]>('/api/opportunitystages').catch(() => []),
+        api.get<UserLookup[]>('/api/users').catch(() => []),
+        api.get<any[]>('/api/activitytypes').catch(() => []),
+        api.get<any[]>('/api/taskstatuses').catch(() => [])
       ]);
       setOpportunity(oppData);
       setEditedOpportunity(oppData);
-      setLineItems(lineItemsData);
-      setProducts(productsData.filter(p => p.productStatus?.isSelectable));
-      setStages(stagesData);
-      setUsers(usersData);
-      setActivityTypes(actTypes.map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })));
-      setTaskStatuses(taskStats.map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })));
+      setLineItems(lineItemsData || []);
+      setProducts((productsData || []).filter(p => p.productStatus?.isSelectable));
+      setStages(stagesData || []);
+      setUsers(usersData || []);
+      setActivityTypes((actTypes || []).map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })));
+      setTaskStatuses((taskStats || []).map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })));
 
       // Load activities & tasks
       const [activitiesData, tasksData, allActivitiesData] = await Promise.all([
-        api.get<any[]>(`/api/activities?opportunityId=${id}`),
-        api.get<TaskReadDto[]>(`/api/tasks?opportunityId=${id}`),
-        api.get<any[]>('/api/activities')
+        api.get<any[]>(`/api/activities?opportunityId=${id}`).catch(() => []),
+        api.get<TaskReadDto[]>(`/api/tasks?opportunityId=${id}`).catch(() => []),
+        api.get<any[]>('/api/activities').catch(() => [])
       ]);
-      setActivities(activitiesData);
-      setTasks(tasksData);
-      setAllActivities(allActivitiesData);
+      setActivities(activitiesData || []);
+      setTasks(tasksData || []);
+      setAllActivities(allActivitiesData || []);
     } catch (error) {
       console.error('Failed to load opportunity details:', error);
       navigate('/pipeline');

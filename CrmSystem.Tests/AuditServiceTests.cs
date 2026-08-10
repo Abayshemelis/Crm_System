@@ -277,4 +277,31 @@ public class AuditServiceTests
         var auditLogCount = await db.AuditLogs.CountAsync();
         Assert.Equal(0, auditLogCount);
     }
+
+    [Fact]
+    public async Task LogDeletionAsync_StoresEntitySummaryInOldValue()
+    {
+        // Arrange
+        var options = GetInMemoryOptions();
+        await using var db = new AppDbContext(options);
+        await SeedRequiredDataAsync(db);
+
+        var auditService = new AuditService(db);
+        var entityTypeId = await db.EntityTypes.Where(e => e.Name == "Opportunity").Select(e => e.EntityTypeId).SingleAsync();
+        var changedById = await db.Identities.Select(i => i.IdentityId).SingleAsync();
+        var summary = "Pipeline Opportunity: \"Enterprise Cloud\" | Stage: Proposal | Value: $120,000.00";
+
+        // Act
+        await auditService.LogDeletionAsync(
+            entityTypeId: entityTypeId,
+            entityId: 42,
+            changedById: changedById,
+            entitySummary: summary);
+
+        // Assert
+        var auditLog = await db.AuditLogs.SingleAsync(a => a.EntityId == 42);
+        Assert.Equal(summary, auditLog.OldValue);
+        Assert.Equal(changedById, auditLog.ChangedById);
+        Assert.Equal("Delete", (await db.AuditActionTypes.FindAsync(auditLog.AuditActionTypeId))!.Name);
+    }
 }

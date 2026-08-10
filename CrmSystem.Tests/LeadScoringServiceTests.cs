@@ -75,4 +75,21 @@ public class LeadScoringServiceTests
         Assert.True(result.DaysInactive >= 14);
         Assert.Contains(result.ScoreFactors, f => f.Contains("SLA Breached"));
     }
+
+    [Theory]
+    [InlineData(85, "Hot")]
+    [InlineData(70, "Hot")]
+    [InlineData(65, "Warm")]
+    [InlineData(40, "Warm")]
+    [InlineData(35, "Cold")]
+    [InlineData(0, "Cold")]
+    public void Rating_Calculation_MatchesExpectedScoreTier(int score, string expectedRating)
+    {
+        string rating;
+        if (score >= 70) rating = "Hot";
+        else if (score >= 40) rating = "Warm";
+        else rating = "Cold";
+
+        Assert.Equal(expectedRating, rating);
+    }
 }

@@ -31,9 +31,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 // 5 MB
       },
       devOptions: {
-        enabled: true,
-        type: 'module',
-        navigateFallback: 'index.html',
+        enabled: false
       }
     })
   ],
@@ -53,21 +51,29 @@ export default defineConfig({
         secure: false,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
-            // Forward the skip-warning header to backend proxy requests too
             proxyReq.setHeader('ngrok-skip-browser-warning', 'true');
+          });
+          proxy.on('error', () => {
+            // Suppress ECONNREFUSED noise during server startup
           });
         }
       },
       '/uploads': {
         target: 'http://localhost:5072',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+        }
       },
       '/hubs': {
         target: 'http://localhost:5072',
         changeOrigin: true,
         secure: false,
-        ws: true
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', () => {});
+        }
       }
     }
   }

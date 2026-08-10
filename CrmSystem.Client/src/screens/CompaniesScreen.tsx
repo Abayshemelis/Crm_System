@@ -7,7 +7,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { api } from '../lib/api';
-import { Building2, Globe, MapPin, Briefcase, Plus, Building, Search, X, Trash2 } from 'lucide-react';
+import { Building2, Globe, MapPin, Briefcase, Plus, Building, Search, X, Trash2, LayoutGrid, List, Eye } from 'lucide-react';
 import { showToast } from '../lib/toast';
 import './screens.css';
 
@@ -68,76 +68,108 @@ export const CompaniesScreen: React.FC = () => {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const loadCompanies = useCallback(() => {
-    setIsLoading(true);
+  const loadData = useCallback(async (sDate?: string, eDate?: string) => {
+    setLoading(true);
     setLoadError(null);
-    const dateFromParam = startDate ? `&createdFrom=${startDate}` : '';
-    const dateToParam = endDate ? `&createdTo=${endDate}` : '';
-    api.get<CompanyApiEnvelope>(`/api/companies?page=1&pageSize=100${dateFromParam}${dateToParam}`)
-      .then((d) => {
-        const items = (d.data ?? d.Data ?? []).map(company => ({
-          companyId: company.companyId ?? company.CompanyId ?? 0,
-          name: company.name ?? company.Name ?? 'Unnamed company',
-          industry: company.industry ?? company.Industry,
-          companySize: company.companySize ?? company.CompanySize,
-          website: company.website ?? company.Website,
-          address: company.address ?? company.Address,
-          phone: company.phone ?? company.Phone,
-          email: company.email ?? company.Email,
-          sourceId: company.sourceId ?? company.SourceId,
-          sourceName: company.sourceName ?? company.SourceName,
-          assignedRepId: company.assignedRepId ?? company.AssignedRepId,
-          assignedRepName: company.assignedRepName ?? company.AssignedRepName,
-          contactCount: company.contactCount ?? company.ContactCount,
-          createdAt: company.createdAt ?? company.CreatedAt,
-        }));
-        setCompanies(items);
-      })
-      .catch(() => setLoadError('Failed to load companies. Please try again.'))
-      .finally(() => setIsLoading(false));
-  }, [startDate, endDate]);
+    try {
+      const queryParams = new URLSearchParams({ page: '1', pageSize: '100' });
+      if (sDate) queryParams.append('createdFrom', sDate);
+      if (eDate) queryParams.append('createdTo', eDate);
+      
+      const res = await api.get<CompanyApiEnvelope | CompanyApiResponse[]>(`/api/companies?${queryParams.toString()}`);
+      
+      let rawList: CompanyApiResponse[] = [];
+      if (Array.isArray(res)) {
+        rawList = res;
+      } else if (res && Array.isArray((res as CompanyApiEnvelope).data)) {
+        rawList = (res as CompanyApiEnvelope).data!;
+      } else if (res && Array.isArray((res as CompanyApiEnvelope).Data)) {
+        rawList = (res as CompanyApiEnvelope).Data!;
+      }
+      
+      const mappedList: Company[] = rawList.map(c => ({
+        companyId: c.companyId ?? c.CompanyId ?? 0,
+        name: c.name ?? c.Name ?? 'Unnamed Company',
+        industry: c.industry ?? c.Industry,
+        companySize: c.companySize ?? c.CompanySize,
+        website: c.website ?? c.Website,
+        address: c.address ?? c.Address,
+        phone: c.phone ?? c.Phone,
+        email: c.email ?? c.Email,
+        sourceId: c.sourceId ?? c.SourceId,
+        sourceName: c.sourceName ?? c.SourceName,
+        assignedRepId: c.assignedRepId ?? c.AssignedRepId,
+        assignedRepName: c.assignedRepName ?? c.AssignedRepName,
+        contactCount: c.contactCount ?? c.ContactCount ?? 0,
+        createdAt: c.createdAt ?? c.CreatedAt
+      })).filter(c => c.companyId > 0);
+
+      setCompanies(mappedList);
+    } catch (err: any) {
+      console.error('Failed to load companies:', err);
+      setLoadError(err.message || 'Failed to load company profiles.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    loadCompanies();
-  }, [loadCompanies, location.key]);
+    loadData(startDate, endDate);
+  }, [loadData, startDate, endDate, location.key]);
 
   const industries = useMemo(() => {
-    const list = Array.from(new Set(companies.map(c => c.industry).filter(Boolean))) as string[];
-    return list.sort();
+    const set = new Set<string>();
+    companies.forEach(c => {
+      if (c.industry) set.add(c.industry);
+    });
+    return Array.from(set).sort();
   }, [companies]);
 
   const filteredCompanies = useMemo(() => {
     return companies.filter(c => {
-      const term = search.trim().toLowerCase();
-      const matchesSearch = !term || (
-        c.name.toLowerCase().includes(term) ||
-        (c.industry && c.industry.toLowerCase().includes(term)) ||
-        (c.email && c.email.toLowerCase().includes(term)) ||
-        (c.website && c.website.toLowerCase().includes(term))
-      );
-      const matchesIndustry = !selectedIndustry || c.industry === selectedIndustry;
-      return matchesSearch && matchesIndustry;
+      const matchSearch =
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        (c.industry && c.industry.toLowerCase().includes(search.toLowerCase())) ||
+        (c.website && c.website.toLowerCase().includes(search.toLowerCase())) ||
+        (c.email && c.email.toLowerCase().includes(search.toLowerCase()));
+
+      const matchIndustry = !selectedIndustry || c.industry === selectedIndustry;
+
+      return matchSearch && matchIndustry;
     });
   }, [companies, search, selectedIndustry]);
 
-  if (isLoading && !companies.length) {
+  const handleDeleteCompany = async (e: React.MouseEvent, id: number, name: string) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
+    try {
+      await api.delete(`/api/companies/${id}`);
+      showToast('Company deleted successfully', 'success');
+      setCompanies(prev => prev.filter(c => c.companyId !== id));
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete company', 'error');
+    }
+  };
+
+  if (loading && companies.length === 0) {
     return (
       <Layout>
         <div className="dashboard-header animate-fade-in">
           <div className="dashboard-title">
             <h1>Companies</h1>
-            <p>Loading companies...</p>
+            <p>Loading company accounts...</p>
           </div>
           <Button disabled><Plus size={16} style={{ marginRight: 6 }} /> New Company</Button>
         </div>
-        <div className="skeleton-grid">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} variant="card" className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties} />
+        <div className="table-skeleton animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} variant="rect" height={52} style={{ borderRadius: '8px', animationDelay: `${i * 0.05}s` }} />
           ))}
         </div>
       </Layout>
@@ -202,44 +234,163 @@ export const CompaniesScreen: React.FC = () => {
             setEndDate(e);
           }}
         />
-      </div>
-
-      <div className="customers-grid">
-
-        {filteredCompanies.map((c, i) => (
-          <Card
-            key={c.companyId}
-            className="customer-card glass-panel animate-fade-in"
-            style={{ animationDelay: `${i * 0.04}s`, cursor: 'pointer' } as React.CSSProperties}
-            onClick={() => navigate(`/companies/${c.companyId}`)}
+        {/* View Switcher Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)', marginLeft: 'auto' }}>
+          <button
+            type="button"
+            style={{ padding: '0.35rem 0.65rem', border: 'none', background: viewMode === 'grid' ? 'var(--accent-primary)' : 'transparent', color: viewMode === 'grid' ? '#ffffff' : 'var(--text-secondary)', borderRadius: '0.375rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 600 }}
+            onClick={() => setViewMode('grid')}
+            title="Card Grid View"
           >
-            <Card.Content>
-              <div className="customer-header">
-                <div className="company-avatar">{c.name[0]}</div>
-                <div className="customer-info" style={{ minWidth: 0 }}>
-                  <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</h3>
-                  <p style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.industry ?? 'Unknown industry'}</p>
-                  {c.companySize && <span className="badge" style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: 'var(--accent-primary)', color: 'white' }}>{c.companySize}</span>}
-                </div>
-              </div>
-              <div className="customer-details">
-                {c.website && <div className="detail-row"><Globe size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.website}</span></div>}
-                {c.address && <div className="detail-row"><MapPin size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address}</span></div>}
-                {c.phone && <div className="detail-row"><Briefcase size={14} /><span>{c.phone}</span></div>}
-                {c.email && <div className="detail-row"><Building2 size={14} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span></div>}
-                {c.contactCount !== undefined && <div className="detail-row"><Building size={14} /><span>{c.contactCount} contacts</span></div>}
-                {c.sourceName && <div className="detail-row"><span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Source: {c.sourceName}</span></div>}
-              </div>
-            </Card.Content>
-          </Card>
-        ))}
+            <LayoutGrid size={14} /> Cards
+          </button>
+          <button
+            type="button"
+            style={{ padding: '0.35rem 0.65rem', border: 'none', background: viewMode === 'table' ? 'var(--accent-primary)' : 'transparent', color: viewMode === 'table' ? '#ffffff' : 'var(--text-secondary)', borderRadius: '0.375rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 600 }}
+            onClick={() => setViewMode('table')}
+            title="Compact Data Table View"
+          >
+            <List size={14} /> Data Table
+          </button>
+        </div>
       </div>
+
+      {viewMode === 'table' ? (
+        <div className="customer-table-wrap glass-panel animate-fade-in" style={{ borderRadius: '1rem', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+          <table className="customer-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <th style={{ padding: '0.85rem 1rem' }}>Company Name</th>
+                <th style={{ padding: '0.85rem 1rem' }}>Industry</th>
+                <th style={{ padding: '0.85rem 1rem' }}>Company Size</th>
+                <th style={{ padding: '0.85rem 1rem' }}>Website / Email</th>
+                <th style={{ padding: '0.85rem 1rem' }}>Contacts Count</th>
+                <th style={{ padding: '0.85rem 1rem' }}>Assigned Rep</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCompanies.map(c => (
+                <tr
+                  key={c.companyId}
+                  style={{ cursor: 'pointer', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                  onClick={() => navigate(`/companies/${c.companyId}`)}
+                >
+                  <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <div className="company-avatar" style={{ width: 28, height: 28, fontSize: '0.75rem' }}>{c.name[0]}</div>
+                      <span>{c.name}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                    {c.industry || '—'}
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                    {c.companySize || '—'}
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {c.website ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>{c.website}</a> : <span>{c.email || '—'}</span>}
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>
+                    {c.contactCount ?? 0} contacts
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                    {c.assignedRepName || 'Unassigned'}
+                  </td>
+                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                      <Button size="sm" variant="ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }} onClick={() => navigate(`/companies/${c.companyId}`)}>
+                        <Eye size={13} style={{ marginRight: 4 }} /> View
+                      </Button>
+                      <Button size="sm" variant="ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: '#ef4444' }} onClick={(e) => handleDeleteCompany(e, c.companyId, c.name)}>
+                        <Trash2 size={13} />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="customers-grid">
+          {filteredCompanies.map((c, i) => (
+            <Card
+              key={c.companyId}
+              className="customer-card glass-panel animate-fade-in"
+              style={{ animationDelay: `${i * 0.04}s`, cursor: 'pointer' } as React.CSSProperties}
+              onClick={() => navigate(`/companies/${c.companyId}`)}
+            >
+              <Card.Content>
+                <div className="customer-header">
+                  <div className="company-avatar">{c.name[0]}</div>
+                  <div className="customer-info" style={{ minWidth: 0 }}>
+                    <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</h3>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.15rem 0 0 0' }}>
+                      <Briefcase size={13} style={{ flexShrink: 0 }} />
+                      <span className="truncate">{c.industry || 'No industry set'}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => handleDeleteCompany(e, c.companyId, c.name)}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, borderRadius: 4 }}
+                    title="Delete company"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+
+                <div className="customer-details">
+                  {c.website && (
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.35rem 0' }}>
+                      <Globe size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <a
+                        href={c.website.startsWith('http') ? c.website : `https://${c.website}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}
+                        className="truncate"
+                      >
+                        {c.website}
+                      </a>
+                    </p>
+                  )}
+                  {c.address && (
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.35rem 0' }}>
+                      <MapPin size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span className="truncate">{c.address}</span>
+                    </p>
+                  )}
+                  <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.35rem 0' }}>
+                    <Building size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    <span>{c.companySize ? `${c.companySize} employees` : 'Size not specified'}</span>
+                  </p>
+                </div>
+
+                <div className="customer-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="source-badge">
+                    {c.contactCount ? `${c.contactCount} contacts` : '0 contacts'}
+                  </span>
+                  {c.assignedRepName && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Rep: {c.assignedRepName}
+                    </span>
+                  )}
+                </div>
+              </Card.Content>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {filteredCompanies.length === 0 && !loadError && (
         <EmptyState
           title="No companies found"
-          description="Adjust your search filters or add a new company to the CRM."
-          icon={Building}
+          description="Adjust your search query or add a new company profile."
+          icon={Building2}
           actionText="New Company"
           onActionClick={() => navigate('/companies/new')}
         />

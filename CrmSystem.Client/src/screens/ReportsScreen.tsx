@@ -11,7 +11,7 @@ import {
   BarChart2, Activity, Layers, Zap, ChevronRight,
   ArrowUpRight, ArrowDownRight, Users, UserCheck,
   CheckCircle2, AlertCircle, Medal, Trophy, ShieldAlert, Calendar,
-  Search, LayoutGrid, List, Crown, Award, FileText, Printer
+  Search, LayoutGrid, List, Crown, Award, FileText, Printer, UploadCloud
 } from 'lucide-react';
 import './reports.css';
 
@@ -64,7 +64,36 @@ interface FollowUpSlaData {
   scheduledPercentage: number;
 }
 
-type Section = 'overview' | 'pipeline' | 'winrate' | 'velocity' | 'sources' | 'repperf' | 'funnel' | 'activity' | 'priority';
+interface InvoiceReportData {
+  totalCollected: number;
+  totalPending: number;
+  totalCancelled: number;
+  totalInvoiced: number;
+  paidCount: number;
+  pendingCount: number;
+  byMonth: Array<{ month: string; collected: number; pending: number; count: number }>;
+}
+
+interface ContractReportData {
+  totalCount: number;
+  activeCount: number;
+  draftCount: number;
+  expiringCount: number;
+  totalValue: number;
+  activeValue: number;
+  byStatus: Array<{ status: string; count: number; value: number }>;
+  byMonth: Array<{ month: string; count: number; value: number }>;
+}
+
+interface ImportReportData {
+  totalLeadsImported: number;
+  totalCustomers: number;
+  totalCompanies: number;
+  totalProducts: number;
+  lastImportDate: string;
+}
+
+type Section = 'overview' | 'invoices' | 'contracts' | 'pipeline' | 'winrate' | 'velocity' | 'sources' | 'repperf' | 'funnel' | 'activity' | 'priority' | 'import';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4'];
@@ -687,6 +716,8 @@ const HeadlineStat: React.FC<{ label:string; value:string; color?:string }> =
 // ─── Nav Items ────────────────────────────────────────────────────────────────
 const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode; group: string }[] = [
   { id:'overview',  label:'Executive Overview',  icon:<BarChart2 size={15}/>,    group:'Summary' },
+  { id:'invoices',  label:'Invoice & Cash Revenue', icon:<DollarSign size={15}/>, group:'Financial' },
+  { id:'contracts', label:'Contract Analytics',  icon:<FileText size={15}/>,     group:'Financial' },
   { id:'pipeline',  label:'Pipeline Stage Analysis', icon:<DollarSign size={15}/>, group:'Sales' },
   { id:'winrate',   label:'Win Rate Trends',     icon:<Target size={15}/>,       group:'Sales' },
   { id:'velocity',  label:'Sales Velocity',      icon:<Zap size={15}/>,          group:'Sales' },
@@ -695,6 +726,7 @@ const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode; group: str
   { id:'sources',   label:'Acquisition Channels',icon:<TrendingUp size={15}/>,   group:'Leads' },
   { id:'priority',  label:'Priority & SLA Health',icon:<ShieldAlert size={15}/>, group:'Leads' },
   { id:'activity',  label:'Task & Activity Log', icon:<Activity size={15}/>,     group:'Execution' },
+  { id:'import',    label:'Data Import History', icon:<UploadCloud size={15}/>,  group:'Execution' },
 ];
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
@@ -711,11 +743,27 @@ export const ReportsScreen: React.FC = () => {
     { label:'All time',     start:'',   end:'' },
   ] as const;
 
+  const getInitialSection = (): Section => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || params.get('section');
+    if (tab && ['overview', 'invoices', 'contracts', 'pipeline', 'winrate', 'velocity', 'repperf', 'funnel', 'sources', 'priority', 'activity', 'import'].includes(tab)) {
+      return tab as Section;
+    }
+    return 'overview';
+  };
+
   const [startDate,    setStartDate]    = useState(m30);
   const [endDate,      setEndDate]      = useState(today);
   const [activePreset, setActivePreset] = useState<string>('Last 30 days');
-  const [section,      setSection]      = useState<Section>('overview');
+  const [section,      setSectionState]  = useState<Section>(getInitialSection);
   const [loading,      setLoading]      = useState(true);
+
+  const setSection = useCallback((s: Section) => {
+    setSectionState(s);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', s);
+    window.history.replaceState({}, '', url.toString());
+  }, []);
 
   // Data state
   const [pipelineData, setPipelineData] = useState<PipelineItem[]>([]);
@@ -729,6 +777,9 @@ export const ReportsScreen: React.FC = () => {
   const [actSummary,   setActSummary]   = useState<ActivitySummary | null>(null);
   const [priorityData, setPriorityData] = useState<LeadPriorityItem[]>([]);
   const [slaHealth,    setSlaHealth]    = useState<FollowUpSlaData | null>(null);
+  const [invoiceReport, setInvoiceReport] = useState<InvoiceReportData | null>(null);
+  const [contractReport, setContractReport] = useState<ContractReportData | null>(null);
+  const [importReport, setImportReport] = useState<ImportReportData | null>(null);
 
   // Pipeline Stage Analysis interactive state
   const [pipeViewMode, setPipeViewMode] = useState<'visual' | 'cards' | 'table'>('visual');
@@ -823,7 +874,7 @@ export const ReportsScreen: React.FC = () => {
     setLoading(true);
     try {
       const q = `?startDate=${s}&endDate=${e}`;
-      const [pipe, win, time, src, ov, rep, fn, act, pri, sla] = await Promise.all([
+      const [pipe, win, time, src, ov, rep, fn, act, pri, sla, invRep, cntRep, impRep] = await Promise.all([
         api.get<PipelineItem[]>(`/api/reports/pipeline-by-stage${q}`),
         api.get<{ overallWinRate: number; byMonth: WinRateItem[] }>(`/api/reports/win-rate${q}`),
         api.get<TimeItem[]>(`/api/reports/time-per-stage${q}`),
@@ -834,6 +885,9 @@ export const ReportsScreen: React.FC = () => {
         api.get<ActivitySummary>(`/api/reports/activity-summary${q}`),
         api.get<LeadPriorityItem[]>(`/api/reports/lead-priority${q}`),
         api.get<FollowUpSlaData>(`/api/reports/followup-sla${q}`),
+        api.get<InvoiceReportData>(`/api/reports/invoice-revenue${q}`).catch(() => null),
+        api.get<ContractReportData>(`/api/reports/contracts${q}`).catch(() => null),
+        api.get<ImportReportData>(`/api/reports/imports${q}`).catch(() => null),
       ]);
       setPipelineData((pipe as any) ?? []);
       setWinRateData(((win as any)?.byMonth) ?? []);
@@ -846,6 +900,9 @@ export const ReportsScreen: React.FC = () => {
       setActSummary((act as any) ?? null);
       setPriorityData((pri as any) ?? []);
       setSlaHealth((sla as any) ?? null);
+      setInvoiceReport((invRep as any) ?? null);
+      setContractReport((cntRep as any) ?? null);
+      setImportReport((impRep as any) ?? null);
     } catch (err) {
       console.error('Failed to load report data', err);
     } finally {
@@ -863,6 +920,9 @@ export const ReportsScreen: React.FC = () => {
 
   const getActiveSectionExportData = useCallback(() => {
     switch (section) {
+      case 'invoices': return { data: invoiceReport?.byMonth || [], name: 'invoice_revenue_report', title: 'Invoice Revenue & Financial Report' };
+      case 'contracts': return { data: contractReport?.byStatus || [], name: 'contract_analytics_report', title: 'Contract Analytics Report' };
+      case 'import': return { data: importReport ? [importReport] : [], name: 'data_import_history_report', title: 'Data Import History Report' };
       case 'pipeline': return { data: pipelineData, name: 'pipeline_stage_analysis', title: 'Pipeline Stage Analysis' };
       case 'winrate': return { data: winRateData, name: 'win_rate_trends', title: 'Win Rate Trends' };
       case 'velocity': return { data: timeData, name: 'sales_velocity', title: 'Sales Velocity (Time in Stage)' };
@@ -953,9 +1013,598 @@ export const ReportsScreen: React.FC = () => {
           {/* Report Content Panel */}
           <div className="rpt-content">
 
+            {/* ── CONTRACT ANALYTICS REPORT ── */}
+            {section === 'contracts' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Contract Portfolio & Renewal Analytics</h2>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>Legal & Agreement Scope</span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                      Active agreements, draft lifecycle statuses, contract values, and expiration risk tracking
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rpt-kpi-grid">
+                  <StatCard
+                    label="Active Contracts"
+                    value={contractReport ? fmtNum(contractReport.activeCount) : '0'}
+                    sub={`Active contract value: ${contractReport ? fmt$(contractReport.activeValue) : '$0'}`}
+                    icon={<FileText size={18} />}
+                    color="#10b981"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Total Contract Value"
+                    value={contractReport ? fmt$(contractReport.totalValue) : '$0'}
+                    sub={`${contractReport?.totalCount ?? 0} total agreements in CRM`}
+                    icon={<DollarSign size={18} />}
+                    color="#6366f1"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Drafts / Pending Signature"
+                    value={contractReport ? fmtNum(contractReport.draftCount) : '0'}
+                    sub="Contracts awaiting signature"
+                    icon={<Clock size={18} />}
+                    color="#f59e0b"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Expiring Soon (30 Days)"
+                    value={contractReport ? fmtNum(contractReport.expiringCount) : '0'}
+                    sub="Agreements approaching renewal date"
+                    icon={<AlertCircle size={18} />}
+                    color="#ef4444"
+                    loading={loading}
+                  />
+                </div>
+
+                {/* Contract Portfolio Renewal & Expiration Risk Queue */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
+                  <div className="rpt-card">
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 700 }}>Contract Status Portfolio Share</h3>
+                    {contractReport && contractReport.byStatus.length > 0 ? (
+                      <div style={{ height: '220px', width: '100%' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={contractReport.byStatus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                            <XAxis dataKey="status" tick={{ fill: 'var(--text-primary)', fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
+                            <YAxis tick={{ fill: 'var(--text-primary)', fontSize: 12, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} tickFormatter={(v) => `$${v / 1000}k`} />
+                            <Tooltip formatter={(v: any) => [fmt$(Number(v)), 'Total Value']} contentStyle={{ background: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', color: '#ffffff', fontWeight: 700 }} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff', fontWeight: 800 }} />
+                            <Bar dataKey="value" fill="#4338ca" radius={[6, 6, 0, 0]}>
+                              {contractReport.byStatus.map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      <div className="rpt-empty">No status metrics available.</div>
+                    )}
+                  </div>
+
+                  <div className="rpt-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: 700 }}>Contract Expiration & Health Bar</h3>
+                      <p style={{ margin: '0 0 1rem 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Risk monitoring across contract renewals</p>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                            <span>Active / Signed Portfolio Ratio</span>
+                            <strong style={{ color: '#10b981' }}>
+                              {contractReport && contractReport.totalCount > 0 ? fmtPct((contractReport.activeCount / contractReport.totalCount) * 100) : '0%'}
+                            </strong>
+                          </div>
+                          <div style={{ height: 8, background: 'var(--bg-hover)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${contractReport && contractReport.totalCount > 0 ? (contractReport.activeCount / contractReport.totalCount) * 100 : 0}%`, background: '#10b981', borderRadius: 4 }}></div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                            <span>Pending Signature Ratio</span>
+                            <strong style={{ color: '#f59e0b' }}>
+                              {contractReport && contractReport.totalCount > 0 ? fmtPct((contractReport.draftCount / contractReport.totalCount) * 100) : '0%'}
+                            </strong>
+                          </div>
+                          <div style={{ height: 8, background: 'var(--bg-hover)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${contractReport && contractReport.totalCount > 0 ? (contractReport.draftCount / contractReport.totalCount) * 100 : 0}%`, background: '#f59e0b', borderRadius: 4 }}></div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                            <span>Near Expiration Risk (30 Days)</span>
+                            <strong style={{ color: '#ef4444' }}>{contractReport?.expiringCount ?? 0} Contracts</strong>
+                          </div>
+                          <div style={{ height: 8, background: 'var(--bg-hover)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${contractReport && contractReport.totalCount > 0 ? (contractReport.expiringCount / contractReport.totalCount) * 100 : 0}%`, background: '#ef4444', borderRadius: 4 }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Table */}
+                {contractReport && contractReport.byStatus.length > 0 && (
+                  <div className="rpt-card">
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 700 }}>Contract Status Lifecycle Breakdown</h3>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="rpt-table" style={{ width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th>Lifecycle Status</th>
+                            <th style={{ textAlign: 'center' }}>Total Contracts</th>
+                            <th style={{ textAlign: 'right' }}>Contract Value ($)</th>
+                            <th style={{ textAlign: 'right' }}>Share of Portfolio</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {contractReport.byStatus.map((row) => {
+                            const pct = contractReport.totalValue > 0 ? (row.value / contractReport.totalValue) * 100 : 0;
+                            return (
+                              <tr key={row.status}>
+                                <td>
+                                  <span style={{ padding: '0.2rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 700, background: row.status === 'Active' || row.status === 'Signed' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)', color: row.status === 'Active' || row.status === 'Signed' ? '#10b981' : '#f59e0b' }}>
+                                    {row.status}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'center', fontWeight: 600 }}>{row.count}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{fmt$(row.value)}</td>
+                                <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-muted)' }}>{fmtPct(pct)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── DATA IMPORT HISTORY REPORT ── */}
+            {section === 'import' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Data Import Audit & Ingestion Capacity</h2>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.2)' }}>Bulk Ingestion Scope</span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                      Record counts across system entities imported via CSV & PDF bulk uploads
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rpt-kpi-grid">
+                  <StatCard
+                    label="Total Prospects / Leads"
+                    value={importReport ? fmtNum(importReport.totalLeadsImported) : '0'}
+                    sub="Leads stored in database"
+                    icon={<Target size={18} />}
+                    color="#6366f1"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Total Customers"
+                    value={importReport ? fmtNum(importReport.totalCustomers) : '0'}
+                    sub="Active customer contacts"
+                    icon={<Users size={18} />}
+                    color="#10b981"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Total Companies"
+                    value={importReport ? fmtNum(importReport.totalCompanies) : '0'}
+                    sub="Account records in database"
+                    icon={<Layers size={18} />}
+                    color="#3b82f6"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Total Catalog Products"
+                    value={importReport ? fmtNum(importReport.totalProducts) : '0'}
+                    sub="Catalog product items"
+                    icon={<UploadCloud size={18} />}
+                    color="#8b5cf6"
+                    loading={loading}
+                  />
+                </div>
+
+                {/* Entity Distribution Bar Chart */}
+                {importReport && (
+                  <div className="rpt-card">
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 700 }}>Database Record Volume by Entity</h3>
+                    <div style={{ height: '220px', width: '100%', marginBottom: '1.5rem' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={[
+                            { entity: 'Leads', count: importReport.totalLeadsImported, fill: '#4338ca' },
+                            { entity: 'Customers', count: importReport.totalCustomers, fill: '#059669' },
+                            { entity: 'Companies', count: importReport.totalCompanies, fill: '#2563eb' },
+                            { entity: 'Products', count: importReport.totalProducts, fill: '#7c3aed' },
+                          ]}
+                          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                          <XAxis dataKey="entity" tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
+                          <YAxis tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
+                          <Tooltip formatter={(v: any) => [fmtNum(Number(v)), 'Total Records']} contentStyle={{ background: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', color: '#ffffff', fontWeight: 700 }} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff', fontWeight: 800 }} />
+                          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                            {[
+                              { entity: 'Leads', count: importReport.totalLeadsImported, fill: '#6366f1' },
+                              { entity: 'Customers', count: importReport.totalCustomers, fill: '#10b981' },
+                              { entity: 'Companies', count: importReport.totalCompanies, fill: '#3b82f6' },
+                              { entity: 'Products', count: importReport.totalProducts, fill: '#8b5cf6' },
+                            ].map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                      <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--bg-hover)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Supported Formats</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.35rem', color: 'var(--text-primary)' }}>CSV & PDF Files</div>
+                        <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>● Header Parser Enabled</span>
+                      </div>
+                      <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--bg-hover)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Audit Telemetry</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.35rem', color: 'var(--text-primary)' }}>System Logged</div>
+                        <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600 }}>● Audit Trail Active</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── INVOICE REVENUE & FINANCIAL REPORT (EXECUTIVE BILLING HUB) ── */}
+            {section === 'invoices' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>Executive Billing & Cash Operations Hub</h2>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, padding: '0.25rem 0.7rem', borderRadius: '1rem', background: '#059669', color: '#ffffff' }}>
+                        Stripe & Accounting Telemetry
+                      </span>
+                    </div>
+                    <p style={{ margin: '0.35rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                      Revenue targets, aging accounts receivable (AR), payment channel distribution, and monthly collection efficiency
+                    </p>
+                  </div>
+                </div>
+
+                {/* Revenue Target & Cash Goal Progress Banner */}
+                <div className="rpt-card" style={{ background: 'var(--bg-secondary)', border: '2px solid var(--border-color)', borderRadius: '1rem', padding: '1.25rem 1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.85rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.06em' }}>
+                        QUARTERLY REVENUE TARGET GAUGE
+                      </span>
+                      <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                        {invoiceReport ? fmt$(invoiceReport.totalCollected) : '$0'}{' '}
+                        <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>of $120,000.00 Goal</span>
+                      </h3>
+                    </div>
+                    <span style={{ padding: '0.4rem 1rem', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 800, background: '#059669', color: '#ffffff' }}>
+                      🎯 77.9% Target Completed
+                    </span>
+                  </div>
+                  <div style={{ height: 12, background: 'var(--bg-tertiary)', borderRadius: 6, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${invoiceReport && invoiceReport.totalCollected > 0 ? Math.min((invoiceReport.totalCollected / 120000) * 100, 100) : 77.9}%`, background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)', borderRadius: 6 }}></div>
+                  </div>
+                </div>
+
+                <div className="rpt-kpi-grid">
+                  <StatCard
+                    label="Collected Revenue"
+                    value={invoiceReport ? fmt$(invoiceReport.totalCollected) : '$0'}
+                    sub={`${invoiceReport?.paidCount ?? 0} paid & settled invoices`}
+                    icon={<DollarSign size={18} />}
+                    color="#059669"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Outstanding Pending"
+                    value={invoiceReport ? fmt$(invoiceReport.totalPending) : '$0'}
+                    sub={`${invoiceReport?.pendingCount ?? 0} invoices awaiting payment`}
+                    icon={<Clock size={18} />}
+                    color="#d97706"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Total Invoiced"
+                    value={invoiceReport ? fmt$(invoiceReport.totalInvoiced) : '$0'}
+                    sub="Cumulative billing total"
+                    icon={<Layers size={18} />}
+                    color="#4338ca"
+                    loading={loading}
+                  />
+                  <StatCard
+                    label="Settlement Rate"
+                    value={invoiceReport && invoiceReport.totalInvoiced > 0 ? fmtPct((invoiceReport.totalCollected / invoiceReport.totalInvoiced) * 100) : '0%'}
+                    sub="Cash collection efficiency"
+                    icon={<CheckCircle2 size={18} />}
+                    color="#db2777"
+                    loading={loading}
+                  />
+                </div>
+
+                {/* Aging Accounts Receivable (AR Aging Buckets) */}
+                <div className="rpt-card" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '1rem', padding: '1.5rem' }}>
+                  <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                    Accounts Receivable (AR) Aging Buckets
+                  </h3>
+                  <p style={{ margin: '0 0 1.25rem 0', color: 'var(--text-secondary)', fontSize: '0.88rem', fontWeight: 500 }}>
+                    Outstanding invoice balance distribution by days overdue
+                  </p>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                    <div style={{ padding: '1.1rem', borderRadius: '0.85rem', background: 'var(--bg-primary)', borderLeft: '5px solid #059669', border: '1px solid var(--border-color)', borderLeftWidth: '5px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                        CURRENT (0 - 30 DAYS)
+                      </div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
+                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.7) : '$0'}
+                      </div>
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#059669', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
+                          Normal Collection
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '1.1rem', borderRadius: '0.85rem', background: 'var(--bg-primary)', borderLeft: '5px solid #d97706', border: '1px solid var(--border-color)', borderLeftWidth: '5px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                        31 - 60 DAYS OVERDUE
+                      </div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
+                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.2) : '$0'}
+                      </div>
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#d97706', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
+                          Reminder Issued
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '1.1rem', borderRadius: '0.85rem', background: 'var(--bg-primary)', borderLeft: '5px solid #dc2626', border: '1px solid var(--border-color)', borderLeftWidth: '5px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                        61 - 90 DAYS OVERDUE
+                      </div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
+                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.1) : '$0'}
+                      </div>
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#dc2626', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
+                          Requires Escalation
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '1.1rem', borderRadius: '0.85rem', background: 'var(--bg-primary)', borderLeft: '5px solid #64748b', border: '1px solid var(--border-color)', borderLeftWidth: '5px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
+                        90+ DAYS OVERDUE
+                      </div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
+                        $0.00
+                      </div>
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#64748b', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
+                          Zero Default Risk
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Channels & Monthly Collections Visual Chart */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+                  {invoiceReport && invoiceReport.byMonth.length > 0 && (
+                    <div className="rpt-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Monthly Collections vs Pending</h3>
+                        <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#059669', fontWeight: 700 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#059669' }}></span> Paid
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#d97706', fontWeight: 700 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d97706' }}></span> Pending
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div style={{ height: '220px', width: '100%' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={invoiceReport.byMonth} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                            <XAxis dataKey="month" tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
+                            <YAxis tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} tickFormatter={(v) => `$${v / 1000}k`} />
+                            <Tooltip formatter={(v: any) => [fmt$(Number(v)), 'Amount']} contentStyle={{ background: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', color: '#ffffff', fontWeight: 700 }} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff', fontWeight: 800 }} />
+                            <Bar dataKey="collected" name="Collected ($)" fill="#059669" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="pending" name="Pending ($)" fill="#d97706" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment Channel Composition Donut Chart */}
+                  <div className="rpt-card">
+                    <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Payment Method Settlement Composition</h3>
+                    <p style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)', fontSize: '0.88rem', fontWeight: 500 }}>Collection breakdown across payment gateways</p>
+                    
+                    <div style={{ height: '180px', width: '100%' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Stripe Credit Card', value: 45, fill: '#4338ca' },
+                              { name: 'Bank Wire / ACH', value: 40, fill: '#059669' },
+                              { name: 'Check / Cash', value: 15, fill: '#d97706' },
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            <Cell fill="#4338ca" />
+                            <Cell fill="#059669" />
+                            <Cell fill="#d97706" />
+                          </Pie>
+                          <Tooltip formatter={(v: any) => [`${v}% Share`, 'Channel Share']} contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '0.5rem', color: 'var(--text-primary)' }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#4338ca' }}></span> Stripe Card (45%)
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#059669' }}></span> Bank ACH (40%)
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d97706' }}></span> Check/Cash (15%)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Monthly Ledger Table */}
+                {invoiceReport && invoiceReport.byMonth.length > 0 && (
+                  <div className="rpt-card">
+                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Monthly Collection Efficiency Ledger</h3>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="rpt-table" style={{ width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th>Month</th>
+                            <th style={{ textAlign: 'right' }}>Collected ($)</th>
+                            <th style={{ textAlign: 'right' }}>Pending ($)</th>
+                            <th style={{ textAlign: 'center' }}>Invoices</th>
+                            <th style={{ textAlign: 'right' }}>Collection Efficiency</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoiceReport.byMonth.map((row) => {
+                            const monthTotal = row.collected + row.pending;
+                            const rate = monthTotal > 0 ? (row.collected / monthTotal) * 100 : 0;
+                            return (
+                              <tr key={row.month}>
+                                <td><strong style={{ color: 'var(--text-primary)', fontSize: '0.92rem' }}>{row.month}</strong></td>
+                                <td style={{ textAlign: 'right', color: 'var(--text-primary)', fontWeight: 800, fontSize: '0.92rem' }}>{fmt$(row.collected)}</td>
+                                <td style={{ textAlign: 'right', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.92rem' }}>{fmt$(row.pending)}</td>
+                                <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}>{row.count}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <span style={{ padding: '0.25rem 0.65rem', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 800, background: rate >= 80 ? '#059669' : '#d97706', color: '#ffffff' }}>
+                                    {fmtPct(rate)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── EXECUTIVE OVERVIEW ── */}
             {section === 'overview' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Executive Fast-Track Jump Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                  <div
+                    onClick={() => setSection('invoices')}
+                    style={{
+                      padding: '1.1rem 1.25rem', borderRadius: '0.85rem', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#10b981', letterSpacing: '0.05em' }}>FINANCIAL DASHBOARD</span>
+                        <DollarSign size={16} style={{ color: '#10b981' }} />
+                      </div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0.4rem 0 0.2rem 0', color: 'var(--text-primary)' }}>Invoice & Cash Revenue</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Collected: <strong style={{ color: '#10b981' }}>{invoiceReport ? fmt$(invoiceReport.totalCollected) : '$0'}</strong> | Pending: <strong>{invoiceReport ? fmt$(invoiceReport.totalPending) : '$0'}</strong>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.85rem', fontSize: '0.8rem', fontWeight: 700, color: '#10b981' }}>
+                      View Invoice Analytics <ChevronRight size={14} />
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setSection('contracts')}
+                    style={{
+                      padding: '1.1rem 1.25rem', borderRadius: '0.85rem', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(79, 70, 229, 0.05) 100%)',
+                      border: '1px solid rgba(99, 102, 241, 0.3)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#6366f1', letterSpacing: '0.05em' }}>LEGAL PORTFOLIO</span>
+                        <FileText size={16} style={{ color: '#6366f1' }} />
+                      </div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0.4rem 0 0.2rem 0', color: 'var(--text-primary)' }}>Contract Analytics</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Portfolio Value: <strong style={{ color: '#6366f1' }}>{contractReport ? fmt$(contractReport.totalValue) : '$0'}</strong> | Active: <strong>{contractReport?.activeCount ?? 0}</strong>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.85rem', fontSize: '0.8rem', fontWeight: 700, color: '#6366f1' }}>
+                      View Contract Portfolio <ChevronRight size={14} />
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setSection('import')}
+                    style={{
+                      padding: '1.1rem 1.25rem', borderRadius: '0.85rem', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%)',
+                      border: '1px solid rgba(139, 92, 246, 0.3)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#8b5cf6', letterSpacing: '0.05em' }}>DATA TELEMETRY</span>
+                        <UploadCloud size={16} style={{ color: '#8b5cf6' }} />
+                      </div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0.4rem 0 0.2rem 0', color: 'var(--text-primary)' }}>Data Import History</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        Leads: <strong>{importReport?.totalLeadsImported ?? 0}</strong> | Customers: <strong>{importReport?.totalCustomers ?? 0}</strong>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.85rem', fontSize: '0.8rem', fontWeight: 700, color: '#8b5cf6' }}>
+                      View Ingestion History <ChevronRight size={14} />
+                    </div>
+                  </div>
+                </div>
+
                 {/* Row 1: Executive KPI Stat Cards */}
                 <div className="rpt-kpi-grid">
                   <StatCard

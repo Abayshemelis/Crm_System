@@ -30,7 +30,7 @@ public class MockAuditService : IAuditService
         return Task.CompletedTask;
     }
 
-    public Task LogDeletionAsync(int entityTypeId, int entityId, int changedById)
+    public Task LogDeletionAsync(int entityTypeId, int entityId, int changedById, string? entitySummary = null)
     {
         return Task.CompletedTask;
     }
@@ -39,6 +39,13 @@ public class MockAuditService : IAuditService
     {
         return Task.CompletedTask;
     }
+}
+
+public class MockEmailTriggerService : IEmailTriggerService
+{
+    public Task SendLeadWelcomeEmailAsync(Lead lead, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task SendLeadAssignedEmailAsync(Lead lead, Identity user, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task SendCustomerAssignedEmailAsync(Customer customer, Identity user, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public class PublicLeadsControllerTests
@@ -61,7 +68,7 @@ public class PublicLeadsControllerTests
         await db.SaveChangesAsync();
 
         var mockAudit = new MockAuditService();
-        var mockEmail = new MockEmailSender();
+        var mockEmail = new MockEmailTriggerService();
         var controller = new PublicLeadsController(db, mockAudit, mockEmail);
 
         var dto = new PublicLeadCaptureDto
@@ -93,7 +100,7 @@ public class PublicLeadsControllerTests
     {
         await using var db = CreateDbContext();
         var mockAudit = new MockAuditService();
-        var mockEmail = new MockEmailSender();
+        var mockEmail = new MockEmailTriggerService();
         var controller = new PublicLeadsController(db, mockAudit, mockEmail);
 
         var dto = new PublicLeadCaptureDto

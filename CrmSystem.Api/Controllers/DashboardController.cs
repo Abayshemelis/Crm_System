@@ -314,6 +314,25 @@ public class ContactRequestDto
             })
             .ToListAsync();
 
+        // Invoice Stats
+        var invoicesQuery = _db.Invoices.Where(i => !i.IsDeleted);
+        var totalInvoiceCollected = await invoicesQuery.Where(i => i.Status == "Paid").SumAsync(i => (double?)i.TotalAmount) ?? 0.0;
+        var totalInvoicePending = await invoicesQuery.Where(i => i.Status != "Paid" && i.Status != "Cancelled").SumAsync(i => (double?)i.TotalAmount) ?? 0.0;
+        var recentInvoices = await invoicesQuery
+            .Include(i => i.Customer)
+            .OrderByDescending(i => i.CreatedAt)
+            .Take(5)
+            .Select(i => new
+            {
+                i.InvoiceId,
+                i.InvoiceNumber,
+                CustomerName = i.Customer != null ? $"{i.Customer.FirstName} {i.Customer.LastName}".Trim() : "Customer",
+                TotalAmount = (double)i.TotalAmount,
+                Status = i.Status,
+                CreatedAt = i.CreatedAt
+            })
+            .ToListAsync();
+
         return Ok(new
         {
             totalCustomers,
@@ -331,7 +350,10 @@ public class ContactRequestDto
             productsInStock,
             totalProducts,
             recentActivities,
-            topOpportunities
+            topOpportunities,
+            totalInvoiceCollected,
+            totalInvoicePending,
+            recentInvoices
         });
     }
 }

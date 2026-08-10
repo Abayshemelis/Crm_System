@@ -304,6 +304,48 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    [HttpPost("verify-stripe-session")]
+    public async Task<IActionResult> VerifyStripeSession([FromQuery] string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return BadRequest(new { message = "sessionId is required." });
+
+        var invoiceId = await _stripePaymentService.VerifyCheckoutSessionAsync(sessionId);
+        if (invoiceId is null)
+        {
+            return BadRequest(new { message = "Payment session could not be verified or is unpaid." });
+        }
+
+        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId.Value && !i.IsDeleted);
+        if (invoice == null) return NotFound(new { message = "Invoice not found." });
+
+        if (invoice.Status != "Paid")
+        {
+            invoice.Status = "Paid";
+            invoice.PaidAt = DateTime.UtcNow;
+            invoice.PaymentMethod = "Stripe Credit Card";
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            try
+            {
+                var msg = $"💳 Payment of ${invoice.TotalAmount:N2} received for Invoice #{invoice.InvoiceNumber} via Stripe.";
+                await _notificationService.CreateNotificationAsync(
+                    invoice.CreatedById,
+                    "TaskDue",
+                    msg,
+                    opportunityId: invoice.OpportunityId
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Notification] Error creating payment notification: {ex.Message}");
+            }
+        }
+
+        return Ok(new { message = "Payment verified successfully.", invoiceId = invoice.InvoiceId, invoiceNumber = invoice.InvoiceNumber });
+    }
+
     [AllowAnonymous]
     [HttpPost("webhook")]
     public async Task<IActionResult> StripeWebhook()
@@ -313,9 +355,19 @@ public class InvoicesController : ControllerBase
 
         try
         {
-            // For now just pass it to the service. We could wire the service to return the invoice ID.
-            // But since this is a demo, let's assume it logs it or updates it if we change the service.
-            await _stripePaymentService.ProcessWebhookEventAsync(json, signature);
+            var invoiceId = await _stripePaymentService.ProcessWebhookEventAsync(json, signature);
+            if (invoiceId.HasValue)
+            {
+                var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId.Value && !i.IsDeleted);
+                if (invoice != null && invoice.Status != "Paid")
+                {
+                    invoice.Status = "Paid";
+                    invoice.PaidAt = DateTime.UtcNow;
+                    invoice.PaymentMethod = "Stripe Credit Card";
+                    invoice.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+            }
             return Ok();
         }
         catch (Exception ex)

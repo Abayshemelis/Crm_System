@@ -27,7 +27,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 function parseJwt(token: string): any {
   try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+      base64 += '=';
+    }
     return JSON.parse(window.atob(base64));
   } catch {
     return null;
@@ -39,7 +45,8 @@ function isTokenExpired(token: string): boolean {
     const payload = parseJwt(token);
     if (!payload || !payload.exp) return true;
     const exp = payload.exp * 1000; // Convert to milliseconds
-    return Date.now() >= exp;
+    // Refresh only when within 10 seconds of actual expiration
+    return Date.now() >= (exp - 10000);
   } catch {
     return true;
   }

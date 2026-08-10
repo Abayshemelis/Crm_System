@@ -1450,3 +1450,18 @@
   .rpt-funnel-pct { display: none; }
 }
 
+/* ── Theme Text & Contrast Adjustments ── */
+[data-theme="light"] {
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --success: #047857;
+}
+
+[data-theme="light"] .rpt-card,
+[data-theme="light"] .rpt-section-card,
+[data-theme="light"] .rpt-stat-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  border-color: #e2e8f0;
+}
+
