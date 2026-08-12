@@ -8,9 +8,11 @@ import {
   Phone, Mail, MapPin, Clock, Globe, ChevronDown,
   Activity, Shield, DollarSign, Award, Layers, HelpCircle,
   CheckCircle2, AlertCircle, FileText, Check, Zap,
-  TrendingUp, Linkedin, Instagram, Send
+  TrendingUp, Linkedin, Instagram, Send,
+  Sparkles, FileSignature, CreditCard, Sliders, History
 } from 'lucide-react';
 import { AuthLoginForm } from '../components/auth/AuthLoginForm';
+import { PublicAiAssistant } from '../components/ai/PublicAiAssistant';
 import './LandingPage.css';
 
 export const LandingPage: React.FC = () => {
@@ -183,6 +185,24 @@ export const LandingPage: React.FC = () => {
       description: 'Track lead channels, qualify prospects, and convert qualified leads into linked customer and deal records with one click.'
     },
     {
+      icon: Sparkles,
+      title: 'AI Lead Assistant & Scoring',
+      stat: 'Predictive Scoring & Insights',
+      description: 'Automated 0-100 lead scoring, SLA response alert tracking, and AI-assisted email generation for reps.'
+    },
+    {
+      icon: FileSignature,
+      title: 'Contracts & E-Signatures',
+      stat: 'Digital Document Signing',
+      description: 'Draft contracts, share public signing links, capture e-signatures online, and auto-export signed PDFs.'
+    },
+    {
+      icon: CreditCard,
+      title: 'Invoicing & Stripe Payments',
+      stat: 'Live Online Checkout',
+      description: 'Issue invoices, collect credit card payments via Stripe integration, and track payment status in real-time.'
+    },
+    {
       icon: Layers,
       title: 'Opportunity Pipeline & Forecasting',
       stat: `$${Math.round((dashboardData?.pipelineValue ?? 0) / 1000)}K Active Pipeline`,
@@ -216,7 +236,27 @@ export const LandingPage: React.FC = () => {
     {
       icon: Target,
       title: 'Lead Management & Conversion',
-      description: 'Capture leads, track acquisition sources, and execute seamless one-click lead conversions.'
+      description: 'Capture leads, track acquisition sources, and execute seamless direct lead conversions.'
+    },
+    {
+      icon: Sparkles,
+      title: 'AI Lead Scoring & Assistant',
+      description: 'Real-time Hot/Warm/Cold scoring (0-100), SLA response breach alerts, and predictive recommendations.'
+    },
+    {
+      icon: FileSignature,
+      title: 'Digital Contracts & E-Signatures',
+      description: 'Create contracts, share public e-signature links, track agreement statuses, and generate PDF receipts.'
+    },
+    {
+      icon: CreditCard,
+      title: 'Invoices & Stripe Payment Gateway',
+      description: 'Generate customer invoices, accept instant Stripe payments, and maintain payment history.'
+    },
+    {
+      icon: Sliders,
+      title: 'Custom Fields Engine',
+      description: 'Add custom fields (text, number, date, dropdown) across Leads, Customers, and Opportunities.'
     },
     {
       icon: Layers,
@@ -239,28 +279,36 @@ export const LandingPage: React.FC = () => {
       description: 'Log phone calls, emails, meetings, and follow-ups with automatic timestamps.'
     },
     {
-      icon: Shield,
-      title: 'Role-Based Governance',
-      description: 'Role-based permissions (Admin, Manager, SalesRep) protecting sensitive data and configuration.'
+      icon: History,
+      title: 'Field-Level Audit Trail',
+      description: 'Complete audit logging tracking every field change, old/new values, timestamps, and user IDs.'
     }
   ];
 
   const faqs = [
     {
       question: 'What modules are included in the CRM system?',
-      answer: 'Our CRM includes complete Customer & Company Management, Lead Acquisition & Conversion, Opportunity Pipeline Kanban, Product Catalog, Task Calendar, Activity Tracking, Reports & Analytics, and User Role Administration.'
+      answer: 'Our CRM includes Customer & Company Management, Lead Acquisition & Conversion, AI Lead Scoring, Opportunity Pipeline Kanban, Contracts & E-Signatures, Invoices & Stripe Payments, Custom Fields Engine, Task Calendar, Activity Tracking, and Role Governance.'
     },
     {
-      question: 'Is real-time reporting available for managers and admins?',
-      answer: 'Yes. Dashboards and reports update live based on backend database transactions, providing instant metrics for win rates, revenue forecasts, pipeline velocity, and team performance.'
+      question: 'How do Digital Contracts and E-Signatures work?',
+      answer: 'You can create contracts directly from opportunities or customers, generate a secure public e-signature link, send it to clients, and collect signatures online. Once signed, a PDF is automatically generated and an invoice can be created instantly.'
+    },
+    {
+      question: 'Is online payment processing supported for invoices?',
+      answer: 'Yes! The system integrates directly with Stripe Payment Gateway. Clients can pay their invoices online via credit card, and invoice statuses update automatically to Paid upon completion.'
+    },
+    {
+      question: 'How does the AI Lead Scoring & Assistant help sales reps?',
+      answer: 'The AI Lead Assistant evaluates prospect engagement, calculates a 0-100 lead score (Hot/Warm/Cold), monitors SLA response times, and suggests next best actions and email templates.'
     },
     {
       question: 'Can leads be converted directly into customers and opportunities?',
-      answer: 'Absolutely. With one click, qualified leads convert into linked customer, company, and initial deal records with full audit history preservation.'
+      answer: 'Absolutely. With one click, active leads (even from New status) convert into linked customer, company, and initial deal records with full audit history preservation.'
     },
     {
       question: 'What security and access controls are supported?',
-      answer: 'The system enforces role-based access control (Admin, Manager, SalesRep) ensuring data privacy, restricted administrative settings, and audit logs for all data mutations.'
+      answer: 'The system enforces role-based access control (Admin, Manager, SalesRep) ensuring data privacy, restricted administrative settings, and complete field-level audit logs for all data mutations.'
     }
   ];
 
@@ -537,6 +585,49 @@ export const LandingPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+
+          {/* Advanced Enterprise Modules Highlight Banner */}
+          <div style={{ marginTop: '3.5rem', paddingTop: '2.5rem', borderTop: '1px solid var(--card-border)' }}>
+            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+              <span className="section-pill" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>⚡ High-Velocity Sales Engine</span>
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '0.5rem', marginBottom: '0.5rem' }}>Advanced Enterprise Modules</h3>
+              <p style={{ color: 'var(--fg-muted)', fontSize: '0.95rem', maxWidth: 650, margin: '0 auto' }}>Specialized built-in tools for AI predictions, online contract signing, Stripe payment gateways, and custom field customization.</p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(99, 102, 241, 0.2)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), transparent)' }}>
+                <div style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+                  <Sparkles size={26} />
+                </div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>AI Lead Assistant & Scoring</h4>
+                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Automated 0-100 scoring based on interactions, SLA response breach alerts, and AI next-best-action email recommendations.</p>
+              </div>
+
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(16, 185, 129, 0.2)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent)' }}>
+                <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+                  <FileSignature size={26} />
+                </div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>E-Signatures & Contract PDFs</h4>
+                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Generate contract agreements, share public signing link tokens, capture client digital signatures online, and auto-export signed PDFs.</p>
+              </div>
+
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(245, 158, 11, 0.2)', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent)' }}>
+                <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+                  <CreditCard size={26} />
+                </div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>Stripe Online Invoicing</h4>
+                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Direct credit card checkout integration via Stripe API. Invoices auto-update to Paid with client payment receipts.</p>
+              </div>
+
+              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(14, 165, 233, 0.2)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), transparent)' }}>
+                <div style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0ea5e9', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+                  <Sliders size={26} />
+                </div>
+                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>Custom Fields & Audit Log</h4>
+                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Extend Leads, Customers, and Opportunities with custom fields while maintaining deep field-level audit trail history.</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -824,6 +915,9 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Floating Public AI Product Assistant for Visitors */}
+      <PublicAiAssistant />
     </div>
   );
 };

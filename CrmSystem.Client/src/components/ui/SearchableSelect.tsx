@@ -12,6 +12,7 @@ interface SearchableSelectProps {
   onChange: (value: string | number) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -20,6 +21,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   onChange,
   placeholder = 'Type to search...',
   className = '',
+  disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -87,11 +89,15 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           className={`input-field ss-input ${open ? 'ss-input--open' : ''}`}
           placeholder={placeholder}
           value={filterText}
+          disabled={disabled}
           onChange={e => {
+            if (disabled) return;
             setFilterText(e.target.value);
             setOpen(true);
           }}
-          onFocus={handleFocus}
+          onFocus={() => {
+            if (!disabled) handleFocus();
+          }}
         />
         <svg
           className={`ss-chevron ${open ? 'ss-chevron--open' : ''}`}

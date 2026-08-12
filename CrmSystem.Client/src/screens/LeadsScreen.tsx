@@ -9,9 +9,10 @@ import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { api } from '../lib/api';
 import {
     Plus, Search, UserPlus, Calendar, Clock, AlertTriangle,
-    Users, Target, UserCheck, Award, Mail, Phone, CheckCircle, LayoutGrid, List
+    Users, Target, UserCheck, Award, Mail, Phone, CheckCircle, LayoutGrid, List, Eye, ArrowRight, ChevronRight
 } from 'lucide-react';
 import { LeadConvertModal } from '../components/ui/LeadConvertModal';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
 interface LeadSummary {
@@ -68,6 +69,25 @@ export const LeadsScreen: React.FC = () => {
         if (score >= 70) return { label: '🔥 Hot', rating: 'Hot', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.25)' };
         if (score >= 40) return { label: '⚡ Warm', rating: 'Warm', color: '#d97706', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.25)' };
         return { label: '❄️ Cold', rating: 'Cold', color: '#2563eb', bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.25)' };
+    };
+
+    const getLeadStatusStyle = (name?: string) => {
+        switch (name) {
+            case 'Converted':
+                return { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: 'rgba(16, 185, 129, 0.25)' };
+            case 'Qualified':
+                return { bg: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5', border: 'rgba(99, 102, 241, 0.25)' };
+            case 'Contacted':
+                return { bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: 'rgba(245, 158, 11, 0.25)' };
+            case 'Follow-up Scheduled':
+                return { bg: 'rgba(14, 165, 233, 0.12)', color: '#0284c7', border: 'rgba(14, 165, 233, 0.25)' };
+            case 'Lost':
+            case 'Disqualified':
+            case 'Closed':
+                return { bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', border: 'rgba(239, 68, 68, 0.25)' };
+            default: // New
+                return { bg: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: 'rgba(59, 130, 246, 0.25)' };
+        }
     };
 
     const loadLeads = useCallback(async () => {
@@ -166,6 +186,128 @@ export const LeadsScreen: React.FC = () => {
                 </div>
             )}
 
+            {/* Leads Dashboard KPI Summary Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        padding: '1.15rem 1.25rem',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                    }}
+                    onClick={() => {
+                        setSelectedStatusId('');
+                        setSelectedRating('');
+                        setSelectedFollowUpFilter('');
+                        setShowConverted(false);
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Active Leads</span>
+                        <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Target size={18} />
+                        </div>
+                    </div>
+                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
+                        {leads.filter(l => l.leadStatusName !== 'Converted').length}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.2rem', fontWeight: 500 }}>
+                        Pipeline prospects
+                    </div>
+                </div>
+
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        padding: '1.15rem 1.25rem',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                    }}
+                    onClick={() => {
+                        setSelectedRating('Hot');
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>🔥 Hot Prospects</span>
+                        <div style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Award size={18} />
+                        </div>
+                    </div>
+                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#ef4444', marginTop: '0.4rem' }}>
+                        {leads.filter(l => (l.leadScore ?? 0) >= 70).length}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#ef4444', marginTop: '0.2rem', fontWeight: 500 }}>
+                        Score 70+ (Ready to close)
+                    </div>
+                </div>
+
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        padding: '1.15rem 1.25rem',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                    }}
+                    onClick={() => {
+                        setSelectedFollowUpFilter('today');
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>⏰ Due / Overdue</span>
+                        <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Clock size={18} />
+                        </div>
+                    </div>
+                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#d97706', marginTop: '0.4rem' }}>
+                        {leads.filter(l => isOverdue(l.nextFollowUpDate, l.leadStatusName) || isToday(l.nextFollowUpDate)).length}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#d97706', marginTop: '0.2rem', fontWeight: 500 }}>
+                        Follow-ups needing action
+                    </div>
+                </div>
+
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        padding: '1.15rem 1.25rem',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                    }}
+                    onClick={() => {
+                        setShowConverted(true);
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>✅ Converted</span>
+                        <div style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <UserCheck size={18} />
+                        </div>
+                    </div>
+                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#10b981', marginTop: '0.4rem' }}>
+                        {leads.filter(l => l.leadStatusName === 'Converted').length}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#10b981', marginTop: '0.2rem', fontWeight: 500 }}>
+                        Sales conversions
+                    </div>
+                </div>
+            </div>
+
             {/* Standard CRM Search and Filters Bar */}
             <div className="filters-bar glass-panel" style={{ padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem' }}>
                 <div style={{ position: 'relative', flex: '1 1 240px' }}>
@@ -178,51 +320,87 @@ export const LeadsScreen: React.FC = () => {
                     />
                 </div>
 
-                <select className="filter-select" value={selectedStatusId} onChange={e => setSelectedStatusId(e.target.value)}>
-                    <option key="status-all" value="">All Statuses</option>
-                    {statuses.map((s, idx) => (
-                        <option key={`status-${s.id ?? idx}`} value={s.id}>{s.name}</option>
-                    ))}
-                </select>
+                <div style={{ minWidth: 140, flex: '1 1 140px' }}>
+                    <SearchableSelect
+                        value={selectedStatusId}
+                        options={[
+                            { value: '', label: 'All Statuses' },
+                            ...statuses.map(s => ({ value: String(s.id), label: s.name }))
+                        ]}
+                        onChange={val => setSelectedStatusId(String(val))}
+                        placeholder="All Statuses"
+                    />
+                </div>
 
-                <select className="filter-select" value={selectedPriority} onChange={e => setSelectedPriority(e.target.value)}>
-                    <option key="priority-all" value="">All Priorities</option>
-                    <option key="priority-low" value="Low">Low</option>
-                    <option key="priority-medium" value="Medium">Medium</option>
-                    <option key="priority-high" value="High">High</option>
-                    <option key="priority-urgent" value="Urgent">Urgent</option>
-                </select>
+                <div style={{ minWidth: 130, flex: '1 1 130px' }}>
+                    <SearchableSelect
+                        value={selectedPriority}
+                        options={[
+                            { value: '', label: 'All Priorities' },
+                            { value: 'Low', label: 'Low Priority' },
+                            { value: 'Medium', label: 'Medium Priority' },
+                            { value: 'High', label: 'High Priority' },
+                            { value: 'Urgent', label: 'Urgent Priority' }
+                        ]}
+                        onChange={val => setSelectedPriority(String(val))}
+                        placeholder="All Priorities"
+                    />
+                </div>
 
-                <select className="filter-select" value={selectedRating} onChange={e => setSelectedRating(e.target.value)}>
-                    <option key="rating-all" value="">All Score Ratings</option>
-                    <option key="rating-hot" value="Hot">🔥 Hot Prospect (70+)</option>
-                    <option key="rating-warm" value="Warm">⚡ Warm Lead (40-69)</option>
-                    <option key="rating-cold" value="Cold">❄️ Cold Lead (0-39)</option>
-                </select>
+                <div style={{ minWidth: 160, flex: '1 1 160px' }}>
+                    <SearchableSelect
+                        value={selectedRating}
+                        options={[
+                            { value: '', label: 'All Score Ratings' },
+                            { value: 'Hot', label: '🔥 Hot Prospect (70+)' },
+                            { value: 'Warm', label: '⚡ Warm Lead (40-69)' },
+                            { value: 'Cold', label: '❄️ Cold Lead (0-39)' }
+                        ]}
+                        onChange={val => setSelectedRating(String(val))}
+                        placeholder="All Score Ratings"
+                    />
+                </div>
 
-                <select className="filter-select" value={selectedFollowUpFilter} onChange={e => setSelectedFollowUpFilter(e.target.value)}>
-                    <option key="followup-all" value="">All Follow-Ups</option>
-                    <option key="followup-today" value="today">Follow-Up Due Today</option>
-                    <option key="followup-overdue" value="overdue">Overdue Follow-Ups</option>
-                    <option key="followup-upcoming" value="upcoming">Upcoming Follow-Ups</option>
-                </select>
+                <div style={{ minWidth: 150, flex: '1 1 150px' }}>
+                    <SearchableSelect
+                        value={selectedFollowUpFilter}
+                        options={[
+                            { value: '', label: 'All Follow-Ups' },
+                            { value: 'today', label: 'Follow-Up Due Today' },
+                            { value: 'overdue', label: 'Overdue Follow-Ups' },
+                            { value: 'upcoming', label: 'Upcoming Follow-Ups' }
+                        ]}
+                        onChange={val => setSelectedFollowUpFilter(String(val))}
+                        placeholder="All Follow-Ups"
+                    />
+                </div>
 
                 {users.length > 0 && (
-                    <select className="filter-select" value={selectedRepId} onChange={e => setSelectedRepId(e.target.value)}>
-                        <option key="rep-all" value="">All Sales Reps</option>
-                        {users.map((u, idx) => (
-                            <option key={`rep-${u.id ?? idx}`} value={u.id}>{u.name}</option>
-                        ))}
-                    </select>
+                    <div style={{ minWidth: 150, flex: '1 1 150px' }}>
+                        <SearchableSelect
+                            value={selectedRepId}
+                            options={[
+                                { value: '', label: 'All Sales Reps' },
+                                ...users.map(u => ({ value: String(u.id), label: u.name }))
+                            ]}
+                            onChange={val => setSelectedRepId(String(val))}
+                            placeholder="All Sales Reps"
+                        />
+                    </div>
                 )}
 
                 {sources.length > 0 && (
-                    <select className="filter-select" value={selectedSourceId} onChange={e => setSelectedSourceId(e.target.value)}>
-                        <option key="source-all" value="">All Sources</option>
-                        {sources.map((s, idx) => (
-                            <option key={`source-${s.id ?? idx}`} value={s.id}>{s.name}</option>
-                        ))}
-                    </select>
+                    <div style={{ minWidth: 140, flex: '1 1 140px' }}>
+                        <SearchableSelect
+                            value={selectedSourceId}
+                            options={[
+                                { value: '', label: 'All Sources' },
+                                ...sources.map(s => ({ value: String(s.id), label: s.name }))
+                            ]}
+                            onChange={val => setSelectedSourceId(String(val))}
+                            placeholder="All Sources"
+                        />
+                    </div>
                 )}
 
                 <DateRangePicker
@@ -307,9 +485,14 @@ export const LeadsScreen: React.FC = () => {
                                             </span>
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem' }}>
-                                            <span style={{ padding: '0.2rem 0.6rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 600, background: lead.leadStatusName === 'Converted' ? 'rgba(16, 185, 129, 0.12)' : lead.leadStatusName === 'Qualified' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(59, 130, 246, 0.12)', color: lead.leadStatusName === 'Converted' ? '#059669' : lead.leadStatusName === 'Qualified' ? '#4f46e5' : '#2563eb' }}>
-                                                {lead.leadStatusName}
-                                            </span>
+                                            {(() => {
+                                                const st = getLeadStatusStyle(lead.leadStatusName);
+                                                return (
+                                                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 600, background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
+                                                        {lead.leadStatusName}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem', fontSize: '0.8rem', fontWeight: 600, color: lead.priority === 'Urgent' ? '#dc2626' : lead.priority === 'High' ? '#d97706' : 'var(--text-secondary)' }}>
                                             {lead.priority || 'Medium'}
@@ -318,18 +501,20 @@ export const LeadsScreen: React.FC = () => {
                                             {lead.assignedRepName || 'Unassigned'}
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                                            {lead.leadStatusName === 'Qualified' ? (
+                                            {lead.leadStatusName === 'Converted' ? (
+                                                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                    <CheckCircle size={13} /> Converted
+                                                </span>
+                                            ) : lead.leadStatusName === 'Lost' ? (
+                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lost</span>
+                                            ) : (
                                                 <Button
                                                     size="sm"
                                                     variant="secondary"
-                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', borderColor: '#10b981', color: '#059669' }}
+                                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', borderColor: '#10b981', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}
                                                     onClick={() => setConvertingLead(lead)}
                                                 >
                                                     <CheckCircle size={12} style={{ marginRight: 4 }} /> Convert
-                                                </Button>
-                                            ) : (
-                                                <Button size="sm" variant="ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }} onClick={() => navigate(`/leads/${lead.leadId}`)}>
-                                                    View
                                                 </Button>
                                             )}
                                         </td>
@@ -346,149 +531,157 @@ export const LeadsScreen: React.FC = () => {
                         const overdue = isOverdue(lead.nextFollowUpDate, lead.leadStatusName);
                         const dueToday = isToday(lead.nextFollowUpDate);
                         const initials = `${lead.firstName[0] || ''}${lead.lastName[0] || ''}`.toUpperCase();
+                        const rating = getLeadRating(lead.leadScore ?? 0);
 
                         return (
                             <Card
                                 key={lead.leadId}
                                 className="glass-panel customer-card animate-fade-in"
-                                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                                style={{
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    borderRadius: '14px',
+                                    border: '1px solid var(--border-color)',
+                                    transition: 'transform 0.2s, box-shadow 0.2s'
+                                }}
                                 onClick={() => navigate(`/leads/${lead.leadId}`)}
                             >
-                                <Card.Content>
-                                    {/* Card Header: Avatar & Badges */}
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', gap: '0.5rem' }}>
+                                <Card.Content style={{ padding: '1.25rem' }}>
+                                    {/* Card Header: Avatar, Name & Status Badges */}
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.85rem', gap: '0.5rem' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                            <div className="customer-avatar" style={{ background: 'linear-gradient(135deg, var(--accent-primary), #6366f1)', color: '#ffffff' }}>
+                                            <div className="customer-avatar" style={{ background: 'linear-gradient(135deg, var(--accent-primary), #6366f1)', color: '#ffffff', width: '42px', height: '42px', borderRadius: '10px', fontSize: '1rem', fontWeight: 700 }}>
                                                 {initials}
                                             </div>
                                             <div>
-                                                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                                                     {lead.firstName} {lead.lastName}
                                                 </h3>
-                                                {lead.companyName && (
-                                                    <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                        {lead.companyName} {lead.jobTitle ? `· ${lead.jobTitle}` : ''}
-                                                    </p>
-                                                )}
+                                                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                                    {lead.companyName || 'Individual Contact'} {lead.jobTitle ? `· ${lead.jobTitle}` : ''}
+                                                </p>
                                             </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <span style={{
-                                                    padding: '0.15rem 0.5rem',
-                                                    borderRadius: '0.375rem',
-                                                    fontSize: '0.7rem',
-                                                    fontWeight: 700,
-                                                    background: getLeadRating(lead.leadScore ?? 0).bg,
-                                                    color: getLeadRating(lead.leadScore ?? 0).color,
-                                                    border: `1px solid ${getLeadRating(lead.leadScore ?? 0).border}`
-                                                }}>
-                                                    {getLeadRating(lead.leadScore ?? 0).label} ({lead.leadScore ?? 0})
-                                                </span>
-                                                <span style={{
-                                                    padding: '0.2rem 0.6rem',
-                                                    borderRadius: '0.5rem',
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 600,
-                                                    background: lead.leadStatusName === 'Converted' ? 'rgba(16, 185, 129, 0.12)' : lead.leadStatusName === 'Qualified' ? 'rgba(99, 102, 241, 0.12)' : 'rgba(59, 130, 246, 0.12)',
-                                                    color: lead.leadStatusName === 'Converted' ? '#059669' : lead.leadStatusName === 'Qualified' ? '#4f46e5' : '#2563eb',
-                                                    border: '1px solid rgba(0, 0, 0, 0.08)'
-                                                }}>
-                                                    {lead.leadStatusName}
-                                                </span>
-                                            </div>
-                                            <span style={{
-                                                padding: '0.15rem 0.5rem',
-                                                borderRadius: '0.375rem',
-                                                fontSize: '0.7rem',
-                                                fontWeight: 600,
-                                                background: lead.priority === 'Urgent' ? 'rgba(239, 68, 68, 0.12)' : lead.priority === 'High' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(100, 116, 139, 0.12)',
-                                                color: lead.priority === 'Urgent' ? '#dc2626' : lead.priority === 'High' ? '#d97706' : '#475569',
-                                                border: '1px solid rgba(0, 0, 0, 0.05)'
-                                            }}>
-                                                {lead.priority || 'Medium'} Priority
-                                            </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                            {(() => {
+                                                const st = getLeadStatusStyle(lead.leadStatusName);
+                                                return (
+                                                    <span style={{
+                                                        padding: '0.2rem 0.6rem',
+                                                        borderRadius: '6px',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 700,
+                                                        background: st.bg,
+                                                        color: st.color,
+                                                        border: `1px solid ${st.border}`
+                                                    }}>
+                                                        {lead.leadStatusName}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
 
-                                    {/* Contact & Assigned Information */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '0.75rem 0', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }}>
+                                    {/* Score Rating & Priority Bar */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem', padding: '0.4rem 0.65rem', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                                        <span style={{
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: rating.color
+                                        }}>
+                                            {rating.label} ({lead.leadScore ?? 0})
+                                        </span>
+                                        <span style={{
+                                            fontSize: '0.72rem',
+                                            fontWeight: 600,
+                                            color: lead.priority === 'Urgent' ? '#dc2626' : lead.priority === 'High' ? '#d97706' : 'var(--text-secondary)'
+                                        }}>
+                                            {lead.priority || 'Medium'} Priority
+                                        </span>
+                                    </div>
+
+                                    {/* Contact & Assigned Details */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '0.65rem 0', borderTop: '1px solid var(--border-color)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            <Mail size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                            <Mail size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                                             <span className="truncate">{lead.email || 'No email provided'}</span>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <Phone size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                            <Phone size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                                             <span>{lead.phone || 'No phone number'}</span>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <UserCheck size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                                            <span>Assigned: <strong>{lead.assignedRepName || 'Unassigned'}</strong></span>
+                                            <UserCheck size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                                            <span>Rep: <strong>{lead.assignedRepName || 'Unassigned'}</strong></span>
                                         </div>
-                                        {lead.sourceName && (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <Target size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                                                <span>Source: {lead.sourceName}</span>
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* Next Follow-Up Banner */}
-                                    <div style={{ marginTop: '0.75rem' }}>
+                                    <div style={{ marginTop: '0.65rem' }}>
                                         {lead.nextFollowUpDate ? (
                                             <div style={{
-                                                padding: '0.6rem 0.75rem',
-                                                borderRadius: '0.5rem',
-                                                fontSize: '0.8rem',
+                                                padding: '0.55rem 0.75rem',
+                                                borderRadius: '8px',
+                                                fontSize: '0.78rem',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                background: overdue ? 'rgba(239, 68, 68, 0.08)' : dueToday ? 'rgba(245, 158, 11, 0.08)' : 'rgba(241, 245, 249, 0.8)',
-                                                border: overdue ? '1px solid rgba(239, 68, 68, 0.2)' : dueToday ? '1px solid rgba(245, 158, 11, 0.2)' : '1px solid rgba(226, 232, 240, 0.8)',
+                                                background: overdue ? 'rgba(239, 68, 68, 0.08)' : dueToday ? 'rgba(245, 158, 11, 0.08)' : 'var(--bg-secondary)',
+                                                border: overdue ? '1px solid rgba(239, 68, 68, 0.25)' : dueToday ? '1px solid rgba(245, 158, 11, 0.25)' : '1px solid var(--border-color)',
                                                 color: overdue ? '#dc2626' : dueToday ? '#b45309' : 'var(--text-secondary)'
                                             }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    {overdue ? <AlertTriangle size={15} /> : <Clock size={15} />}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    {overdue ? <AlertTriangle size={14} /> : <Clock size={14} />}
                                                     <div>
-                                                        <div style={{ fontWeight: 600 }}>{lead.nextFollowUpType || 'Follow-Up'}</div>
-                                                        <div style={{ fontSize: '0.75rem', opacity: 0.85 }}>{new Date(lead.nextFollowUpDate).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                                                        <div style={{ fontWeight: 600, fontSize: '0.78rem' }}>{lead.nextFollowUpType || 'Follow-Up'}</div>
+                                                        <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>{new Date(lead.nextFollowUpDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                                                     </div>
                                                 </div>
                                                 {overdue && <span style={{ fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', background: 'rgba(239, 68, 68, 0.15)', color: '#dc2626', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>Overdue</span>}
                                                 {dueToday && <span style={{ fontWeight: 700, fontSize: '0.65rem', textTransform: 'uppercase', background: 'rgba(245, 158, 11, 0.15)', color: '#b45309', padding: '0.15rem 0.4rem', borderRadius: '0.25rem' }}>Today</span>}
                                             </div>
                                         ) : (
-                                            <div style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                                            <div style={{ padding: '0.45rem', borderRadius: '6px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
                                                 No follow-up planned
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Convert to Customer Action Button - Strictly for Qualified Leads */}
-                                    <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-color)' }}>
-                                        {lead.leadStatusName === 'Qualified' ? (
+                                    {/* Action Toolbar */}
+                                    <div style={{ marginTop: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '0.6rem', borderTop: '1px solid var(--border-color)' }}>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            style={{ fontSize: '0.78rem', padding: '0.25rem 0.5rem' }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/leads/${lead.leadId}`);
+                                            }}
+                                        >
+                                            <Eye size={13} style={{ marginRight: 4 }} /> View Details
+                                        </Button>
+
+                                        {lead.leadStatusName === 'Converted' ? (
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <CheckCircle size={13} /> Converted
+                                            </span>
+                                        ) : lead.leadStatusName === 'Lost' ? (
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lost</span>
+                                        ) : (
                                             <Button
                                                 size="sm"
                                                 variant="secondary"
-                                                style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem', borderRadius: '0.4rem', borderColor: '#10b981', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}
+                                                style={{ fontSize: '0.78rem', padding: '0.25rem 0.6rem', borderColor: '#10b981', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setConvertingLead(lead);
                                                 }}
                                             >
-                                                <CheckCircle size={13} style={{ marginRight: 4, color: '#10b981' }} /> Convert to Customer
+                                                <CheckCircle size={13} style={{ marginRight: 4, color: '#10b981' }} /> Convert
                                             </Button>
-                                        ) : lead.leadStatusName === 'Converted' ? (
-                                            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                <CheckCircle size={13} /> Converted Customer
-                                            </span>
-                                        ) : lead.leadStatusName === 'Lost' ? (
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Lead Lost</span>
-                                        ) : (
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                                Stage: {lead.leadStatusName} (Qualify to convert)
-                                            </span>
                                         )}
                                     </div>
                                 </Card.Content>

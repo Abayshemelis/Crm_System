@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand */}
       <div className="sidebar-brand">
         <Building2 className="brand-icon" aria-hidden="true" />
-        <span className="brand-text">CRM Pro</span>
+        <span className="brand-text">CRM</span>
         {/* Close button – only visible on mobile/tablet */}
         <button
           className="sidebar-close-btn"

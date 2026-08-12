@@ -11,6 +11,7 @@ import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal'
 import { api } from '../lib/api';
 import { Plus, Filter, Search, X, Calendar } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
 interface Opportunity {
@@ -245,43 +246,43 @@ export const PipelineScreen: React.FC = () => {
                     )}
                 </div>
                 <div style={{ position: 'relative', flex: '1 1 180px', minWidth: 0 }}>
-                    <Filter size={16} className="filter-icon" />
-                    <select
-                        className="filter-select"
+                    <SearchableSelect
                         value={selectedCustomerId}
-                        onChange={e => setSelectedCustomerId(e.target.value)}
-                        style={{ width: '100%', paddingLeft: '2.25rem' }}
-                    >
-                        <option value="">All Customers</option>
-                        {customers.map(c => (
-                            <option key={c.customerId} value={c.customerId}>
-                                {c.firstName} {c.lastName}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={val => setSelectedCustomerId(String(val))}
+                        options={[
+                            { value: '', label: 'All Customers' },
+                            ...customers.map(c => ({
+                                value: String(c.customerId),
+                                label: `${c.firstName} ${c.lastName}`
+                            }))
+                        ]}
+                    />
                 </div>
-                <select
-                    className="filter-select"
-                    value={selectedCompanyId}
-                    onChange={e => setSelectedCompanyId(e.target.value)}
-                    style={{ flex: '1 1 160px', minWidth: 0 }}
-                >
-                    <option value="">All Companies</option>
-                    {companies.map(c => (
-                        <option key={c.companyId} value={c.companyId}>{c.name}</option>
-                    ))}
-                </select>
+                <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+                    <SearchableSelect
+                        value={selectedCompanyId}
+                        onChange={val => setSelectedCompanyId(String(val))}
+                        options={[
+                            { value: '', label: 'All Companies' },
+                            ...companies.map(c => ({
+                                value: String(c.companyId),
+                                label: c.name
+                            }))
+                        ]}
+                    />
+                </div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <select
-                        className="filter-select"
-                        value={dateFilterField}
-                        onChange={e => setDateFilterField(e.target.value as any)}
-                        style={{ fontSize: '0.82rem', padding: '0.35rem 0.5rem' }}
-                    >
-                        <option value="expectedClose">Expected Close</option>
-                        <option value="created">Created Date</option>
-                    </select>
+                    <div style={{ width: '140px' }}>
+                        <SearchableSelect
+                            value={dateFilterField}
+                            onChange={val => setDateFilterField(String(val) as any)}
+                            options={[
+                                { value: 'expectedClose', label: 'Expected Close' },
+                                { value: 'created', label: 'Created Date' }
+                            ]}
+                        />
+                    </div>
 
                     <DateRangePicker
                         startDate={startDate}

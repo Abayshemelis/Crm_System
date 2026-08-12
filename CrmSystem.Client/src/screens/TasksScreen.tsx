@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { List, Calendar, Plus, User } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { showToast } from '../lib/toast';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
 interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; }
@@ -157,16 +158,15 @@ export const TasksScreen: React.FC = () => {
           <h1 className="tasks-header-title">My Tasks</h1>
 
           {isManager && users.length > 0 && (
-            <div className="rep-selector">
-              <User size={14} />
-              <select
-                className="filter-select"
+            <div className="rep-selector" style={{ width: '200px' }}>
+              <SearchableSelect
                 value={selectedRep}
-                onChange={e => setSelectedRep(e.target.value)}
-              >
-                <option value="me">My Tasks</option>
-                {users.map(u => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
-              </select>
+                options={[
+                  { value: 'me', label: 'My Tasks' },
+                  ...users.map(u => ({ value: String(u.id), label: u.name }))
+                ]}
+                onChange={val => setSelectedRep(String(val))}
+              />
             </div>
           )}
 

@@ -16,6 +16,7 @@ import {
     CheckSquare, Plus, Trash2, Calendar, Clock, AlertTriangle, XCircle, UserCheck, ShieldAlert, Edit2
 } from 'lucide-react';
 import { TimelineList } from '../components/activities/TimelineList';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { AiLeadAssistant } from '../components/ai/AiLeadAssistant';
@@ -413,12 +414,68 @@ export const LeadDetailScreen: React.FC = () => {
                             </Button>
                         </>
                     )}
-                    {lead.leadStatusName !== 'Converted' && (
-                        <Button variant="secondary" size="sm" onClick={() => navigate(`/leads/${id}/edit`)}>Edit</Button>
+                    {lead.leadStatusName === 'Converted' && lead.convertedCustomerId && (
+                        <Button size="sm" variant="primary" style={{ background: '#059669', borderColor: '#059669' }} onClick={() => navigate(`/customers/${lead.convertedCustomerId}`)}>
+                            <UserCheck size={14} style={{ marginRight: 4 }} /> View Customer
+                        </Button>
                     )}
-                    <Button variant="danger" size="sm" onClick={deleteLead}>Delete</Button>
+                    {lead.leadStatusName !== 'Converted' && (
+                        <>
+                            <Button variant="secondary" size="sm" onClick={() => navigate(`/leads/${id}/edit`)}>Edit</Button>
+                            <Button variant="danger" size="sm" onClick={deleteLead}>Delete</Button>
+                        </>
+                    )}
                 </div>
             </div>
+
+            {/* Converted Lead Standard Banner */}
+            {lead.leadStatusName === 'Converted' && (
+                <div className="glass-panel animate-fade-in" style={{
+                    padding: '1.25rem 1.5rem',
+                    marginBottom: '1.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1rem',
+                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08))',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: 'var(--radius-lg)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '50%',
+                            background: '#10b981',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                        }}>
+                            <CheckCircle size={24} />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#059669', fontWeight: 700 }}>
+                                Converted to Customer
+                            </h3>
+                            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                                This lead was successfully converted to a Customer profile{lead.convertedAt ? ` on ${new Date(lead.convertedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}` : ''}. Historical activities and notes have been transferred.
+                            </p>
+                        </div>
+                    </div>
+                    {lead.convertedCustomerId && (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            style={{ background: '#059669', borderColor: '#059669', whiteSpace: 'nowrap' }}
+                            onClick={() => navigate(`/customers/${lead.convertedCustomerId}`)}
+                        >
+                            View Customer Profile →
+                        </Button>
+                    )}
+                </div>
+            )}
 
             {/* Lead Score & SLA Intelligence Widget */}
             {scoreBreakdown && (
@@ -492,7 +549,11 @@ export const LeadDetailScreen: React.FC = () => {
 
             {/* AI Predictive Lead Insights */}
             <div style={{ marginBottom: '1.5rem' }}>
-                <AiLeadAssistant leadId={lead.leadId} />
+                <AiLeadAssistant 
+                    leadId={lead.leadId} 
+                    leadEmail={lead.email}
+                    leadName={`${lead.firstName} ${lead.lastName}`}
+                />
             </div>
 
             {/* Next Follow-Up Banner */}
@@ -626,17 +687,16 @@ export const LeadDetailScreen: React.FC = () => {
                             <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 0.35rem 0' }}>
                                 Lead Priority
                             </h3>
-                            <select
-                                className="filter-select"
-                                style={{ width: '100%', fontSize: '0.85rem' }}
+                            <SearchableSelect
                                 value={lead.priority || 'Medium'}
-                                onChange={e => handlePriorityUpdate(e.target.value)}
-                            >
-                                <option key="p-low" value="Low">Low Priority</option>
-                                <option key="p-medium" value="Medium">Medium Priority</option>
-                                <option key="p-high" value="High">High Priority</option>
-                                <option key="p-urgent" value="Urgent">Urgent Priority</option>
-                            </select>
+                                options={[
+                                    { value: 'Low', label: 'Low Priority' },
+                                    { value: 'Medium', label: 'Medium Priority' },
+                                    { value: 'High', label: 'High Priority' },
+                                    { value: 'Urgent', label: 'Urgent Priority' }
+                                ]}
+                                onChange={val => handlePriorityUpdate(String(val))}
+                            />
                         </div>
 
                         {/* Sales Rep Quick Change */}
@@ -645,17 +705,15 @@ export const LeadDetailScreen: React.FC = () => {
                                 <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 0.35rem 0' }}>
                                     Assigned Sales Rep
                                 </h3>
-                                <select
-                                    className="filter-select"
-                                    style={{ width: '100%', fontSize: '0.85rem' }}
+                                <SearchableSelect
                                     value={lead.assignedRepId ?? ''}
-                                    onChange={e => handleRepUpdate(e.target.value)}
-                                >
-                                    <option key="rep-none" value="">Unassigned</option>
-                                    {users.map(u => (
-                                        <option key={`rep-${u.id}`} value={u.id}>{u.name}</option>
-                                    ))}
-                                </select>
+                                    options={[
+                                        { value: '', label: 'Unassigned' },
+                                        ...users.map(u => ({ value: String(u.id), label: u.name }))
+                                    ]}
+                                    onChange={val => handleRepUpdate(String(val))}
+                                    placeholder="Unassigned"
+                                />
                             </div>
                         )}
 

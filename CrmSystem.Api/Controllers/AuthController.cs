@@ -72,12 +72,15 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        var cleanEmail = request.Email?.Trim() ?? string.Empty;
+        var cleanPassword = request.Password?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(cleanEmail) || string.IsNullOrWhiteSpace(cleanPassword))
         {
             return BadRequest(new { message = "Email and password are required." });
         }
 
-        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(request.Email))
+        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(cleanEmail))
         {
             return BadRequest(new { message = "Invalid email format." });
         }
@@ -86,9 +89,9 @@ public class AuthController : ControllerBase
             .Include(i => i.Role)
             .Include(i => i.IdentityRoles)
                 .ThenInclude(ir => ir.Role)
-            .SingleOrDefaultAsync(i => i.Email == request.Email);
+            .FirstOrDefaultAsync(i => i.Email.ToLower() == cleanEmail.ToLower());
 
-        if (identity is null || !_passwordHasher.Verify(request.Password, identity.PasswordHash))
+        if (identity is null || !_passwordHasher.Verify(cleanPassword, identity.PasswordHash))
         {
             return Unauthorized(new { message = "Invalid email or password." });
         }
@@ -251,12 +254,13 @@ public class AuthController : ControllerBase
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Email))
+        var cleanEmail = request.Email?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(cleanEmail))
         {
             return BadRequest(new { message = "Email is required." });
         }
 
-        var identity = await _db.Identities.SingleOrDefaultAsync(i => i.Email == request.Email);
+        var identity = await _db.Identities.FirstOrDefaultAsync(i => i.Email.ToLower() == cleanEmail.ToLower());
         if (identity is null)
         {
             return Ok(new { message = "If that email exists, a reset link has been sent." });
@@ -276,7 +280,21 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         var resetUrl = $"http://localhost:5173/reset-password?token={rawToken}";
-        await _emailSender.SendPasswordResetAsync(identity.Email, resetUrl);
+        var targetEmail = identity.Email;
+
+        // Dispatch email sending in a non-blocking background thread for instant response
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await _emailSender.SendPasswordResetAsync(targetEmail, resetUrl, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Email Dispatch Warning] Could not deliver reset email to {targetEmail}: {ex.Message}");
+            }
+        });
 
         return Ok(new { message = "If that email exists, a reset link has been sent." });
     }
@@ -284,31 +302,40 @@ public class AuthController : ControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+        var rawToken = request.Token?.Trim() ?? string.Empty;
+        var newPass = request.NewPassword?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(rawToken) || string.IsNullOrWhiteSpace(newPass))
         {
             return BadRequest(new { message = "Token and password are required." });
         }
 
-        if (request.NewPassword.Length < 8)
+        if (newPass.Length < 8)
         {
             return BadRequest(new { message = "Password must be at least 8 characters long." });
         }
 
-        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.Token)));
+        var tokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
         var resetToken = await _db.PasswordResetTokens
             .Include(t => t.Identity)
-            .SingleOrDefaultAsync(t => t.TokenHash == tokenHash);
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
 
         if (resetToken is null || resetToken.ExpiresAt < DateTime.UtcNow)
         {
             return BadRequest(new { message = "Invalid or expired reset token." });
         }
 
-        resetToken.Identity!.PasswordHash = _passwordHasher.Hash(request.NewPassword);
+        var userToUpdate = resetToken.Identity ?? await _db.Identities.FindAsync(resetToken.IdentityId);
+        if (userToUpdate is null)
+        {
+            return BadRequest(new { message = "User account associated with this token was not found." });
+        }
+
+        userToUpdate.PasswordHash = _passwordHasher.Hash(newPass);
         _db.PasswordResetTokens.Remove(resetToken);
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = "Password reset successfully." });
+        return Ok(new { message = "Password reset successfully. You can now sign in with your new password." });
     }
 
     [Authorize]

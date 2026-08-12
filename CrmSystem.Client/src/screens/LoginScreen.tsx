@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { showToast } from '../lib/toast';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
+import { ArrowLeft } from 'lucide-react';
 import './screens.css';
 
 export const LoginScreen: React.FC = () => {
@@ -100,7 +101,7 @@ export const LoginScreen: React.FC = () => {
           <Button type="submit" fullWidth size="lg" disabled={isLoading}>
             {isLoading ? 'Signing in...' : 'Sign in'}
           </Button>
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
             <Link to="/forgot-password" className="forgot-password-link">Forgot password?</Link>
           </div>
         </form>

@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
@@ -220,12 +221,16 @@ export const LeadFormScreen: React.FC = () => {
 
                         <div className="input-wrapper">
                             <label className="input-label">Priority</label>
-                            <select className="input-field" value={form.priority} onChange={e => handleChange('priority', e.target.value)}>
-                                <option key="priority-low" value="Low">Low</option>
-                                <option key="priority-medium" value="Medium">Medium</option>
-                                <option key="priority-high" value="High">High</option>
-                                <option key="priority-urgent" value="Urgent">Urgent</option>
-                            </select>
+                            <SearchableSelect
+                                value={form.priority}
+                                options={[
+                                    { value: 'Low', label: 'Low' },
+                                    { value: 'Medium', label: 'Medium' },
+                                    { value: 'High', label: 'High' },
+                                    { value: 'Urgent', label: 'Urgent' }
+                                ]}
+                                onChange={val => handleChange('priority', String(val))}
+                            />
                         </div>
 
                         <Input 
@@ -240,17 +245,16 @@ export const LeadFormScreen: React.FC = () => {
                         {users.length > 0 && (
                             <div className="input-wrapper">
                                 <label className="input-label">Assigned Sales Rep</label>
-                                <select 
-                                    className="input-field" 
-                                    value={form.assignedRepId} 
-                                    onChange={e => handleChange('assignedRepId', e.target.value)}
+                                <SearchableSelect
+                                    value={form.assignedRepId}
+                                    options={[
+                                        { value: '', label: 'Unassigned' },
+                                        ...users.map(u => ({ value: String(u.id), label: u.name }))
+                                    ]}
+                                    onChange={val => handleChange('assignedRepId', String(val))}
                                     disabled={!isManagerOrAboveSelected}
-                                >
-                                    <option key="rep-unassigned" value="">Unassigned</option>
-                                    {users.map(u => (
-                                        <option key={`rep-${u.id}`} value={u.id}>{u.name}</option>
-                                    ))}
-                                </select>
+                                    placeholder="Unassigned"
+                                />
                             </div>
                         )}
 

@@ -3323,7 +3323,7 @@
   position: absolute;
   top: 2px;
   right: 2px;
-  background: var(--danger);
+  background: var(--error);
   color: #fff;
   font-size: 0.6rem;
   font-weight: 700;

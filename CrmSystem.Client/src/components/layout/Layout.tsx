@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { GlobalAiCopilot } from '../ai/GlobalAiCopilot';
 import './layout.css';
 
 interface LayoutProps { children: React.ReactNode; }
@@ -99,6 +100,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="content-container">{children}</div>
         </main>
       </div>
+      <GlobalAiCopilot />
     </div>
   );
 };

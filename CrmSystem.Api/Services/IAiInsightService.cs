@@ -11,6 +11,7 @@ namespace CrmSystem.Api.Services
         public string[] KeyPositiveFactors { get; set; } = new string[0];
         public string[] RiskFactors { get; set; } = new string[0];
         public string RecommendedNextAction { get; set; } = string.Empty;
+        public bool IsGeminiPowered { get; set; }
     }
 
     public class OpportunityAiPredictionDto
@@ -23,11 +24,23 @@ namespace CrmSystem.Api.Services
         public string[] Strengths { get; set; } = new string[0];
         public string[] WarningFlags { get; set; } = new string[0];
         public string SuggestedStrategy { get; set; } = string.Empty;
+        public bool IsGeminiPowered { get; set; }
+    }
+
+    public class AiStatusDto
+    {
+        public bool IsConfigured { get; set; }
+        public string Provider { get; set; } = "Google Gemini 1.5 Flash (Free Tier)";
+        public string Model { get; set; } = "gemini-1.5-flash";
+        public string FreeDailyQuota { get; set; } = "1,500 requests / day (Free)";
+        public string ActiveEngine { get; set; } = "Local Heuristic + Gemini LLM";
     }
 
     public interface IAiInsightService
     {
         Task<LeadAiAnalysisDto> AnalyzeLeadAsync(int leadId);
         Task<OpportunityAiPredictionDto> PredictOpportunityWinAsync(int opportunityId);
+        Task<string?> GenerateSalesEmailAsync(int leadId);
+        AiStatusDto GetStatus();
     }
 }

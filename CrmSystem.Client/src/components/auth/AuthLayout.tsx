@@ -1,7 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   Building2, TrendingUp, Target, Users, Zap,
-  Users2, Kanban, CalendarCheck, BarChart3, BellRing,
+  Users2, Kanban, CalendarCheck, BarChart3, BellRing, ArrowLeft
 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import '../ui/ui.css';
@@ -34,7 +35,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
         <div className="auth-left-brand">
           <div className="auth-brand-pill">
             <Building2 size={20} className="auth-brand-icon" />
-            <span>CRM Pro Platform</span>
+            <span>CRM Platform</span>
           </div>
         </div>
 
@@ -104,7 +105,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
         </div>
 
         <div className="auth-left-footer">
-          <span>© 2026 CRM Pro. All rights reserved.</span>
+          <span>© 2026 CRM. All rights reserved.</span>
         </div>
       </div>
 
@@ -113,6 +114,30 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
          ═════════════════════════════════════════════════════════════════════ */}
       <div className="auth-right-panel">
         <div className="auth-right-content">
+          {/* Back to Landing Page Navigation Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '1rem', width: '100%' }}>
+            <Link
+              to="/"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                color: '#10b981',
+                fontSize: '0.875rem',
+                fontWeight: 700,
+                textDecoration: 'none',
+                padding: '0.5rem 1.1rem',
+                borderRadius: '99px',
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.15)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ArrowLeft size={16} />
+              <span>Back </span>
+            </Link>
+          </div>
 
           {/* ── Compact Resized KPI Cards (Right Side) ── */}
           <div className="auth-compact-kpi-bar">

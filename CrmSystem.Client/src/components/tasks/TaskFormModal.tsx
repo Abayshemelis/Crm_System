@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { TaskReadDto } from './TaskListGroup';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface Lookup { id: number; name: string; }
 
@@ -249,29 +250,27 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
             <div className="form-field">
               <label>Assigned To</label>
-              <select
-                className="form-select"
+              <SearchableSelect
                 value={form.assignedToId}
-                onChange={e => setForm(f => ({ ...f, assignedToId: e.target.value }))}
-              >
-                {userOptions.map((u, index) => (
-                  <option key={u.id != null ? `user-${u.id}` : `user-${index}`} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+                options={userOptions.map((u, index) => ({
+                  value: String(u.id),
+                  label: u.name
+                }))}
+                onChange={val => setForm(f => ({ ...f, assignedToId: String(val) }))}
+              />
             </div>
 
             {isEditing && statuses.length > 0 && (
               <div className="form-field" style={{ gridColumn: '1 / -1' }}>
                 <label>Status</label>
-                <select
-                  className="form-select"
+                <SearchableSelect
                   value={form.crmTaskStatusId}
-                  onChange={e => setForm(f => ({ ...f, crmTaskStatusId: e.target.value }))}
-                >
-                  {statuses.map((s, index) => (
-                    <option key={s.id != null ? `status-${s.id}` : `status-${index}`} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                  options={statuses.map((s, index) => ({
+                    value: String(s.id),
+                    label: s.name
+                  }))}
+                  onChange={val => setForm(f => ({ ...f, crmTaskStatusId: String(val) }))}
+                />
               </div>
             )}
 
@@ -280,31 +279,35 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 {customers.length > 0 && (
                   <div className="form-field">
                     <label>Link Customer</label>
-                    <select
-                      className="form-select"
+                    <SearchableSelect
                       value={form.customerId}
-                      onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
-                    >
-                      <option key="customer-none-option" value="">None</option>
-                      {customers.map((c, index) => (
-                        <option key={c.id != null ? `customer-${c.id}` : `customer-${index}`} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: 'None' },
+                        ...customers.map((c, index) => ({
+                          value: String(c.id),
+                          label: c.name
+                        }))
+                      ]}
+                      onChange={val => setForm(f => ({ ...f, customerId: String(val) }))}
+                      placeholder="None"
+                    />
                   </div>
                 )}
                 {opportunities.length > 0 && (
                   <div className="form-field">
                     <label>Link Opportunity</label>
-                    <select
-                      className="form-select"
+                    <SearchableSelect
                       value={form.opportunityId}
-                      onChange={e => setForm(f => ({ ...f, opportunityId: e.target.value }))}
-                    >
-                      <option key="opportunity-none-option" value="">None</option>
-                      {opportunities.map((o, index) => (
-                        <option key={o.id != null ? `opportunity-${o.id}` : `opportunity-${index}`} value={o.id}>{o.name}</option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: '', label: 'None' },
+                        ...opportunities.map((o, index) => ({
+                          value: String(o.id),
+                          label: o.name
+                        }))
+                      ]}
+                      onChange={val => setForm(f => ({ ...f, opportunityId: String(val) }))}
+                      placeholder="None"
+                    />
                   </div>
                 )}
               </div>
@@ -346,16 +349,18 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
               </div>
 
               {activityMode === 'link' && activities.length > 0 && (
-                <select
-                  className="form-select"
+                <SearchableSelect
                   value={form.activityId}
-                  onChange={e => setForm(f => ({ ...f, activityId: e.target.value }))}
-                >
-                  <option key="activity-none-option" value="">Select an activity...</option>
-                  {activities.map((a, index) => (
-                    <option key={a.id != null ? `activity-${a.id}` : `activity-${index}`} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Select an activity...' },
+                    ...activities.map((a, index) => ({
+                      value: String(a.id),
+                      label: a.name
+                    }))
+                  ]}
+                  onChange={val => setForm(f => ({ ...f, activityId: String(val) }))}
+                  placeholder="Select an activity..."
+                />
               )}
 
               {activityMode === 'link' && activities.length === 0 && (
@@ -366,22 +371,21 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)', marginTop: 'var(--space-2)' }}>
                   <div className="form-field">
                     <label>Activity Type *</label>
-                    <select
-                      className="form-select"
+                    <SearchableSelect
                       value={newActivity.activityTypeId}
-                      onChange={e => {
-                        setNewActivity(a => ({ ...a, activityTypeId: e.target.value }));
+                      options={[
+                        { value: '', label: 'Select type...' },
+                        ...effectiveActivityTypes.map((at, index) => ({
+                          value: at.id != null && at.id !== undefined ? String(at.id) : String(index),
+                          label: at.name
+                        }))
+                      ]}
+                      onChange={val => {
+                        setNewActivity(a => ({ ...a, activityTypeId: String(val) }));
                         if (errors.activityTypeId) setErrors(e => ({ ...e, activityTypeId: '' }));
                       }}
-                    >
-                      <option key="activity-type-none-option" value="">Select type...</option>
-                      {effectiveActivityTypes.map((at, index) => {
-                        const idValue = at.id != null && at.id !== undefined ? String(at.id) : String(index);
-                        return (
-                          <option key={`activity-type-${idValue}`} value={idValue}>{at.name}</option>
-                        );
-                      })}
-                    </select>
+                      placeholder="Select type..."
+                    />
                     {errors.activityTypeId && <span className="form-error">{errors.activityTypeId}</span>}
                   </div>
                   <div className="form-field">

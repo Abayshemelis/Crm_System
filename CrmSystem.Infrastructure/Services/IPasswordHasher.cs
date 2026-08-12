@@ -15,6 +15,17 @@ public class BCryptPasswordHasher : IPasswordHasher
 
     public bool Verify(string plainTextPassword, string hash)
     {
-        return BCrypt.Net.BCrypt.Verify(plainTextPassword, hash);
+        if (string.IsNullOrWhiteSpace(plainTextPassword) || string.IsNullOrWhiteSpace(hash))
+        {
+            return false;
+        }
+        try
+        {
+            return BCrypt.Net.BCrypt.Verify(plainTextPassword, hash);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -86,20 +86,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path, { method: 'GET', headers: authHeaders() }),
-  post: <T>(path: string, body: unknown) =>
+  get: <T>(path: string, options?: RequestInit) => request<T>(path, { method: 'GET', headers: authHeaders(), ...options }),
+  post: <T>(path: string, body: unknown, options?: RequestInit) =>
     body instanceof FormData
-      ? request<T>(path, { method: 'POST', body })
-      : request<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }),
-  put: <T>(path: string, body: unknown) =>
+      ? request<T>(path, { method: 'POST', body, ...options })
+      : request<T>(path, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body), ...options }),
+  put: <T>(path: string, body: unknown, options?: RequestInit) =>
     body instanceof FormData
-      ? request<T>(path, { method: 'PUT', body })
-      : request<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) }),
-  patch: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE', headers: authHeaders() }),
-  upload: <T>(path: string, form: FormData) =>
-    request<T>(path, { method: 'POST', body: form }),
+      ? request<T>(path, { method: 'PUT', body, ...options })
+      : request<T>(path, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body), ...options }),
+  patch: <T>(path: string, body: unknown, options?: RequestInit) =>
+    request<T>(path, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body), ...options }),
+  delete: <T>(path: string, options?: RequestInit) => request<T>(path, { method: 'DELETE', headers: authHeaders(), ...options }),
+  upload: <T>(path: string, form: FormData, options?: RequestInit) =>
+    request<T>(path, { method: 'POST', body: form, ...options }),
 };
 
 export function resolveUrl(path: string) {

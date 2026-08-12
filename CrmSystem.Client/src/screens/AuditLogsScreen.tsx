@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../lib/toast';
 import { api } from '../lib/api';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import {
   History,
   Trash2,
@@ -394,27 +395,18 @@ export const AuditLogsScreen: React.FC = () => {
             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
               Target Entity
             </label>
-            <select
+            <SearchableSelect
               value={entityTypeName}
-              onChange={e => { setEntityTypeName(e.target.value); setPage(1); }}
-              style={{
-                width: '100%',
-                height: '36px',
-                padding: '0 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: '0.85rem'
-              }}
-            >
-              <option value="All">All Entities</option>
-              <option value="Opportunity">Pipeline Opportunity</option>
-              <option value="Lead">Lead</option>
-              <option value="Customer">Customer</option>
-              <option value="Company">Company</option>
-              <option value="Contract">Contract</option>
-            </select>
+              onChange={val => { setEntityTypeName(String(val)); setPage(1); }}
+              options={[
+                { value: 'All', label: 'All Entities' },
+                { value: 'Opportunity', label: 'Pipeline Opportunity' },
+                { value: 'Lead', label: 'Lead' },
+                { value: 'Customer', label: 'Customer' },
+                { value: 'Company', label: 'Company' },
+                { value: 'Contract', label: 'Contract' }
+              ]}
+            />
           </div>
 
           {/* Action Type Filter */}
@@ -422,28 +414,19 @@ export const AuditLogsScreen: React.FC = () => {
             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
               Action Type
             </label>
-            <select
+            <SearchableSelect
               value={auditActionTypeName}
-              onChange={e => { setAuditActionTypeName(e.target.value); setPage(1); }}
-              style={{
-                width: '100%',
-                height: '36px',
-                padding: '0 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: '0.85rem'
-              }}
-            >
-              <option value="All">All Action Types</option>
-              <option value="Delete">Delete (Deletions Only)</option>
-              <option value="Update">Update</option>
-              <option value="Create">Create</option>
-              <option value="Assign">Assign / Reassign</option>
-              <option value="Convert">Convert</option>
-              <option value="StageChange">Stage Change</option>
-            </select>
+              onChange={val => { setAuditActionTypeName(String(val)); setPage(1); }}
+              options={[
+                { value: 'All', label: 'All Action Types' },
+                { value: 'Delete', label: 'Delete (Deletions Only)' },
+                { value: 'Update', label: 'Update' },
+                { value: 'Create', label: 'Create' },
+                { value: 'Assign', label: 'Assign / Reassign' },
+                { value: 'Convert', label: 'Convert' },
+                { value: 'StageChange', label: 'Stage Change' }
+              ]}
+            />
           </div>
 
           {/* Changed By User Filter */}
@@ -451,31 +434,21 @@ export const AuditLogsScreen: React.FC = () => {
             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
               Performed By Rep / User
             </label>
-            <select
+            <SearchableSelect
               value={changedById}
-              onChange={e => { setChangedById(e.target.value); setPage(1); }}
-              style={{
-                width: '100%',
-                height: '36px',
-                padding: '0 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: '0.85rem'
-              }}
-            >
-              <option value="All">All Reps & Users</option>
-              {users.map((u, idx) => {
-                const userId = u.id ?? u.identityId;
-                if (userId == null) return null;
-                return (
-                  <option key={userId || idx} value={userId.toString()}>
-                    {u.name || 'User'} {u.email ? `(${u.email})` : ''}
-                  </option>
-                );
-              })}
-            </select>
+              onChange={val => { setChangedById(String(val)); setPage(1); }}
+              options={[
+                { value: 'All', label: 'All Reps & Users' },
+                ...users.map(u => {
+                  const userId = u.id ?? u.identityId;
+                  if (userId == null) return null;
+                  return {
+                    value: userId.toString(),
+                    label: `${u.name || 'User'} ${u.email ? `(${u.email})` : ''}`
+                  };
+                }).filter((o): o is { value: string; label: string } => o !== null)
+              ]}
+            />
           </div>
 
           {/* Reset Filters button */}

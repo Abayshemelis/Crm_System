@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../lib/toast';
 import { GoogleSignInButton } from './GoogleSignInButton';
+import { ArrowLeft } from 'lucide-react';
 
 interface AuthLoginFormProps {
   onSuccess?: () => void;
@@ -135,7 +136,7 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
           )}
         </button>
 
-        <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+        <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
           <Link to="/forgot-password" className="forgot-password-link">
             Forgot password?
           </Link>

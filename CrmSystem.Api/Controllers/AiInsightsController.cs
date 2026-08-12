@@ -19,6 +19,12 @@ namespace CrmSystem.Api.Controllers
             _aiService = aiService;
         }
 
+        [HttpGet("status")]
+        public IActionResult GetStatus()
+        {
+            return Ok(_aiService.GetStatus());
+        }
+
         [HttpPost("leads/{id}/analyze")]
         public async Task<IActionResult> AnalyzeLead(int id)
         {
@@ -26,6 +32,20 @@ namespace CrmSystem.Api.Controllers
             {
                 var result = await _aiService.AnalyzeLeadAsync(id);
                 return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("leads/{id}/generate-email")]
+        public async Task<IActionResult> GenerateSalesEmail(int id)
+        {
+            try
+            {
+                var draft = await _aiService.GenerateSalesEmailAsync(id);
+                return Ok(new { leadId = id, draft });
             }
             catch (KeyNotFoundException ex)
             {

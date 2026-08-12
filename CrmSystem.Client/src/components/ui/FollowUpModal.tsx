@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Calendar, Clock, User, Tag, FileText, X } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 import './ui.css';
 
 interface UserOption {
@@ -167,18 +168,11 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                                 Follow-Up Type *
                             </label>
-                            <select
-                                className="filter-select"
-                                style={{ width: '100%' }}
+                            <SearchableSelect
                                 value={type || 'Phone Call'}
-                                onChange={(e) => setType(e.target.value)}
-                            >
-                                {FOLLOW_UP_TYPES.map((t) => (
-                                    <option key={`type-${t}`} value={t}>
-                                        {t}
-                                    </option>
-                                ))}
-                            </select>
+                                options={FOLLOW_UP_TYPES.map(t => ({ value: t, label: t }))}
+                                onChange={val => setType(String(val))}
+                            />
                         </div>
 
                         {users && users.length > 0 && (
@@ -186,19 +180,15 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
                                     Assign To
                                 </label>
-                                <select
-                                    className="filter-select"
-                                    style={{ width: '100%' }}
+                                <SearchableSelect
                                     value={assignedToId ?? ''}
-                                    onChange={(e) => setAssignedToId(e.target.value)}
-                                >
-                                    <option key="user-default" value="">Keep current assigned rep</option>
-                                    {users.map((u, idx) => (
-                                        <option key={`user-${u.id ?? idx}`} value={u.id}>
-                                            {u.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={[
+                                        { value: '', label: 'Keep current assigned rep' },
+                                        ...users.map(u => ({ value: String(u.id), label: u.name }))
+                                    ]}
+                                    onChange={val => setAssignedToId(String(val))}
+                                    placeholder="Keep current assigned rep"
+                                />
                             </div>
                         )}
 

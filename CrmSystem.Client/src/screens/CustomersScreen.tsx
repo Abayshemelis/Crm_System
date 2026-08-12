@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Download, Building, Plus, Search, Tag, UserCheck, Users, X, Trash2 } from 'lucide-react';
+import { Download, Building, Plus, Search, Tag, UserCheck, Users, X, Trash2, Filter, RotateCcw } from 'lucide-react';
 import { Layout } from '../components/layout/Layout';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -9,6 +9,7 @@ import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { showToast } from '../lib/toast';
 import './screens.css';
 
@@ -214,22 +215,179 @@ export const CustomersScreen: React.FC = () => {
     <div className="dashboard-header animate-fade-in"><div className="dashboard-title"><h1>Customers</h1><p>{filtered.length} contacts found</p></div><Button onClick={() => navigate('/customers/new')}><Plus size={16} /> New Customer</Button></div>
     {error && <div className="error-banner">{error}</div>}
     {message && <div className="success-banner">{message}</div>}
-    <div className="filters-bar customer-filters" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
-      <div style={{ position: 'relative', flex: '1 1 230px' }}><Search size={16} className="filter-icon" /><input className="filter-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers…" /></div>
-      <select className="filter-select" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-      <select className="filter-select" value={sourceId} onChange={e => setSourceId(e.target.value)}><option value="">All sources</option>{sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-      <div style={{ minWidth: 200 }}>
-        <SearchableMultiSelect options={tags.map(t => ({ id: t.id, name: t.name }))} selectedIds={tagIds} onChange={setTagIds} placeholder="Filter tags…" />
+    {/* Ultra-Attractive Search & Filter Bar */}
+    <div className="glass-panel animate-fade-in" style={{ padding: '1.25rem 1.5rem', borderRadius: '16px', marginBottom: '1.5rem', border: '1px solid var(--border-color)', boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)' }}>
+      {/* Top Search Input Row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+        {/* Search Input Box */}
+        <div style={{ position: 'relative', flex: '1 1 280px', display: 'flex', alignItems: 'center' }}>
+          <Search size={18} style={{ position: 'absolute', left: '1rem', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            className="filter-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search customers by name, email, or company..."
+            style={{
+              paddingLeft: '2.75rem',
+              paddingRight: search ? '2.5rem' : '1rem',
+              height: '42px',
+              borderRadius: '10px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
+              fontSize: '0.9rem',
+              width: '100%',
+              transition: 'all 0.2s ease'
+            }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{
+                position: 'absolute',
+                right: '0.75rem',
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '0.2rem',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Clear search"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdowns Group */}
+        <div style={{ minWidth: 160, flex: '1 1 160px' }}>
+          <SearchableSelect
+            value={companyId}
+            options={[
+              { value: '', label: '🏢 All Companies' },
+              ...companies.map(c => ({ value: String(c.id), label: c.name }))
+            ]}
+            onChange={val => setCompanyId(String(val))}
+            placeholder="🏢 All Companies"
+          />
+        </div>
+
+        <div style={{ minWidth: 150, flex: '1 1 150px' }}>
+          <SearchableSelect
+            value={sourceId}
+            options={[
+              { value: '', label: '🎯 All Sources' },
+              ...sources.map(s => ({ value: String(s.id), label: s.name }))
+            ]}
+            onChange={val => setSourceId(String(val))}
+            placeholder="🎯 All Sources"
+          />
+        </div>
+
+        <div style={{ minWidth: 190, flex: '1 1 190px' }}>
+          <SearchableMultiSelect
+            options={tags.map(t => ({ id: t.id, name: t.name }))}
+            selectedIds={tagIds}
+            onChange={setTagIds}
+            placeholder="🏷️ Filter tags…"
+          />
+        </div>
+
+        {isManagerOrAbove && (
+          <div style={{ minWidth: 170, flex: '1 1 170px' }}>
+            <SearchableSelect
+              value={repId}
+              options={[
+                { value: '', label: '👤 All Assigned Reps' },
+                ...reps.map(r => ({ value: String(r.id), label: `${r.name}${r.role ? ` (${r.role})` : ''}` }))
+              ]}
+              onChange={val => setRepId(String(val))}
+              placeholder="👤 All Assigned Reps"
+            />
+          </div>
+        )}
+
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onApply={(s, e) => {
+            setStartDate(s);
+            setEndDate(e);
+          }}
+        />
+
+        {(Boolean(search.trim() || companyId || sourceId || tagIds.length > 0 || repId || startDate || endDate)) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setSearch('');
+              setCompanyId('');
+              setSourceId('');
+              setTagIds([]);
+              setRepId('');
+              setStartDate('');
+              setEndDate('');
+            }}
+            style={{ height: '42px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '0 0.85rem' }}
+          >
+            <RotateCcw size={14} style={{ marginRight: 4 }} /> Reset All
+          </Button>
+        )}
       </div>
-      {isManagerOrAbove && <select className="filter-select" value={repId} onChange={e => setRepId(e.target.value)}><option value="">All assigned reps</option>{reps.map((r, index) => <option key={r.id != null ? `rep-${r.id}` : `rep-${index}`} value={r.id}>{r.name}{r.role ? ` (${r.role})` : ''}</option>)}</select>}
-      <DateRangePicker
-        startDate={startDate}
-        endDate={endDate}
-        onApply={(s, e) => {
-          setStartDate(s);
-          setEndDate(e);
-        }}
-      />
+
+      {/* Active Filter Chips / Pills Bar */}
+      {(Boolean(search.trim() || companyId || sourceId || tagIds.length > 0 || repId || startDate || endDate)) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border-color)' }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Filter size={13} /> Active Filters:
+          </span>
+
+          {search.trim() && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
+              Search: "{search.trim()}"
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSearch('')} />
+            </span>
+          )}
+
+          {companyId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(16, 185, 129, 0.12)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+              Company: {companies.find(c => String(c.id) === companyId)?.name || companyId}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setCompanyId('')} />
+            </span>
+          )}
+
+          {sourceId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+              Source: {sources.find(s => String(s.id) === sourceId)?.name || sourceId}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setSourceId('')} />
+            </span>
+          )}
+
+          {repId && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(139, 92, 246, 0.12)', color: '#7c3aed', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
+              Rep: {reps.find(r => String(r.id) === repId)?.name || repId}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setRepId('')} />
+            </span>
+          )}
+
+          {tagIds.length > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(236, 72, 153, 0.12)', color: '#db2777', border: '1px solid rgba(236, 72, 153, 0.25)' }}>
+              Tags: {tagIds.map(id => tags.find(t => String(t.id) === id)?.name || id).join(', ')}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setTagIds([])} />
+            </span>
+          )}
+
+          {(startDate || endDate) && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(100, 116, 139, 0.12)', color: '#475569', border: '1px solid rgba(100, 116, 139, 0.25)' }}>
+              Date: {startDate || 'Start'} to {endDate || 'End'}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => { setStartDate(''); setEndDate(''); }} />
+            </span>
+          )}
+        </div>
+      )}
     </div>
     {selected.size > 0 && <div className="bulk-panel"><span>{selected.size} selected</span>
       <select className="filter-select" disabled={bulkLoading} value={bulkTagId} onChange={e => setBulkTagId(e.target.value)}><option value="">Add tag…</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>

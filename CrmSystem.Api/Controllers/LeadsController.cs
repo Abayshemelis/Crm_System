@@ -916,15 +916,7 @@ public class LeadsController : ControllerBase
             return BadRequest(new { message = "Lead is already converted." });
         }
 
-        if (lead.LeadStatus?.Name != "Qualified")
-        {
-            var qualifiedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "Qualified");
-            if (qualifiedStatus != null)
-            {
-                lead.LeadStatusId = qualifiedStatus.LeadStatusId;
-                lead.LeadStatus = qualifiedStatus;
-            }
-        }
+        var oldStatusName = lead.LeadStatus?.Name ?? "New";
 
         var firstName = (request.FirstName ?? lead.FirstName).Trim();
         var lastName = (request.LastName ?? lead.LastName).Trim();
@@ -1043,7 +1035,6 @@ public class LeadsController : ControllerBase
 
         // Set status to "Converted" (id=5)
         var convertedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(ls => ls.Name == "Converted");
-        var oldStatusName = lead.LeadStatus?.Name ?? "Qualified";
         lead.LeadStatusId = convertedStatus?.LeadStatusId;
         lead.ConvertedCustomerId = customer.CustomerId;
         lead.ConvertedOpportunityId = opportunityId;

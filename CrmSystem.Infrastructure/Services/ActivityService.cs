@@ -129,6 +129,47 @@ public class ActivityService : IActivityService
         };
 
         _db.Activities.Add(entity);
+
+        if (dto.LeadId.HasValue)
+        {
+            var lead = await _db.Leads
+                .Include(l => l.LeadStatus)
+                .FirstOrDefaultAsync(l => l.LeadId == dto.LeadId.Value);
+
+            if (lead != null)
+            {
+                lead.LastActivityAt = DateTime.UtcNow;
+
+                if (lead.LeadStatus != null && lead.LeadStatus.Name == "New")
+                {
+                    var contactedStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "Contacted");
+                    if (contactedStatus != null)
+                    {
+                        var oldStatusName = lead.LeadStatus.Name;
+                        lead.LeadStatusId = contactedStatus.LeadStatusId;
+
+                        var leadEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
+                        if (leadEntityType != null)
+                        {
+                            var auditActionType = await _db.AuditActionTypes.FirstOrDefaultAsync(a => a.Name == "Update");
+                            var auditLog = new AuditLog
+                            {
+                                EntityTypeId = leadEntityType.EntityTypeId,
+                                EntityId = lead.LeadId,
+                                FieldName = "LeadStatus",
+                                OldValue = oldStatusName,
+                                NewValue = "Contacted",
+                                AuditActionTypeId = auditActionType?.AuditActionTypeId ?? 1,
+                                ChangedById = createdById,
+                                ChangedAt = DateTime.UtcNow
+                            };
+                            _db.AuditLogs.Add(auditLog);
+                        }
+                    }
+                }
+            }
+        }
+
         await _db.SaveChangesAsync();
 
         // Reload with navigation properties

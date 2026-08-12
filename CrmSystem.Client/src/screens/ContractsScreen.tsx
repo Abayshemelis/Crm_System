@@ -10,6 +10,7 @@ import { showToast } from '../lib/toast';
 import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2 } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
 const ContractActionMenu: React.FC<{
@@ -829,19 +830,18 @@ export const ContractsScreen: React.FC = () => {
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   📌 Contract Status
                 </label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={editStatus}
-                  onChange={e => setEditStatus(e.target.value)}
-                  style={{ width: '100%' }}
-                >
-                  <option value="Draft">Draft</option>
-                  <option value="SentForSignature">Sent for Signature</option>
-                  <option value="Signed">Signed</option>
-                  <option value="Active">Active</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Expired">Expired</option>
-                </select>
+                  onChange={val => setEditStatus(String(val))}
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'SentForSignature', label: 'Sent for Signature' },
+                    { value: 'Signed', label: 'Signed' },
+                    { value: 'Active', label: 'Active' },
+                    { value: 'Cancelled', label: 'Cancelled' },
+                    { value: 'Expired', label: 'Expired' }
+                  ]}
+                />
               </div>
 
               {/* Linked Deal */}
@@ -850,43 +850,18 @@ export const ContractsScreen: React.FC = () => {
                   🔗 Linked Deal / Opportunity
                   <span style={{ fontWeight: 400, marginLeft: '0.4rem', color: 'var(--text-muted)' }}>(optional)</span>
                 </label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={editOpportunityId ?? 0}
-                  onChange={e => {
-                    const id = parseInt(e.target.value, 10);
+                  onChange={val => {
+                    const id = parseInt(String(val), 10);
                     setEditOpportunityId(id > 0 ? id : null);
                   }}
-                  style={{ width: '100%' }}
-                >
-                  <option value={0}>— None (no linked deal) —</option>
-                  {/* Show current deal as option even while loading */}
-                  {editingContract?.opportunityTitle && (editOpportunityId === (editingContract?.opportunityId ?? null)) && !editOpps.find(o => o.id === editOpportunityId) && (
-                    <option value={editingContract.opportunityId ?? 0}>
-                      🏷️ {editingContract.opportunityTitle} (current)
-                    </option>
-                  )}
-                  {editOpps.map(o => (
-                    <option key={o.id} value={o.id}>
-                      🏷️ {o.title}{o.customerName ? ` · 👤 ${o.customerName}` : ''}{o.companyName ? ` (${o.companyName})` : ''} · {o.stage} · ${Number(o.value).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
-                {loadingEditOpps && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                    ⏳ Loading deals…
-                  </div>
-                )}
-                {!loadingEditOpps && editOpps.length === 0 && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                    No active deals found for this customer.
-                  </div>
-                )}
-                {!loadingEditOpps && editOpps.length > 0 && (
-                  <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>
-                    ✓ {editOpps.length} deal{editOpps.length > 1 ? 's' : ''} available for linking
-                  </div>
-                )}
+                  options={[
+                    { value: 0, label: '— No deal linked —' },
+                    ...editOpps.map(o => ({ value: String(o.id), label: o.title }))
+                  ]}
+                  placeholder="— No deal linked —"
+                />
               </div>
 
               <div>
@@ -975,17 +950,15 @@ export const ContractsScreen: React.FC = () => {
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   1. Select Client *
                 </label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={newCustomerId}
-                  onChange={e => setNewCustomerId(Number(e.target.value))}
-                  style={{ width: '100%' }}
-                >
-                  <option value="0">— Choose a customer —</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={val => setNewCustomerId(Number(val))}
+                  options={[
+                    { value: 0, label: '— Choose a customer —' },
+                    ...customers.map(c => ({ value: String(c.id), label: c.name }))
+                  ]}
+                  placeholder="— Choose a customer —"
+                />
               </div>
 
               {/* Opportunity */}
@@ -994,11 +967,10 @@ export const ContractsScreen: React.FC = () => {
                   2. Linked Deal / Opportunity
                   <span style={{ fontWeight: 400, marginLeft: '0.4rem', color: 'var(--text-muted)' }}>(optional — auto-fills title &amp; value)</span>
                 </label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={newOpportunityId}
-                  onChange={e => {
-                    const selectedId = parseInt(e.target.value, 10);
+                  onChange={val => {
+                    const selectedId = parseInt(String(val), 10);
                     setNewOpportunityId(selectedId);
                     if (selectedId > 0) {
                       const found = opportunities.find(o => o.id === selectedId);
@@ -1012,21 +984,15 @@ export const ContractsScreen: React.FC = () => {
                       }
                     }
                   }}
-                  style={{ width: '100%' }}
-                >
-                  <option value={0}>
-                    {loadingOpps
-                      ? '⏳ Loading deals…'
-                      : opportunities.length === 0
-                        ? '— No deals found —'
-                        : `— Choose from ${opportunities.length} deal${opportunities.length > 1 ? 's' : ''} —`}
-                  </option>
-                  {opportunities.map(o => (
-                    <option key={o.id} value={o.id}>
-                      🏷️ {o.title}{o.customerName ? ` · 👤 ${o.customerName}` : ''}{o.companyName ? ` (${o.companyName})` : ''} · {o.stage} · ${Number(o.value).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { 
+                      value: 0, 
+                      label: loadingOpps ? '⏳ Loading deals…' : opportunities.length === 0 ? 'No deals available' : '— Select a related deal —' 
+                    },
+                    ...opportunities.map(o => ({ value: String(o.id), label: o.title }))
+                  ]}
+                  placeholder="— Select a related deal —"
+                />
                 {!loadingOpps && opportunities.length > 0 && (
                   <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>
                     ✓ {opportunities.length} deal{opportunities.length > 1 ? 's' : ''} available — select one to auto-link

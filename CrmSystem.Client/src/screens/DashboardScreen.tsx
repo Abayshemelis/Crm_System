@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { SimpleChart } from '../components/ui/SimpleChart';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Users, Building2, TrendingUp, Calendar, ArrowRight, LogIn, Shield, Target, DollarSign, X, Package, CheckCircle, Clock } from 'lucide-react';
+import { Users, Building2, TrendingUp, Calendar, ArrowRight, LogIn, Shield, Target, DollarSign, X, Package, CheckCircle, Clock, Plus, Activity, Zap, CheckCircle2, AlertTriangle, Layers, ChevronRight } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import './screens.css';
 
@@ -21,6 +21,8 @@ interface DashboardStats {
 interface FilteredDashboardStats {
     totalCustomers: number;
     totalLeads: number;
+    totalLeadsAll?: number;
+    convertedLeadsCount?: number;
     openDeals: number;
     pipelineValue: number;
     averageDealSize: number;
@@ -222,27 +224,19 @@ export const DashboardScreen: React.FC = () => {
             title: 'Total Customers',
             value: stats?.totalCustomers ?? 0,
             icon: Users,
-            color: 'var(--accent-primary)',
+            color: '#3b82f6',
             path: '/customers',
-            description: 'Active contacts in CRM'
+            description: 'Active client accounts in CRM',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Assigned contacts & clients</span>
         },
         {
             title: 'Companies',
             value: stats?.totalCompanies ?? 0,
             icon: Building2,
-            color: 'var(--success)',
+            color: '#10b981',
             path: '/companies',
-            description: 'Created / Active accounts',
-            footer: (
-                <div className="dashboard-metric-detail">
-                    <div className="dashboard-metric-footer">
-                        <span>Active: {stats?.activeCompanies ?? 0}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/companies')}>
-                        View all <ArrowRight size={14} />
-                    </Button>
-                </div>
-            )
+            description: 'Organization & B2B accounts',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Active: <strong style={{ color: '#10b981' }}>{stats?.activeCompanies ?? 0}</strong> accounts</span>
         },
         {
             title: 'Total Leads',
@@ -250,23 +244,18 @@ export const DashboardScreen: React.FC = () => {
             icon: Target,
             color: '#f59e0b',
             path: '/leads',
-            description: 'Total leads in pipeline'
+            description: 'Active prospects in pipeline',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Converted: <strong style={{ color: '#10b981' }}>{filteredStats?.convertedLeadsCount ?? 0}</strong></span>
         },
         {
             title: 'Pipeline Value',
             value: filteredStats?.pipelineValue ?? 0,
             icon: TrendingUp,
-            color: 'var(--success)',
+            color: '#8b5cf6',
             path: '/opportunities',
-            description: 'Open opportunity pipeline',
+            description: 'Forecasted opportunity revenue',
             format: 'currency' as const,
-            footer: (
-                <div className="dashboard-metric-detail">
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/opportunities')}>
-                        View opportunities <ArrowRight size={14} />
-                    </Button>
-                </div>
-            )
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Avg Deal: <strong style={{ color: '#8b5cf6' }}>{formatCurrency(filteredStats?.averageDealSize ?? 0)}</strong></span>
         },
         {
             title: 'Open Tasks',
@@ -274,17 +263,11 @@ export const DashboardScreen: React.FC = () => {
             icon: Clock,
             color: '#ec4899',
             path: '/tasks',
-            description: 'Tasks awaiting action',
+            description: 'Pending activities & follow-ups',
             footer: (
-                <div className="dashboard-metric-detail">
-                    <div className="dashboard-metric-footer">
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=overdue')}>Overdue: {filteredStats?.overdueTasksCount ?? 0}</span>
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=dueToday')}>Due today: {filteredStats?.dueTodayTasksCount ?? 0}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/tasks')}>
-                        Open tasks <ArrowRight size={14} />
-                    </Button>
-                </div>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Overdue: <strong style={{ color: '#ef4444' }}>{filteredStats?.overdueTasksCount ?? 0}</strong> · Today: <strong style={{ color: '#f59e0b' }}>{filteredStats?.dueTodayTasksCount ?? 0}</strong>
+                </span>
             )
         }
     ];
@@ -295,27 +278,19 @@ export const DashboardScreen: React.FC = () => {
             title: 'Total Customers',
             value: stats?.totalCustomers ?? 0,
             icon: Users,
-            color: 'var(--accent-primary)',
+            color: '#3b82f6',
             path: '/customers',
-            description: 'Active contacts in CRM'
+            description: 'Active client accounts in CRM',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Team assigned contacts</span>
         },
         {
             title: 'Companies',
             value: stats?.totalCompanies ?? 0,
             icon: Building2,
-            color: 'var(--success)',
+            color: '#10b981',
             path: '/companies',
-            description: 'Created / Active accounts',
-            footer: (
-                <div className="dashboard-metric-detail">
-                    <div className="dashboard-metric-footer">
-                        <span>Active: {stats?.activeCompanies ?? 0}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/companies')}>
-                        View all <ArrowRight size={14} />
-                    </Button>
-                </div>
-            )
+            description: 'Organization & B2B accounts',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Active: <strong style={{ color: '#10b981' }}>{stats?.activeCompanies ?? 0}</strong> accounts</span>
         },
         {
             title: 'Total Leads',
@@ -323,23 +298,18 @@ export const DashboardScreen: React.FC = () => {
             icon: Target,
             color: '#f59e0b',
             path: '/leads',
-            description: 'Total leads in pipeline'
+            description: 'Active prospects in pipeline',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Converted: <strong style={{ color: '#10b981' }}>{filteredStats?.convertedLeadsCount ?? 0}</strong></span>
         },
         {
             title: 'Pipeline Value',
             value: filteredStats?.pipelineValue ?? 0,
             icon: TrendingUp,
-            color: 'var(--success)',
+            color: '#8b5cf6',
             path: '/opportunities',
-            description: 'Open opportunity pipeline',
+            description: 'Forecasted opportunity revenue',
             format: 'currency' as const,
-            footer: (
-                <div className="dashboard-metric-detail">
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/opportunities')}>
-                        View pipeline <ArrowRight size={14} />
-                    </Button>
-                </div>
-            )
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Avg Deal: <strong style={{ color: '#8b5cf6' }}>{formatCurrency(filteredStats?.averageDealSize ?? 0)}</strong></span>
         },
         {
             title: 'Open Tasks',
@@ -347,17 +317,11 @@ export const DashboardScreen: React.FC = () => {
             icon: Clock,
             color: '#ec4899',
             path: '/tasks',
-            description: 'Tasks awaiting action',
+            description: 'Pending activities & follow-ups',
             footer: (
-                <div className="dashboard-metric-detail">
-                    <div className="dashboard-metric-footer">
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=overdue')}>Overdue: {filteredStats?.overdueTasksCount ?? 0}</span>
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=dueToday')}>Due today: {filteredStats?.dueTodayTasksCount ?? 0}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/tasks')}>
-                        Open tasks <ArrowRight size={14} />
-                    </Button>
-                </div>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Overdue: <strong style={{ color: '#ef4444' }}>{filteredStats?.overdueTasksCount ?? 0}</strong> · Today: <strong style={{ color: '#f59e0b' }}>{filteredStats?.dueTodayTasksCount ?? 0}</strong>
+                </span>
             )
         }
     ];
@@ -368,9 +332,9 @@ export const DashboardScreen: React.FC = () => {
             title: 'My Customers',
             value: filteredStats?.totalCustomers ?? 0,
             icon: Users,
-            color: 'var(--accent-primary)',
+            color: '#3b82f6',
             path: '/customers',
-            description: 'My assigned customers'
+            description: 'My assigned active customers'
         },
         {
             title: 'Total Leads',
@@ -378,23 +342,18 @@ export const DashboardScreen: React.FC = () => {
             icon: Target,
             color: '#f59e0b',
             path: '/leads',
-            description: 'My pipeline prospects'
+            description: 'My active pipeline prospects',
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Converted: <strong style={{ color: '#10b981' }}>{filteredStats?.convertedLeadsCount ?? 0}</strong></span>
         },
         {
             title: 'Pipeline Value',
             value: filteredStats?.pipelineValue ?? 0,
             icon: TrendingUp,
-            color: 'var(--success)',
+            color: '#8b5cf6',
             path: '/opportunities',
             description: 'Open opportunity pipeline',
             format: 'currency' as const,
-            footer: (
-                <div className="dashboard-metric-detail">
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/opportunities')}>
-                        View pipeline <ArrowRight size={14} />
-                    </Button>
-                </div>
-            )
+            footer: <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Avg Deal: <strong style={{ color: '#8b5cf6' }}>{formatCurrency(filteredStats?.averageDealSize ?? 0)}</strong></span>
         },
         {
             title: 'Open Tasks',
@@ -404,15 +363,9 @@ export const DashboardScreen: React.FC = () => {
             path: '/tasks',
             description: 'Tasks awaiting action',
             footer: (
-                <div className="dashboard-metric-detail">
-                    <div className="dashboard-metric-footer">
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=overdue')}>Overdue: {filteredStats?.overdueTasksCount ?? 0}</span>
-                        <span style={{ cursor: 'pointer', color: 'var(--accent-primary)' }} onClick={() => navigate('/tasks?filter=dueToday')}>Due today: {filteredStats?.dueTodayTasksCount ?? 0}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" className="stat-action" onClick={() => navigate('/tasks')}>
-                        Open tasks <ArrowRight size={14} />
-                    </Button>
-                </div>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Overdue: <strong style={{ color: '#ef4444' }}>{filteredStats?.overdueTasksCount ?? 0}</strong> · Today: <strong style={{ color: '#f59e0b' }}>{filteredStats?.dueTodayTasksCount ?? 0}</strong>
+                </span>
             )
         }
     ];
@@ -431,82 +384,151 @@ export const DashboardScreen: React.FC = () => {
 
     return (
         <Layout>
-            <div className="dashboard-header animate-fade-in">
-                <div className="dashboard-title">
-                    <h1>Dashboard</h1>
-                    <p>Welcome{user ? ' back,' : ''}{user?.name ? ` ${user.name}.` : ' to CRM Pro.'} Here's your {selectedRole === 'Admin' ? 'system' : selectedRole === 'Manager' ? 'team' : 'personal'} overview.</p>
+            {/* Hero Welcome Header & Action Bar */}
+            <div className="dashboard-header animate-fade-in" style={{
+                position: 'relative',
+                marginBottom: '1.5rem',
+                padding: '1.75rem 2rem',
+                borderRadius: '16px',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '1.25rem'
+            }}>
+                <div style={{ flex: 1, minWidth: '280px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+                        <h1 style={{ margin: 0, fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                            Executive Dashboard
+                        </h1>
+                        <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            padding: '0.2rem 0.75rem',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            background: 'rgba(59, 130, 246, 0.12)',
+                            color: '#3b82f6',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                        }}>
+                            <Zap size={13} /> {selectedRole === 'Admin' ? 'System Administrator' : selectedRole === 'Manager' ? 'Sales Manager' : 'Sales Representative'}
+                        </span>
+                    </div>
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem', lineHeight: 1.5 }}>
+                        Welcome back{user?.name ? `, ${user.name}` : ''}! Real-time pipeline metrics, lead activity, and deal forecasts.
+                    </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                        <input type="checkbox" checked={includeClosed} onChange={(e) => setIncludeClosed(e.target.checked)} />
-                        Include closed / Show won deals
+
+                {/* Controls */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <label style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.4rem 0.85rem',
+                        borderRadius: '8px',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        userSelect: 'none'
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={includeClosed}
+                            onChange={(e) => setIncludeClosed(e.target.checked)}
+                            style={{ accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+                        />
+                        Include Won Deals
                     </label>
                 </div>
-                {!user && (
-                    <Button onClick={() => navigate('/login')} className="login-prompt-btn">
-                        <LogIn size={16} style={{ marginRight: 6 }} />
-                        Sign In to Access Full Features
-                    </Button>
-                )}
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem' }}>
+            {/* KPI Metric Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
                 {statCards.map((card, i) => (
                     <div
                         key={card.title}
                         className="glass-panel animate-fade-in"
                         style={{ 
                             animationDelay: `${i * 0.05}s`,
-                            padding: '1.25rem',
+                            padding: '1.35rem 1.5rem',
                             display: 'flex',
                             flexDirection: 'column',
-                            gap: '0.75rem',
-                            borderRadius: '1rem',
+                            justifyContent: 'space-between',
+                            borderRadius: '16px',
                             cursor: 'pointer',
-                            border: '1px solid rgba(148, 163, 184, 0.2)',
-                            width: '240px',
-                            minWidth: '240px',
-                            transition: 'transform 0.2s, box-shadow 0.2s',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)'
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border-color)',
+                            borderTop: `3px solid ${card.color}`,
+                            transition: 'all 0.2s ease-in-out',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)'
                         }}
                         onClick={() => handleStatCardAction(card)}
                         onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-2px)';
-                            e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                            e.currentTarget.style.transform = 'translateY(-3px)';
+                            e.currentTarget.style.boxShadow = '0 12px 24px -4px rgba(0, 0, 0, 0.08)';
                         }}
                         onMouseLeave={(e) => {
                             e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.03)';
                         }}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
                             <div style={{ 
-                                background: `color-mix(in srgb, ${card.color} 15%, transparent)`,
+                                background: `color-mix(in srgb, ${card.color} 14%, transparent)`,
                                 color: card.color,
-                                padding: '0.75rem',
-                                borderRadius: '0.75rem',
+                                width: '42px',
+                                height: '42px',
+                                borderRadius: '10px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                justifyContent: 'center'
+                                justifyContent: 'center',
+                                border: `1px solid color-mix(in srgb, ${card.color} 30%, transparent)`
                             }}>
-                                {React.createElement(card.icon, { size: 24 })}
+                                {React.createElement(card.icon, { size: 22 })}
                             </div>
-                            <div style={{ color: 'var(--text-muted)' }}>
-                                <ArrowRight size={16} />
-                            </div>
+                            <span style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                color: 'var(--text-muted)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                background: 'var(--bg-secondary)',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '12px',
+                                border: '1px solid var(--border-color)'
+                            }}>
+                                View <ChevronRight size={13} />
+                            </span>
                         </div>
 
-                        <div style={{ marginTop: '0.25rem' }}>
-                            <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+                        <div>
+                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
                                 {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
                             </div>
-                            <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
                                 {card.title}
                             </div>
-                            <div style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', marginTop: '0.25rem', fontWeight: '500' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 500 }}>
                                 {card.description}
                             </div>
                         </div>
+
+                        {card.footer && (
+                            <div style={{ marginTop: '0.75rem', paddingTop: '0.6rem', borderTop: '1px dashed var(--border-color)' }}>
+                                {card.footer}
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
@@ -770,20 +792,51 @@ export const DashboardScreen: React.FC = () => {
                             </p>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Metric Value</span>
-                                    <span style={{ fontSize: '1rem', fontWeight: 700, color: selectedKpiCard.color }}>
-                                        {isLoading ? '—' : selectedKpiCard.format === 'currency' ? formatCurrency(selectedKpiCard.value) : selectedKpiCard.format === 'percentage' ? formatPercentage(selectedKpiCard.value) : selectedKpiCard.value}
-                                    </span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</span>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)' }}>Active Sync</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Data Scope</span>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{selectedRole === 'SalesRep' ? 'Assigned' : 'Organization'}</span>
-                                </div>
+                                {selectedKpiCard.title === 'Total Leads' ? (
+                                    <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active Prospects</span>
+                                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>
+                                                {filteredStats?.totalLeads ?? stats?.activeLeads ?? 0}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Converted to Customers</span>
+                                            <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#10b981' }}>
+                                                {filteredStats?.convertedLeadsCount ?? 0}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Historical Portfolio</span>
+                                            <span style={{ fontSize: '0.92rem', fontWeight: 600 }}>
+                                                {filteredStats?.totalLeadsAll ?? ((filteredStats?.totalLeads ?? 0) + (filteredStats?.convertedLeadsCount ?? 0))}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Conversion Rate</span>
+                                            <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#3b82f6' }}>
+                                                {filteredStats?.conversionRate ? formatPercentage(filteredStats.conversionRate) : '0.0%'}
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Metric Value</span>
+                                            <span style={{ fontSize: '1rem', fontWeight: 700, color: selectedKpiCard.color }}>
+                                                {isLoading ? '—' : selectedKpiCard.format === 'currency' ? formatCurrency(selectedKpiCard.value) : selectedKpiCard.format === 'percentage' ? formatPercentage(selectedKpiCard.value) : selectedKpiCard.value}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</span>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)' }}>Active Sync</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Data Scope</span>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{selectedRole === 'SalesRep' ? 'Assigned' : 'Organization'}</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 

@@ -337,6 +337,8 @@ public class ContactRequestDto
         {
             totalCustomers,
             totalLeads,
+            totalLeadsAll,
+            convertedLeadsCount,
             openDeals,
             pipelineValue,
             averageDealSize,

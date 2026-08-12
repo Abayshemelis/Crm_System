@@ -27,7 +27,6 @@ public class NotificationBackgroundService : BackgroundService
     {
         _logger.LogInformation("Notification background service started.");
 
-        // Run once at startup, then every 5 minutes
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -36,13 +35,26 @@ public class NotificationBackgroundService : BackgroundService
                 var svc = scope.ServiceProvider.GetRequiredService<INotificationService>();
                 await svc.GenerateAsync();
                 _logger.LogDebug("Notification generation pass completed.");
+
+                await Task.Delay(_interval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogInformation("Notification background service stopping gracefully.");
+                break;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during notification generation.");
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
-
-            await Task.Delay(_interval, stoppingToken);
         }
     }
 }

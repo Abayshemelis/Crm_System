@@ -8,6 +8,7 @@ import { showToast } from '../lib/toast';
 import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
 export interface InvoiceItem {
@@ -913,18 +914,15 @@ export const InvoicesScreen: React.FC = () => {
             <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Customer *</label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={newCustomerId}
-                  onChange={e => handleCustomerChange(parseInt(e.target.value, 10))}
-                  style={{ width: '100%' }}
-                  required
-                >
-                  <option value={0}>— Select Customer —</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={val => handleCustomerChange(parseInt(String(val), 10))}
+                  options={[
+                    { value: 0, label: '— Select Customer —' },
+                    ...customers.map(c => ({ value: String(c.id), label: c.name }))
+                  ]}
+                  placeholder="— Select Customer —"
+                />
               </div>
 
               {newCustomerId > 0 && (
@@ -932,19 +930,18 @@ export const InvoicesScreen: React.FC = () => {
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Link Signed Contract (optional)
                   </label>
-                  <select
-                    className="filter-select"
+                  <SearchableSelect
                     value={newContractId ?? 0}
-                    onChange={e => handleContractSelect(parseInt(e.target.value, 10))}
-                    style={{ width: '100%' }}
-                  >
-                    <option value={0}>— None (Manual Billing) —</option>
-                    {contractsList.map(c => (
-                      <option key={c.id} value={c.id}>
-                        📜 {c.number} — {c.title} (${c.value.toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={val => handleContractSelect(parseInt(String(val), 10))}
+                    options={[
+                      { value: 0, label: '— None (Manual Billing) —' },
+                      ...contractsList.map(c => ({
+                        value: String(c.id),
+                        label: `📜 ${c.number} — ${c.title} ($${c.value.toLocaleString()})`
+                      }))
+                    ]}
+                    placeholder="— None (Manual Billing) —"
+                  />
                 </div>
               )}
 
@@ -1051,17 +1048,16 @@ export const InvoicesScreen: React.FC = () => {
 
               <div>
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Payment Method</label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  style={{ width: '100%' }}
-                >
-                  <option value="Bank Transfer">Bank Transfer (ACH / Wire)</option>
-                  <option value="Credit Card">Credit Card</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Check">Check</option>
-                </select>
+                  onChange={val => setPaymentMethod(String(val))}
+                  options={[
+                    { value: 'Bank Transfer', label: 'Bank Transfer (ACH / Wire)' },
+                    { value: 'Credit Card', label: 'Credit Card' },
+                    { value: 'Cash', label: 'Cash' },
+                    { value: 'Check', label: 'Check' }
+                  ]}
+                />
               </div>
 
               <div>
@@ -1125,17 +1121,16 @@ export const InvoicesScreen: React.FC = () => {
 
               <div>
                 <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Invoice Status</label>
-                <select
-                  className="filter-select"
+                <SearchableSelect
                   value={editStatus}
-                  onChange={e => setEditStatus(e.target.value)}
-                  style={{ width: '100%' }}
-                >
-                  <option value="Draft">Draft</option>
-                  <option value="Sent">Sent</option>
-                  <option value="Overdue">Overdue</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
+                  onChange={val => setEditStatus(String(val))}
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Sent', label: 'Sent' },
+                    { value: 'Overdue', label: 'Overdue' },
+                    { value: 'Cancelled', label: 'Cancelled' }
+                  ]}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

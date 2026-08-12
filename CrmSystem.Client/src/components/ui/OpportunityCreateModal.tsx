@@ -3,6 +3,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { DatePicker } from './DatePicker';
 import { CustomerSearchSelect } from './CustomerSearchSelect';
+import { SearchableSelect } from './SearchableSelect';
 import { api } from '../../lib/api';
 import { X } from 'lucide-react';
 import '../../screens/screens.css';
@@ -194,18 +195,18 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
 
             <div>
               <label className="input-label">Stage *</label>
-              <select
-                className="input-field"
+              <SearchableSelect
                 value={stageId}
-                onChange={e => setStageId(e.target.value)}
-              >
-                <option value="">Select a stage</option>
-                {stages.map(s => (
-                  <option key={s.opportunityStageId} value={s.opportunityStageId}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                onChange={val => setStageId(String(val))}
+                options={[
+                  { value: '', label: 'Select a stage' },
+                  ...stages.map(s => ({
+                    value: String(s.opportunityStageId),
+                    label: s.name
+                  }))
+                ]}
+                placeholder="Select a stage"
+              />
               {errors.stageId && <div className="field-error">{errors.stageId}</div>}
             </div>
 
@@ -232,18 +233,18 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
 
             <div>
               <label className="input-label">Owner *</label>
-              <select
-                className="input-field"
+              <SearchableSelect
                 value={ownerId}
-                onChange={e => setOwnerId(e.target.value)}
-              >
-                <option value="">Select an owner</option>
-                {users.filter(u => u.isActive).map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+                onChange={val => setOwnerId(String(val))}
+                options={[
+                  { value: '', label: 'Select an owner' },
+                  ...users.filter(u => u.isActive).map(u => ({
+                    value: String(u.id),
+                    label: u.name
+                  }))
+                ]}
+                placeholder="Select an owner"
+              />
               {errors.ownerId && <div className="field-error">{errors.ownerId}</div>}
             </div>
           </div>
