@@ -7,6 +7,7 @@ import {
 import { Card } from '../ui/Card';
 import '../ui/ui.css';
 import './auth.css';
+import '../layout/layout.css';
 
 interface AuthLayoutProps {
   title: string;
@@ -28,7 +29,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
       {/* ═════════════════════════════════════════════════════════════════════
          LEFT SIDE (50%): HIGH-QUALITY CRM ILLUSTRATION & BRANDING
          ═════════════════════════════════════════════════════════════════════ */}
-      <div className="auth-left-panel">
+      <div className="auth-left-panel" style={{ background: 'transparent' }}>
         <div className="auth-left-grid-pattern" />
 
         {/* Brand Header */}
@@ -49,32 +50,41 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
             An all-in-one CRM suite for managing companies, converting leads, tracking sales pipelines, and analyzing business growth.
           </p>
 
-          {/* CRM Dashboard Vector Visual Representation */}
-          <div className="auth-crm-illustration-card">
-            {/* Visual Header Mockup */}
+          {/* Premium CRM Visual Representation (The Animated Computer/Dashboard Mockup) */}
+          <div className="auth-crm-illustration-card" style={{ animation: 'float 6s ease-in-out infinite' }}>
             <div className="crm-mockup-header">
               <div className="crm-mockup-dots">
-                <span className="dot red" />
-                <span className="dot yellow" />
-                <span className="dot green" />
+                <div className="dot red"></div>
+                <div className="dot yellow"></div>
+                <div className="dot green"></div>
               </div>
-              <span className="crm-mockup-title">Sales Pipeline Overview</span>
-              <span className="crm-mockup-live"><span className="live-pulse" /> Live</span>
+              <div className="crm-mockup-title">Pipeline Overview</div>
+              <div className="crm-mockup-live">
+                <span className="live-pulse"></span>
+                LIVE
+              </div>
             </div>
-
-            {/* Visual Pipeline Stages */}
+            
             <div className="crm-mockup-body">
               <div className="crm-stage-column">
-                <span className="stage-name">Lead Qualification</span>
-                <div className="stage-bar bar-1"><span>$450k</span></div>
+                <span className="stage-name">Qualified</span>
+                <div className="stage-bar bar-1 animate-pulse-slow" style={{ height: '80px' }}>
+                  $45k
+                </div>
               </div>
+              
               <div className="crm-stage-column">
-                <span className="stage-name">Proposal Sent</span>
-                <div className="stage-bar bar-2"><span>$820k</span></div>
+                <span className="stage-name">Proposal</span>
+                <div className="stage-bar bar-2 animate-pulse-slow" style={{ height: '60px', animationDelay: '0.2s' }}>
+                  $28k
+                </div>
               </div>
+              
               <div className="crm-stage-column">
-                <span className="stage-name">Closed Won</span>
-                <div className="stage-bar bar-3"><span>$1.2M</span></div>
+                <span className="stage-name">Negotiation</span>
+                <div className="stage-bar bar-3 animate-pulse-slow" style={{ height: '40px', animationDelay: '0.4s' }}>
+                  $12k
+                </div>
               </div>
             </div>
           </div>
@@ -189,7 +199,6 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
             </div>
             {children}
           </Card>
-
         </div>
       </div>
     </div>

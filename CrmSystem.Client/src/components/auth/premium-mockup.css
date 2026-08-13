@@ -1,0 +1,193 @@
+/* ── Ambient Orbs ── */
+.auth-ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  animation: orb-float 10s ease-in-out infinite alternate;
+  z-index: 0;
+}
+.orb-1 { width: 300px; height: 300px; background: rgba(16, 185, 129, 0.4); top: 10%; left: 10%; animation-delay: 0s; }
+.orb-2 { width: 400px; height: 400px; background: rgba(99, 102, 241, 0.3); bottom: 10%; right: -10%; animation-delay: -3s; }
+.orb-3 { width: 250px; height: 250px; background: rgba(168, 85, 247, 0.3); top: 40%; left: 50%; animation-delay: -6s; }
+
+@keyframes orb-float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, -50px) scale(1.1); }
+}
+
+/* ── Premium Glass Dashboard Mockup ── */
+.premium-dashboard-mockup {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 500px;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  padding: 1.5rem;
+  animation: float 8s ease-in-out infinite;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ── Dashboard Header ── */
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 1rem;
+}
+
+.dash-dots {
+  display: flex;
+  gap: 6px;
+}
+.dash-dot { width: 10px; height: 10px; border-radius: 50%; }
+.dash-dot.r { background: #ef4444; }
+.dash-dot.y { background: #eab308; }
+.dash-dot.g { background: #10b981; }
+
+.dash-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.dash-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.dash-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes ping {
+  75%, 100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ── Animated SVG Chart Area ── */
+.dash-chart-area {
+  height: 180px;
+  width: 100%;
+  position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 100%);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.chart-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawLine 3s ease-out forwards, pulse-line-glow 2s infinite alternate;
+}
+
+@keyframes drawLine {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes pulse-line-glow {
+  0% { filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4)); }
+  100% { filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.8)); }
+}
+
+/* ── Floating Mini Cards ── */
+.floating-card-1, .floating-card-2 {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+}
+
+.floating-card-1 {
+  bottom: -20px;
+  left: -30px;
+  animation: float 6s ease-in-out infinite alternate;
+  animation-delay: -2s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.floating-card-2 {
+  top: 40px;
+  right: -40px;
+  animation: float 7s ease-in-out infinite alternate;
+  animation-delay: -4s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(99, 102, 241, 0.2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c084fc;
+}
+
+.card-text .title {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+.card-text .val {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Radial Progress */
+.radial-progress {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: conic-gradient(#10b981 85%, rgba(255,255,255,0.1) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.radial-progress::before {
+  content: "";
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background: #0f172a;
+  border-radius: 50%;
+}
+.radial-progress span {
+  position: relative;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #10b981;
+}

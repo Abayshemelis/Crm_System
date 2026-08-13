@@ -1,0 +1,12 @@
+{
+  "files.exclude": {
+    "**/.agents": true,
+    "**/.continue": true,
+    "**/.project": true,
+    "AGENTS.md": true,
+    "metadata.json": true,
+    "PHASE1_PLAN.md": true,
+    "ROLLING_OUT_BACKFILL.md": true,
+    "z_meta_configs": true
+  }
+}
