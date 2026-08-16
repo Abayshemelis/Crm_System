@@ -314,7 +314,8 @@ public class TaskService : ITaskService
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
             .Include(t => t.CreatedBy)
-            .Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal);
+            .Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal)
+            .Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null));
 
     private IQueryable<CrmTask> GetAllTasksQuery()
         => _db.CrmTasks
@@ -325,7 +326,8 @@ public class TaskService : ITaskService
             .Include(t => t.Activity)
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
-            .Include(t => t.CreatedBy);
+            .Include(t => t.CreatedBy)
+            .Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null));
 
     private static TaskGroupedDto GroupTasks(IEnumerable<CrmTask> tasks, DateTime now)
     {
@@ -373,6 +375,7 @@ public class TaskService : ITaskService
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
             .Include(t => t.CreatedBy)
+            .Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null))
             .FirstOrDefaultAsync(t => t.CrmTaskId == id);
 
         if (t != null)

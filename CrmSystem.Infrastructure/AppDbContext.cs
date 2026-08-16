@@ -223,6 +223,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(c => c.AssignedRepId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(c => c.CreatedBy)
+             .WithMany()
+             .HasForeignKey(c => c.CreatedById)
+             .OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(c => !c.IsDeleted);
         });
 
@@ -251,6 +255,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(c => c.AssignedRepId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(c => c.CreatedBy)
+             .WithMany()
+             .HasForeignKey(c => c.CreatedById)
+             .OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.Company)
              .WithMany()
              .HasForeignKey(c => c.CompanyId)

@@ -34,6 +34,7 @@ public record CompanySummaryDto(
     int? AssignedRepId,
     string? AssignedRepName,
     int ContactCount,
+    bool IsDeleted,
     string? CustomFieldsJson = null);
 
 public record CompanyContactDto(
@@ -59,6 +60,7 @@ public record CompanyDetailDto(
     string? AssignedRepEmail,
     decimal TotalOpenPipelineValue,
     IReadOnlyList<CompanyContactDto> Contacts,
+    bool IsDeleted,
     string? CustomFieldsJson = null);
 
 public class CompanyListQuery : PaginationQuery
@@ -67,5 +69,6 @@ public class CompanyListQuery : PaginationQuery
     public int? RepId { get; set; }
     public DateTime? CreatedFrom { get; set; }
     public DateTime? CreatedTo { get; set; }
+    public bool IncludeDeleted { get; set; }
 }
 

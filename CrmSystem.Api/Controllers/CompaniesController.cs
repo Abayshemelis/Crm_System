@@ -38,6 +38,15 @@ public class CompaniesController : ControllerBase
             .Include(c => c.AssignedRep)
             .AsQueryable();
 
+        if (query.IncludeDeleted)
+        {
+            companies = companies.IgnoreQueryFilters();
+        }
+        else
+        {
+            companies = companies.Where(c => !c.IsDeleted);
+        }
+
         if (!_currentUser.IsManagerOrAbove)
         {
             companies = companies.Where(c => c.AssignedRepId == _currentUser.UserId);
@@ -97,6 +106,7 @@ public class CompaniesController : ControllerBase
             .AsNoTracking()
             .Include(c => c.AssignedRep)
             .Include(c => c.Source)
+            .IgnoreQueryFilters()
             .SingleOrDefaultAsync(c => c.CompanyId == id);
 
         if (company is null)
@@ -157,6 +167,7 @@ public class CompaniesController : ControllerBase
             Email = request.Email?.Trim(),
             SourceId = request.SourceId,
             AssignedRepId = assignedRepId,
+            CreatedById = _currentUser.UserId.Value,
             CustomFieldsJson = request.CustomFieldsJson
         };
 
@@ -334,6 +345,30 @@ public class CompaniesController : ControllerBase
 
         // Soft delete the company
         company.IsDeleted = true;
+
+        var customers = await _db.Customers.Where(c => c.CompanyId == id).ToListAsync();
+        foreach (var customerObj in customers)
+        {
+            customerObj.IsDeleted = true;
+        }
+
+        var customerIds = customers.Select(c => c.CustomerId).ToList();
+
+        if (customerIds.Any())
+        {
+            var openTasks = await _db.CrmTasks
+                .Include(t => t.CrmTaskStatus)
+                .Where(t => t.CustomerId.HasValue && customerIds.Contains(t.CustomerId.Value) && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+                .ToListAsync();
+            _db.CrmTasks.RemoveRange(openTasks);
+
+            var openOpps = await _db.Opportunities
+                .Include(o => o.OpportunityStage)
+                .Where(o => customerIds.Contains(o.CustomerId) && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
+                .ToListAsync();
+            _db.Opportunities.RemoveRange(openOpps);
+        }
+
         await _db.SaveChangesAsync();
 
         // Log deletion audit if user info available
@@ -425,7 +460,7 @@ public class CompaniesController : ControllerBase
 
         if (requestedRepId is null)
         {
-            return (true, null);
+            return (true, _currentUser.UserId);
         }
 
         var repExists = await _db.Identities
@@ -443,6 +478,7 @@ public class CompaniesController : ControllerBase
             company.AssignedRepId,
             company.AssignedRep?.Name,
             contactCount,
+            company.IsDeleted,
             company.CustomFieldsJson);
 
     private static CompanyDetailDto ToDetailDto(
@@ -465,6 +501,7 @@ public class CompaniesController : ControllerBase
             company.AssignedRep?.Email,
             totalOpenPipelineValue,
             contacts,
+            company.IsDeleted,
             company.CustomFieldsJson);
 
     private async Task<decimal> CalculateCompanyTotalOpenPipelineAsync(int companyId)

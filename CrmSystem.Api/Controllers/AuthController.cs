@@ -366,11 +366,12 @@ public class AuthController : ControllerBase
             var defaultStage = await _db.OpportunityStages.FirstOrDefaultAsync(s => s.Name == "Qualified") ?? await _db.OpportunityStages.FirstOrDefaultAsync();
             var taskPendingStatus = await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => s.Name == "Pending") ?? await _db.CrmTaskStatuses.FirstOrDefaultAsync();
 
+            var randomSuffix = Guid.NewGuid().ToString().Substring(0, 4).ToUpper();
             var company = new Company
             {
-                Name = $"{user.Name}'s Client Corp",
+                Name = $"{user.Name}'s Client Corp ({randomSuffix})",
                 Phone = "+1 555-0199",
-                Website = "https://clientcorp.example.com",
+                Website = $"https://clientcorp-{randomSuffix.ToLower()}.example.com",
                 CreatedAt = DateTime.UtcNow
             };
             _db.Companies.Add(company);
@@ -393,9 +394,9 @@ public class AuthController : ControllerBase
             var lead = new Lead
             {
                 FirstName = "Sarah",
-                LastName = "Chen",
-                CompanyName = "TechStart Innovations",
-                Email = $"sarah.chen.{(user.Name ?? "user").ToLower().Replace(" ", "")}@example.com",
+                LastName = $"Chen-{randomSuffix}",
+                CompanyName = $"TechStart Innovations ({randomSuffix})",
+                Email = $"sarah.chen.{randomSuffix.ToLower()}@example.com",
                 Phone = "+1 555-0188",
                 JobTitle = "Chief Technology Officer",
                 AssignedRepId = user.IdentityId,
@@ -409,7 +410,7 @@ public class AuthController : ControllerBase
 
             var opportunity = new Opportunity
             {
-                Title = $"{user.Name}'s Enterprise Opportunity",
+                Title = $"{user.Name}'s Enterprise Opportunity ({randomSuffix})",
                 Description = "Onboarding deal for CRM deployment & team training.",
                 CustomerId = customer.CustomerId,
                 OwnerId = user.IdentityId,

@@ -50,6 +50,7 @@ public record CustomerSummaryDto(
     int AssignedRepId,
     string AssignedRepName,
     DateTime CreatedAt,
+    bool IsDeleted,
     IReadOnlyList<CustomerTagDto> Tags,
     string? CustomFieldsJson = null);
 
@@ -68,6 +69,7 @@ public record CustomerDetailDto(
     string AssignedRepName,
     string AssignedRepEmail,
     DateTime CreatedAt,
+    bool IsDeleted,
     IReadOnlyList<CustomerTagDto> Tags,
     string? CustomFieldsJson = null);
 
@@ -113,5 +115,6 @@ public class CustomerListQuery : PaginationQuery
     public List<int>? TagIds { get; set; }
     public DateTime? CreatedFrom { get; set; }
     public DateTime? CreatedTo { get; set; }
+    public bool IncludeDeleted { get; set; }
 }
 

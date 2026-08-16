@@ -320,41 +320,45 @@ public class UsersController : ControllerBase
         _db.Notifications.RemoveRange(notifications);
 
         // 2. Reassign domain entity references to current Admin user to avoid FK constraint violations
-        var customers = await _db.Customers.Where(c => c.AssignedRepId == id).ToListAsync();
+        var customers = await _db.Customers.IgnoreQueryFilters().Where(c => c.AssignedRepId == id).ToListAsync();
         foreach (var c in customers) c.AssignedRepId = currentUserId;
 
-        var companies = await _db.Companies.Where(c => c.AssignedRepId == id).ToListAsync();
+        var companies = await _db.Companies.IgnoreQueryFilters().Where(c => c.AssignedRepId == id).ToListAsync();
         foreach (var c in companies) c.AssignedRepId = currentUserId;
 
-        var leads = await _db.Leads.Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id).ToListAsync();
+        var leads = await _db.Leads.IgnoreQueryFilters().Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id || l.NextFollowUpAssignedToId == id).ToListAsync();
         foreach (var l in leads)
         {
             if (l.AssignedRepId == id) l.AssignedRepId = currentUserId;
             if (l.CreatedById == id) l.CreatedById = currentUserId;
             if (l.ConvertedById == id) l.ConvertedById = currentUserId;
+            if (l.NextFollowUpAssignedToId == id) l.NextFollowUpAssignedToId = currentUserId;
         }
 
-        var opportunities = await _db.Opportunities.Where(o => o.OwnerId == id).ToListAsync();
+        var opportunities = await _db.Opportunities.IgnoreQueryFilters().Where(o => o.OwnerId == id).ToListAsync();
         foreach (var o in opportunities) o.OwnerId = currentUserId;
 
-        var tasks = await _db.CrmTasks.Where(t => t.AssignedToId == id || t.CreatedById == id).ToListAsync();
+        var tasks = await _db.CrmTasks.IgnoreQueryFilters().Where(t => t.AssignedToId == id || t.CreatedById == id).ToListAsync();
         foreach (var t in tasks)
         {
             if (t.AssignedToId == id) t.AssignedToId = currentUserId;
             if (t.CreatedById == id) t.CreatedById = currentUserId;
         }
 
-        var activities = await _db.Activities.Where(a => a.CreatedById == id).ToListAsync();
+        var activities = await _db.Activities.IgnoreQueryFilters().Where(a => a.CreatedById == id).ToListAsync();
         foreach (var a in activities) a.CreatedById = currentUserId;
 
-        var auditLogs = await _db.AuditLogs.Where(a => a.ChangedById == id).ToListAsync();
+        var auditLogs = await _db.AuditLogs.IgnoreQueryFilters().Where(a => a.ChangedById == id).ToListAsync();
         foreach (var a in auditLogs) a.ChangedById = currentUserId;
 
-        var stageHistories = await _db.StageHistories.Where(s => s.ChangedById == id).ToListAsync();
+        var stageHistories = await _db.StageHistories.IgnoreQueryFilters().Where(s => s.ChangedById == id).ToListAsync();
         foreach (var s in stageHistories) s.ChangedById = currentUserId;
 
-        var attachments = await _db.Attachments.Where(a => a.UploadedById == id).ToListAsync();
+        var attachments = await _db.Attachments.IgnoreQueryFilters().Where(a => a.UploadedById == id).ToListAsync();
         foreach (var a in attachments) a.UploadedById = currentUserId;
+
+        var invoices = await _db.Invoices.IgnoreQueryFilters().Where(i => i.CreatedById == id).ToListAsync();
+        foreach (var i in invoices) i.CreatedById = currentUserId;
 
         // 3. Remove user identity record
         _db.Identities.Remove(user);

@@ -43,27 +43,27 @@ public class DashboardController : ControllerBase
 
         var openOpportunities = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost && !o.ActualCloseDate.HasValue))
+            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost && !o.ActualCloseDate.HasValue)))
             .CountAsync();
 
         var wonOpportunities = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon)
+            .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon)
             .CountAsync();
 
         var lostOpportunities = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsLost)
+            .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsLost)
             .CountAsync();
 
         var totalRevenue = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon)
+            .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon)
             .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
         var pipelineValue = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost))
+            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
             .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
         var pipelineStages = await _db.OpportunityStages
@@ -71,8 +71,8 @@ public class DashboardController : ControllerBase
             .Select(s => new
             {
                 Name = s.Name,
-                Count = _db.Opportunities.Count(o => o.OpportunityStageId == s.OpportunityStageId),
-                Value = _db.Opportunities.Where(o => o.OpportunityStageId == s.OpportunityStageId).Sum(o => (double?)o.EstimatedValue) ?? 0.0
+                Count = _db.Opportunities.Count(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId),
+                Value = _db.Opportunities.Where(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId).Sum(o => (double?)o.EstimatedValue) ?? 0.0
             })
             .ToListAsync();
 
@@ -89,10 +89,10 @@ public class DashboardController : ControllerBase
             })
             .ToListAsync();
 
-        var totalTasks = await _db.CrmTasks.CountAsync();
-        var completedTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal).CountAsync();
-        var pendingTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal).CountAsync();
-        var overdueTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate < today).CountAsync();
+        var totalTasks = await _db.CrmTasks.Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null)))).CountAsync();
+        var completedTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null)))).Where(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal).CountAsync();
+        var pendingTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null)))).Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal).CountAsync();
+        var overdueTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null)))).Where(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate < today).CountAsync();
 
         var totalClosed = wonOpportunities + lostOpportunities;
         var winRate = totalClosed > 0 ? Math.Round((double)wonOpportunities / totalClosed * 100, 1) : 94.2;
@@ -184,11 +184,11 @@ public class ContactRequestDto
         var userId = GetCurrentUserId();
         var today = DateTime.UtcNow.Date;
 
-        IQueryable<Customer> customersQuery = _db.Customers.Where(c => !c.IsDeleted);
-        IQueryable<Lead> leadsQuery = _db.Leads.Where(l => !l.IsDeleted);
-        IQueryable<Opportunity> opportunitiesQuery = _db.Opportunities;
-        IQueryable<CrmTask> tasksQuery = _db.CrmTasks;
-        IQueryable<Activity> activitiesQuery = _db.Activities;
+        IQueryable<Customer> customersQuery = _db.Customers;
+        IQueryable<Lead> leadsQuery = _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null));
+        IQueryable<Opportunity> opportunitiesQuery = _db.Opportunities.Where(o => (o.CustomerId == null || o.Customer != null));
+        IQueryable<CrmTask> tasksQuery = _db.CrmTasks.Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || (t.Lead != null && (t.Lead.ConvertedCustomerId == null || t.Lead.ConvertedCustomer != null))) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null))));
+        IQueryable<Activity> activitiesQuery = _db.Activities.Where(a => (a.CustomerId == null || a.Customer != null) && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null))) && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null))));
         IQueryable<Product> productsQuery = _db.Products;
 
         // Filter based on role (SalesReps see their assigned portfolio)

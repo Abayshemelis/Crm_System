@@ -97,6 +97,7 @@ public record LeadSummaryDto(
     string? NextFollowUpAssignedToName,
     DateTime? LastActivityAt,
     DateTime CreatedAt,
+    bool IsDeleted,
     string? CustomFieldsJson = null);
 
 public record LeadDetailDto(
@@ -129,6 +130,7 @@ public record LeadDetailDto(
     string? NextFollowUpAssignedToName,
     DateTime? LastActivityAt,
     DateTime CreatedAt,
+    bool IsDeleted,
     string? CustomFieldsJson = null);
 
 public record ConvertLeadResponse(
@@ -153,6 +155,7 @@ public class LeadListQuery : PaginationQuery
     public DateTime? CreatedTo { get; set; }
     public DateTime? LastActivityFrom { get; set; }
     public DateTime? LastActivityTo { get; set; }
+    public bool IncludeDeleted { get; set; }
 }
 
 

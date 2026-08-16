@@ -39,12 +39,20 @@ public class LeadsController : ControllerBase
 
         var leads = _db.Leads
             .AsNoTracking()
-            .Where(l => !l.IsDeleted)
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
             .Include(l => l.NextFollowUpAssignedTo)
             .AsQueryable();
+
+        if (query.IncludeDeleted)
+        {
+            leads = leads.IgnoreQueryFilters();
+        }
+        else
+        {
+            leads = leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null));
+        }
 
         if (!_currentUser.IsManagerOrAbove)
         {
@@ -173,6 +181,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
             .Include(l => l.NextFollowUpAssignedTo)
+            .IgnoreQueryFilters()
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
 
@@ -1114,6 +1123,13 @@ public class LeadsController : ControllerBase
         }
 
         lead.IsDeleted = true;
+
+        var openTasks = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Where(t => t.LeadId == id && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .ToListAsync();
+        _db.CrmTasks.RemoveRange(openTasks);
+
         await _db.SaveChangesAsync();
 
         // Log deletion audit
@@ -1173,6 +1189,7 @@ public class LeadsController : ControllerBase
             lead.NextFollowUpAssignedTo?.Name,
             lead.LastActivityAt,
             lead.CreatedAt,
+            lead.IsDeleted,
             lead.CustomFieldsJson);
 
     private static LeadDetailDto ToDetailDto(Lead lead) =>
@@ -1206,5 +1223,6 @@ public class LeadsController : ControllerBase
             lead.NextFollowUpAssignedTo?.Name,
             lead.LastActivityAt,
             lead.CreatedAt,
+            lead.IsDeleted,
             lead.CustomFieldsJson);
 }

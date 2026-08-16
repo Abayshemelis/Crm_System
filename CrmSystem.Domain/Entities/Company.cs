@@ -23,4 +23,6 @@ public class Company
     public bool IsDeleted { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? CustomFieldsJson { get; set; }
+    public int? CreatedById { get; set; }
+    public Identity? CreatedBy { get; set; }
 }

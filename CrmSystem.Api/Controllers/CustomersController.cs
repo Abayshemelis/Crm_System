@@ -43,6 +43,15 @@ public class CustomersController : ControllerBase
             .Include(c => c.Tags)
             .AsQueryable();
 
+        if (query.IncludeDeleted)
+        {
+            customers = customers.IgnoreQueryFilters();
+        }
+        else
+        {
+            customers = customers.Where(c => !c.IsDeleted);
+        }
+
         if (!_currentUser.IsManagerOrAbove)
         {
             customers = customers.Where(c => c.AssignedRepId == _currentUser.UserId);
@@ -112,6 +121,7 @@ public class CustomersController : ControllerBase
             .Include(c => c.AssignedRep)
             .Include(c => c.Source)
             .Include(c => c.Tags)
+            .IgnoreQueryFilters()
             .SingleOrDefaultAsync(c => c.CustomerId == id);
 
         if (customer is null)
@@ -163,6 +173,7 @@ public class CustomersController : ControllerBase
             CompanyId = request.CompanyId,
             SourceId = request.SourceId,
             AssignedRepId = assignedRepId.Value,
+            CreatedById = _currentUser.UserId.Value,
             CreatedAt = DateTime.UtcNow,
             CustomFieldsJson = request.CustomFieldsJson
         };
@@ -386,6 +397,19 @@ public class CustomersController : ControllerBase
         }
 
         customer.IsDeleted = true;
+
+        var openTasks = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Where(t => t.CustomerId == id && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .ToListAsync();
+        _db.CrmTasks.RemoveRange(openTasks);
+
+        var openOpps = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.CustomerId == id && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
+            .ToListAsync();
+        _db.Opportunities.RemoveRange(openOpps);
+
         await _db.SaveChangesAsync();
 
         // Log deletion audit
@@ -724,6 +748,7 @@ public class CustomersController : ControllerBase
             customer.AssignedRepId,
             customer.AssignedRep?.Name ?? string.Empty,
             customer.CreatedAt,
+            customer.IsDeleted,
             ToTagDtos(customer),
             customer.CustomFieldsJson);
 
@@ -743,6 +768,7 @@ public class CustomersController : ControllerBase
             customer.AssignedRep?.Name ?? string.Empty,
             customer.AssignedRep?.Email ?? string.Empty,
             customer.CreatedAt,
+            customer.IsDeleted,
             ToTagDtos(customer),
             customer.CustomFieldsJson);
 
