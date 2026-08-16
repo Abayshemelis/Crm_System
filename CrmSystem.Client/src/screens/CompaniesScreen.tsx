@@ -40,6 +40,8 @@ interface CompanyApiResponse {
   ContactCount?: number;
   createdAt?: string;
   CreatedAt?: string;
+  isDeleted?: boolean;
+  IsDeleted?: boolean;
 }
 interface CompanyApiEnvelope {
   data?: CompanyApiResponse[];
@@ -60,6 +62,7 @@ interface Company {
   assignedRepName?: string;
   contactCount?: number;
   createdAt?: string;
+  isDeleted?: boolean;
 }
 
 export const CompaniesScreen: React.FC = () => {
@@ -68,6 +71,7 @@ export const CompaniesScreen: React.FC = () => {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -81,6 +85,7 @@ export const CompaniesScreen: React.FC = () => {
       const queryParams = new URLSearchParams({ page: '1', pageSize: '100' });
       if (sDate) queryParams.append('createdFrom', sDate);
       if (eDate) queryParams.append('createdTo', eDate);
+      if (includeDeleted) queryParams.append('includeDeleted', 'true');
       
       const res = await api.get<CompanyApiEnvelope | CompanyApiResponse[]>(`/api/companies?${queryParams.toString()}`);
       
@@ -107,7 +112,8 @@ export const CompaniesScreen: React.FC = () => {
         assignedRepId: c.assignedRepId ?? c.AssignedRepId,
         assignedRepName: c.assignedRepName ?? c.AssignedRepName,
         contactCount: c.contactCount ?? c.ContactCount ?? 0,
-        createdAt: c.createdAt ?? c.CreatedAt
+        createdAt: c.createdAt ?? c.CreatedAt,
+        isDeleted: c.isDeleted ?? c.IsDeleted ?? false
       })).filter(c => c.companyId > 0);
 
       setCompanies(mappedList);
@@ -117,7 +123,7 @@ export const CompaniesScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeDeleted]);
 
   useEffect(() => {
     loadData(startDate, endDate);
@@ -234,6 +240,20 @@ export const CompaniesScreen: React.FC = () => {
             setEndDate(e);
           }}
         />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0 1rem', height: '42px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+          <input
+            type="checkbox"
+            id="includeDeleted"
+            checked={includeDeleted}
+            onChange={e => setIncludeDeleted(e.target.checked)}
+            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+          />
+          <label htmlFor="includeDeleted" style={{ fontSize: '0.9rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>
+            Show Deleted
+          </label>
+        </div>
+
         {/* View Switcher Toggle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)', marginLeft: 'auto' }}>
           <button
@@ -279,7 +299,7 @@ export const CompaniesScreen: React.FC = () => {
                   <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                       <div className="company-avatar" style={{ width: 28, height: 28, fontSize: '0.75rem' }}>{c.name[0]}</div>
-                      <span>{c.name}</span>
+                      <span>{c.name} {c.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>Deleted</span>}</span>
                     </div>
                   </td>
                   <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
@@ -304,7 +324,7 @@ export const CompaniesScreen: React.FC = () => {
                       <Button size="sm" variant="ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem' }} onClick={() => navigate(`/companies/${c.companyId}`)}>
                         <Eye size={13} style={{ marginRight: 4 }} /> View
                       </Button>
-                      <Button size="sm" variant="ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: '#ef4444' }} onClick={(e) => handleDeleteCompany(e, c.companyId, c.name)}>
+                      <Button size="sm" variant="ghost" disabled={c.isDeleted} style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', color: '#ef4444' }} onClick={(e) => handleDeleteCompany(e, c.companyId, c.name)}>
                         <Trash2 size={13} />
                       </Button>
                     </div>
@@ -327,7 +347,10 @@ export const CompaniesScreen: React.FC = () => {
                 <div className="customer-header">
                   <div className="company-avatar">{c.name[0]}</div>
                   <div className="customer-info" style={{ minWidth: 0 }}>
-                    <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</h3>
+                    <h3 style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.name}
+                      {c.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600, verticalAlign: 'middle' }}>Deleted</span>}
+                    </h3>
                     <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', margin: '0.15rem 0 0 0' }}>
                       <Briefcase size={13} style={{ flexShrink: 0 }} />
                       <span className="truncate">{c.industry || 'No industry set'}</span>
@@ -335,7 +358,8 @@ export const CompaniesScreen: React.FC = () => {
                   </div>
                   <button
                     onClick={(e) => handleDeleteCompany(e, c.companyId, c.name)}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4, borderRadius: 4 }}
+                    disabled={c.isDeleted}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: c.isDeleted ? 'default' : 'pointer', padding: 4, borderRadius: 4, opacity: c.isDeleted ? 0.3 : 1 }}
                     title="Delete company"
                   >
                     <Trash2 size={15} />

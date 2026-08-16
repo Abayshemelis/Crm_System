@@ -207,6 +207,7 @@ export const TasksScreen: React.FC = () => {
               completed={completedTasks}
               onTaskComplete={handleTaskComplete}
               onTaskClick={handleTaskClick}
+              onTaskDelete={handleTaskDeleted}
             />
           ) : (
             <CalendarGrid

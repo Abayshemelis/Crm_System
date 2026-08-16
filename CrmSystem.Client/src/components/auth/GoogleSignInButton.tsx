@@ -37,7 +37,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   const isPlaceholderClientId =
     !import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-    clientId.includes('967324541475-42i56cgec51soo7ris7jjddirn4rp371');
+    clientId.includes('placeholder');
 
   const processGoogleCredential = async (idToken: string) => {
     setIsLoading(true);

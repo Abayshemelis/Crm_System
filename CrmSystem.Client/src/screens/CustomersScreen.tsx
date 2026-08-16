@@ -30,6 +30,7 @@ interface CustomerApiResponse {
   assignedRepName: string;
   assignedRepEmail?: string;
   createdAt: string;
+  isDeleted: boolean;
   tags: { tagId: number; name: string }[];
 }
 interface Customer {
@@ -47,6 +48,7 @@ interface Customer {
   assignedRepName: string;
   assignedRepEmail?: string;
   createdAt: string;
+  isDeleted: boolean;
   tags: { tagId: number; name: string }[];
 }
 
@@ -75,6 +77,7 @@ export const CustomersScreen: React.FC = () => {
   const [bulkRepId, setBulkRepId] = useState('');
   const [bulkCompanyId, setBulkCompanyId] = useState('');
   const [repRoleFilter, setRepRoleFilter] = useState('All');
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,8 +88,9 @@ export const CustomersScreen: React.FC = () => {
     try {
       const dateFromParam = startDate ? `&createdFrom=${startDate}` : '';
       const dateToParam = endDate ? `&createdTo=${endDate}` : '';
+      const includeDeletedParam = includeDeleted ? '&includeDeleted=true' : '';
       const [customerData, companyData, sourceData, tagData, userData] = await Promise.all([
-        api.get<{ data: CustomerApiResponse[] }>(`/api/customers?page=1&pageSize=100${dateFromParam}${dateToParam}`),
+        api.get<{ data: CustomerApiResponse[] }>(`/api/customers?page=1&pageSize=100${dateFromParam}${dateToParam}${includeDeletedParam}`),
         api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100'),
         api.get<{ id: number; name: string }[]>('/api/sources'),
         api.get<TagItem[]>('/api/tags'),
@@ -107,6 +111,7 @@ export const CustomersScreen: React.FC = () => {
         assignedRepName: customer.assignedRepName,
         assignedRepEmail: customer.assignedRepEmail,
         createdAt: customer.createdAt,
+        isDeleted: customer.isDeleted,
         tags: (customer.tags ?? []).map(tag => ({ tagId: tag.tagId, name: tag.name })),
       })));
       setCompanies((companyData.data ?? []).map(c => ({ id: c.companyId, name: c.name })));
@@ -118,7 +123,7 @@ export const CustomersScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [isManagerOrAbove, startDate, endDate]);
+  }, [isManagerOrAbove, startDate, endDate, includeDeleted]);
 
   useEffect(() => { load(); }, [load, location.key]);
 
@@ -318,6 +323,19 @@ export const CustomersScreen: React.FC = () => {
           }}
         />
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0 1rem', height: '42px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+          <input
+            type="checkbox"
+            id="includeDeleted"
+            checked={includeDeleted}
+            onChange={e => setIncludeDeleted(e.target.checked)}
+            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+          />
+          <label htmlFor="includeDeleted" style={{ fontSize: '0.9rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>
+            Show Deleted
+          </label>
+        </div>
+
         {(Boolean(search.trim() || companyId || sourceId || tagIds.length > 0 || repId || startDate || endDate)) && (
           <Button
             size="sm"
@@ -339,7 +357,7 @@ export const CustomersScreen: React.FC = () => {
       </div>
 
       {/* Active Filter Chips / Pills Bar */}
-      {(Boolean(search.trim() || companyId || sourceId || tagIds.length > 0 || repId || startDate || endDate)) && (
+      {(Boolean(search.trim() || companyId || sourceId || tagIds.length > 0 || repId || startDate || endDate || includeDeleted)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px dashed var(--border-color)' }}>
           <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Filter size={13} /> Active Filters:
@@ -386,6 +404,13 @@ export const CustomersScreen: React.FC = () => {
               <X size={12} style={{ cursor: 'pointer' }} onClick={() => { setStartDate(''); setEndDate(''); }} />
             </span>
           )}
+          
+          {includeDeleted && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.2rem 0.65rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+              Show Deleted
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => setIncludeDeleted(false)} />
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -410,6 +435,6 @@ export const CustomersScreen: React.FC = () => {
       <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} /></Button>
     </div>}
     {filtered.length === 0 && !error ? <EmptyState title="No customers found" description="Adjust your filters or create a new customer." icon={Users} actionText="New Customer" onActionClick={() => navigate('/customers/new')} /> :
-      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Job Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)}><td onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName}</td><td>{customer.jobTitle ?? '—'}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
+      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Job Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)} style={customer.isDeleted ? { opacity: 0.6, background: 'var(--bg-secondary)' } : {}}><td onClick={e => e.stopPropagation()}><input type="checkbox" disabled={customer.isDeleted} checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName} {customer.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>Deleted</span>}</td><td>{customer.jobTitle ?? '—'}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
   </Layout>;
 };

@@ -38,6 +38,7 @@ interface LeadSummary {
     nextFollowUpAssignedToName?: string;
     lastActivityAt?: string;
     createdAt: string;
+    isDeleted?: boolean;
 }
 
 export const LeadsScreen: React.FC = () => {
@@ -59,6 +60,7 @@ export const LeadsScreen: React.FC = () => {
     const [selectedRepId, setSelectedRepId] = useState<string>('');
     const [selectedSourceId, setSelectedSourceId] = useState<string>('');
     const [showConverted, setShowConverted] = useState(false);
+    const [includeDeleted, setIncludeDeleted] = useState(false);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
 
@@ -106,6 +108,7 @@ export const LeadsScreen: React.FC = () => {
             if (selectedRepId) params.append('repId', selectedRepId);
             if (selectedSourceId) params.append('sourceId', selectedSourceId);
             if (showConverted) params.append('showConverted', 'true');
+            if (includeDeleted) params.append('includeDeleted', 'true');
             if (startDate) params.append('createdFrom', startDate);
             if (endDate) params.append('createdTo', endDate);
 
@@ -117,7 +120,7 @@ export const LeadsScreen: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [search, selectedStatusId, selectedPriority, selectedRating, selectedFollowUpFilter, selectedRepId, selectedSourceId, showConverted, startDate, endDate]);
+    }, [search, selectedStatusId, selectedPriority, selectedRating, selectedFollowUpFilter, selectedRepId, selectedSourceId, showConverted, includeDeleted, startDate, endDate]);
 
     useEffect(() => {
         loadLeads();
@@ -421,6 +424,19 @@ export const LeadsScreen: React.FC = () => {
                     Include Converted
                 </label>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0 1rem', height: '42px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                    <input
+                        type="checkbox"
+                        id="includeDeleted"
+                        checked={includeDeleted}
+                        onChange={e => setIncludeDeleted(e.target.checked)}
+                        style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                    />
+                    <label htmlFor="includeDeleted" style={{ fontSize: '0.9rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        Show Deleted
+                    </label>
+                </div>
+
                 {/* Grid / Table View Mode Toggle */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)', marginLeft: 'auto' }}>
                     <button
@@ -464,11 +480,11 @@ export const LeadsScreen: React.FC = () => {
                                 return (
                                     <tr
                                         key={lead.leadId}
-                                        style={{ cursor: 'pointer', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                                        style={lead.isDeleted ? { cursor: 'pointer', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem', opacity: 0.6, background: 'var(--bg-secondary)' } : { cursor: 'pointer', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem' }}
                                         onClick={() => navigate(`/leads/${lead.leadId}`)}
                                     >
                                         <td style={{ padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                            {lead.firstName} {lead.lastName}
+                                            {lead.firstName} {lead.lastName} {lead.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>Deleted</span>}
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
                                             {lead.companyName ? `${lead.companyName} ${lead.jobTitle ? `· ${lead.jobTitle}` : ''}` : '—'}
@@ -511,6 +527,7 @@ export const LeadsScreen: React.FC = () => {
                                                 <Button
                                                     size="sm"
                                                     variant="secondary"
+                                                    disabled={lead.isDeleted}
                                                     style={{ fontSize: '0.75rem', padding: '0.25rem 0.55rem', borderColor: '#10b981', color: '#059669', background: 'rgba(16, 185, 129, 0.08)' }}
                                                     onClick={() => setConvertingLead(lead)}
                                                 >
@@ -537,7 +554,16 @@ export const LeadsScreen: React.FC = () => {
                             <Card
                                 key={lead.leadId}
                                 className="glass-panel customer-card animate-fade-in"
-                                style={{
+                                style={lead.isDeleted ? {
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    borderRadius: '14px',
+                                    border: '1px solid var(--border-color)',
+                                    transition: 'transform 0.2s, box-shadow 0.2s',
+                                    opacity: 0.6
+                                } : {
                                     cursor: 'pointer',
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -558,6 +584,7 @@ export const LeadsScreen: React.FC = () => {
                                             <div>
                                                 <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                                                     {lead.firstName} {lead.lastName}
+                                                    {lead.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600, verticalAlign: 'middle' }}>Deleted</span>}
                                                 </h3>
                                                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                                                     {lead.companyName || 'Individual Contact'} {lead.jobTitle ? `· ${lead.jobTitle}` : ''}

@@ -2468,7 +2468,7 @@
 .task-section {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: var(--space-3);
 }
 
@@ -2491,6 +2491,8 @@
   cursor: pointer;
   font-size: 0.8rem;
   color: var(--text-secondary);
+  border-top-left-radius: calc(var(--radius-md) - 1px);
+  border-top-right-radius: calc(var(--radius-md) - 1px);
 }
 
 .task-section-label {
@@ -2516,6 +2518,8 @@
   color: var(--text-primary);
   padding: 0;
   min-height: 0;
+  border-bottom-left-radius: calc(var(--radius-md) - 1px);
+  border-bottom-right-radius: calc(var(--radius-md) - 1px);
 }
 
 .task-row {
@@ -2643,7 +2647,7 @@
   border: 1px solid #333;
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 100;
+  z-index: 9999;
   min-width: 140px;
   padding: var(--space-1) 0;
 }

@@ -33,6 +33,7 @@ interface TaskListGroupProps {
   completed: TaskReadDto[];
   onTaskComplete: (id: number) => void;
   onTaskClick: (task: TaskReadDto) => void;
+  onTaskDelete: (id: number) => void;
 }
 
 function formatDue(iso?: string) {
@@ -44,18 +45,32 @@ function TaskRow({
   task,
   onComplete,
   onClick,
+  onDelete,
   overdue,
   isCompleted,
 }: {
   task: TaskReadDto;
   onComplete: (id: number) => void;
   onClick: (task: TaskReadDto) => void;
+  onDelete: (id: number) => void;
   overdue?: boolean;
   isCompleted?: boolean;
 }) {
   const navigate = useNavigate();
   const [completing, setCompleting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!showMenu) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   const handleComplete = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -95,6 +110,18 @@ function TaskRow({
     onClick(task); // Open edit modal to reschedule
   };
 
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    try {
+      await api.delete(`/api/tasks/${task.crmTaskId}`);
+      onDelete(task.crmTaskId);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete task');
+    }
+  };
+
   return (
     <div className={`task-row ${overdue ? 'task-row-overdue' : ''} ${isCompleted ? 'task-row-completed' : ''}`} onClick={() => onClick(task)}>
       {!isCompleted && !overdue && (
@@ -116,7 +143,7 @@ function TaskRow({
         </div>
       )}
       {overdue && !isCompleted && (
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={menuRef}>
           <button
             type="button"
             className="task-complete-btn"
@@ -135,6 +162,9 @@ function TaskRow({
               </button>
               <button type="button" className="task-action-item task-action-cancel" onClick={handleCancel}>
                 <X size={14} /> Cancel
+              </button>
+              <button type="button" className="task-action-item task-action-cancel" onClick={handleDelete}>
+                <Trash2 size={14} /> Delete
               </button>
             </div>
           )}
@@ -177,6 +207,7 @@ function Section({
   isCompleted,
   onComplete,
   onTaskClick,
+  onTaskDelete,
   defaultOpen = true,
 }: {
   label: string;
@@ -185,6 +216,7 @@ function Section({
   isCompleted?: boolean;
   onComplete: (id: number) => void;
   onTaskClick: (task: TaskReadDto) => void;
+  onTaskDelete: (id: number) => void;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -203,7 +235,7 @@ function Section({
       {open && (
         <div className="task-section-body">
           {tasks.map(t => (
-            <TaskRow key={t.crmTaskId} task={t} onComplete={onComplete} onClick={onTaskClick} overdue={overdue} isCompleted={isCompleted} />
+            <TaskRow key={t.crmTaskId} task={t} onComplete={onComplete} onClick={onTaskClick} onDelete={onTaskDelete} overdue={overdue} isCompleted={isCompleted} />
           ))}
         </div>
       )}
@@ -212,7 +244,7 @@ function Section({
 }
 
 export const TaskListGroup: React.FC<TaskListGroupProps> = ({
-  overdue, dueToday, upcoming, completed, onTaskComplete, onTaskClick,
+  overdue, dueToday, upcoming, completed, onTaskComplete, onTaskClick, onTaskDelete
 }) => {
   if (!overdue.length && !dueToday.length && !upcoming.length && !completed.length) {
     return (
@@ -225,10 +257,10 @@ export const TaskListGroup: React.FC<TaskListGroupProps> = ({
 
   return (
     <div className="task-list-group">
-      <Section label="Overdue" tasks={overdue} overdue onComplete={onTaskComplete} onTaskClick={onTaskClick} />
-      <Section label="Due Today" tasks={dueToday} onComplete={onTaskComplete} onTaskClick={onTaskClick} />
-      <Section label="Upcoming" tasks={upcoming} onComplete={onTaskComplete} onTaskClick={onTaskClick} />
-      <Section label="Completed" tasks={completed} isCompleted onComplete={onTaskComplete} onTaskClick={onTaskClick} defaultOpen={false} />
+      <Section label="Overdue" tasks={overdue} overdue onComplete={onTaskComplete} onTaskClick={onTaskClick} onTaskDelete={onTaskDelete} />
+      <Section label="Due Today" tasks={dueToday} onComplete={onTaskComplete} onTaskClick={onTaskClick} onTaskDelete={onTaskDelete} />
+      <Section label="Upcoming" tasks={upcoming} onComplete={onTaskComplete} onTaskClick={onTaskClick} onTaskDelete={onTaskDelete} />
+      <Section label="Completed" tasks={completed} isCompleted onComplete={onTaskComplete} onTaskClick={onTaskClick} onTaskDelete={onTaskDelete} defaultOpen={false} />
     </div>
   );
 };

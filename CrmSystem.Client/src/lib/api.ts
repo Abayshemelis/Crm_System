@@ -86,7 +86,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string, options?: RequestInit) => request<T>(path, { method: 'GET', headers: authHeaders(), ...options }),
+  get: <T>(path: string, options?: RequestInit) => request<T>(path, { method: 'GET', headers: authHeaders(), cache: 'no-store', ...options }),
   post: <T>(path: string, body: unknown, options?: RequestInit) =>
     body instanceof FormData
       ? request<T>(path, { method: 'POST', body, ...options })

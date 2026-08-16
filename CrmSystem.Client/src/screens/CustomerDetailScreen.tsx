@@ -13,6 +13,7 @@ import Attachments from '../components/attachments/Attachments';
 import { TimelineList } from '../components/activities/TimelineList';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
 
@@ -89,6 +90,7 @@ export const CustomerDetailScreen: React.FC = () => {
   const [taskStatuses, setTaskStatuses] = useState<any[]>([]);
   const [users, setUsers] = useState<Lookup[]>([]);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
   const [allActivities, setAllActivities] = useState<any[]>([]);
 
@@ -335,11 +337,7 @@ export const CustomerDetailScreen: React.FC = () => {
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <Button onClick={() => setIsOpportunityModalOpen(true)} size="sm">New Opportunity</Button>
           <Button onClick={() => navigate(`/customers/${customer.customerId}/edit`)} size="sm">Edit</Button>
-          <Button variant="danger" size="sm" onClick={async () => {
-            if (!window.confirm('Delete this customer?')) return;
-            await api.delete(`/api/customers/${customer.customerId}`);
-            navigate('/customers');
-          }}>Delete</Button>
+          <Button variant="danger" size="sm" onClick={() => setIsDeleteModalOpen(true)}>Delete</Button>
         </div>
       </div>
 
@@ -539,6 +537,7 @@ export const CustomerDetailScreen: React.FC = () => {
                     completed={groupedTasks.completed}
                     onTaskComplete={handleTaskComplete}
                     onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
+                    onTaskDelete={fetchAll}
                   />
                 </div>
               )}
@@ -579,6 +578,20 @@ export const CustomerDetailScreen: React.FC = () => {
           onClose={() => { setShowTaskModal(false); setEditTask(null); }}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={isDeleteModalOpen}
+        title="Delete Customer"
+        message="Are you sure you want to delete this customer?"
+        confirmText="Delete"
+        onConfirm={async () => {
+          setIsDeleteModalOpen(false);
+          await api.delete(`/api/customers/${customer.customerId}`);
+          navigate('/customers');
+        }}
+        onCancel={() => setIsDeleteModalOpen(false)}
+      />
+
     </Layout>
   );
 };

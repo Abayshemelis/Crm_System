@@ -180,6 +180,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('refreshToken');
     setToken(null);
     setUser(null);
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.disableAutoSelect();
+    }
   };
 
   const primaryRole = user?.roles.includes('Admin')
