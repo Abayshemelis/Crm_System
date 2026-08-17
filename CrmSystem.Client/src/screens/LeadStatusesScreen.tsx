@@ -7,6 +7,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 export const LeadStatusesScreen: React.FC = () => {
   const { isManagerOrAbove } = useAuth();
@@ -54,7 +55,7 @@ export const LeadStatusesScreen: React.FC = () => {
   };
 
   const handleDeleteStatus = async (id: number) => {
-    if (!window.confirm('Delete this status?')) return;
+    if (!await confirmAction('Delete this status?')) return;
     try {
       await api.delete(`/api/leadstatuses/${id}`);
       setLeadStatuses(leadStatuses.filter(s => s.id !== id));

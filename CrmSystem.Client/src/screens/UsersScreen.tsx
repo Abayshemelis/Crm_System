@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../lib/toast';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 interface UserItem {
   id: number;
@@ -137,7 +138,7 @@ export const UsersScreen: React.FC = () => {
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!window.confirm('Are you sure you want to delete this user? All associated records will be reassigned.')) return;
+    if (!await confirmAction('Are you sure you want to delete this user? All associated records will be reassigned.')) return;
     try {
       await api.delete(`/api/users/${userId}`);
       await loadUsers();

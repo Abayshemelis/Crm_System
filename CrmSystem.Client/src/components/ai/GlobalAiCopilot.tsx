@@ -10,6 +10,7 @@ import {
   Settings, ShieldCheck, Sliders, Search, ChevronDown, ChevronUp
 } from 'lucide-react';
 import './copilot.css';
+import { confirmAction } from '../../lib/confirm';
 
 export interface GlobalFileAttachment {
   fileName: string;
@@ -255,8 +256,8 @@ export const GlobalAiCopilot: React.FC = () => {
     }
   };
 
-  const handleClearAllHistory = () => {
-    if (window.confirm('Clear all AI Copilot history?')) {
+  const handleClearAllHistory = async () => {
+    if (await confirmAction('Clear all AI Copilot history?')) {
       const fresh = createDefaultSession(activeContext.label);
       setSessions([fresh]);
       setActiveSessionId(fresh.id);

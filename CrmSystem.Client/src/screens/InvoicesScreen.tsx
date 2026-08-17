@@ -10,6 +10,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 export interface InvoiceItem {
   invoiceId: number;
@@ -418,7 +419,7 @@ export const InvoicesScreen: React.FC = () => {
   };
 
   const handleDeleteInvoice = async (inv: InvoiceItem) => {
-    if (!window.confirm(`Are you sure you want to delete invoice ${inv.invoiceNumber}? This action cannot be undone.`)) {
+    if (!await confirmAction(`Are you sure you want to delete invoice ${inv.invoiceNumber}? This action cannot be undone.`)) {
       return;
     }
     try {

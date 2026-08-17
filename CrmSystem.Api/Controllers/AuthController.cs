@@ -171,7 +171,7 @@ public class AuthController : ControllerBase
                 _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
                 await _db.SaveChangesAsync();
 
-                await SeedSampleDataForUserAsync(identity);
+                // await SeedSampleDataForUserAsync(identity); // Disabled by user request
 
                 identity.Role = salesRepRole;
                 identity.IdentityRoles = new List<IdentityRole> { new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId, Role = salesRepRole } };

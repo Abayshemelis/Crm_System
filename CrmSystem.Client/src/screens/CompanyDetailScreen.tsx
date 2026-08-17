@@ -10,6 +10,7 @@ import { api } from '../lib/api';
 import Attachments from '../components/attachments/Attachments';
 import { ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Tag, Link, X, History } from 'lucide-react';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 interface CompanyDetail {
   companyId: number;
@@ -127,7 +128,7 @@ export const CompanyDetailScreen: React.FC = () => {
   }, [id, navigate]);
 
   const handleRemoveCustomer = async (customerId: number, name: string) => {
-    if (!window.confirm(`Remove ${name} from this company's contacts?`)) return;
+    if (!await confirmAction(`Remove ${name} from this company's contacts?`)) return;
     try {
       await api.post('/api/customers/bulk', {
         customerIds: [customerId],
@@ -222,7 +223,7 @@ export const CompanyDetailScreen: React.FC = () => {
   };
 
   const deleteCompany = async () => {
-    if (!company || !window.confirm('Delete this company? This cannot be undone.')) return;
+    if (!company || !await confirmAction('Delete this company? This cannot be undone.')) return;
     await api.delete(`/api/companies/${company.companyId}`);
     navigate('/companies');
   };

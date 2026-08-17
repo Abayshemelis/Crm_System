@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CheckSquare, Square, AlertTriangle, Clock, Building2, Briefcase, ChevronDown, ChevronRight, MoreVertical, X, Calendar, MessageSquare, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { confirmAction } from '../../lib/confirm';
 
 export interface TaskReadDto {
   crmTaskId: number;
@@ -113,7 +114,7 @@ function TaskRow({
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowMenu(false);
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    if (!await confirmAction('Are you sure you want to delete this task?')) return;
     try {
       await api.delete(`/api/tasks/${task.crmTaskId}`);
       onDelete(task.crmTaskId);

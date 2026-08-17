@@ -26,14 +26,15 @@ public class ReportsController : ControllerBase
     // ── 1. Pipeline by Stage ──────────────────────────────────────────────────
     [HttpGet("pipeline-by-stage")]
     public async Task<IActionResult> GetPipelineByStage(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isManager || o.OwnerId == userId));
+            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)));
         if (startDate.HasValue) query = query.Where(o => o.CreatedAt >= startDate.Value);
         if (end.HasValue)       query = query.Where(o => o.CreatedAt <= end.Value);
 
@@ -48,14 +49,15 @@ public class ReportsController : ControllerBase
     // ── 2. Win Rate ───────────────────────────────────────────────────────────
     [HttpGet("win-rate")]
     public async Task<IActionResult> GetWinRate(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && (o.OpportunityStage!.IsWon || o.OpportunityStage!.IsLost) && (isManager || o.OwnerId == userId));
+            .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && (o.OpportunityStage!.IsWon || o.OpportunityStage!.IsLost) && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)));
 
         if (startDate.HasValue) query = query.Where(o => (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= startDate.Value);
         if (end.HasValue)       query = query.Where(o => (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end.Value);
@@ -86,16 +88,17 @@ public class ReportsController : ControllerBase
     // ── 3. Time per Stage ─────────────────────────────────────────────────────
     [HttpGet("time-per-stage")]
     public async Task<IActionResult> GetTimePerStage(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.StageHistories
             .Include(sh => sh.OldStage)
             .Include(sh => sh.NewStage)
             .Include(sh => sh.Opportunity)
-            .Where(sh => !sh.Opportunity.Customer.IsDeleted && (isManager || sh.Opportunity.OwnerId == userId))
+            .Where(sh => !sh.Opportunity.Customer.IsDeleted && (isAdmin || sh.Opportunity.OwnerId == userId || (isManager && sh.Opportunity.Owner.ManagerId == userId)))
             .AsQueryable();
 
         if (startDate.HasValue) query = query.Where(sh => sh.ChangedAt >= startDate.Value);
@@ -137,15 +140,16 @@ public class ReportsController : ControllerBase
     // ── 4. Lead Source ────────────────────────────────────────────────────────
     [HttpGet("lead-source")]
     public async Task<IActionResult> GetLeadSourceBreakdown(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var query = _db.Leads
             .Include(l => l.Source)
             .Include(l => l.ConvertedCustomer)
             .ThenInclude(c => c!.Source)
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isManager || l.AssignedRepId == userId));
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)));
 
         if (startDate.HasValue)
         {
@@ -172,35 +176,36 @@ public class ReportsController : ControllerBase
     // ── 5. Overview (Dashboard KPIs for a date range) ─────────────────────────
     [HttpGet("overview")]
     public async Task<IActionResult> GetOverview(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
         var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         // All-time totals
-        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted && (isManager || c.AssignedRepId == userId)).CountAsync();
-        var totalLeads     = await _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isManager || l.AssignedRepId == userId)).CountAsync();
+        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId))).CountAsync();
+        var totalLeads     = await _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId))).CountAsync();
 
         // Period new additions
         var newCustomers = await _db.Customers
-            .Where(c => !c.IsDeleted && c.CreatedAt >= start && c.CreatedAt <= end && (isManager || c.AssignedRepId == userId))
+            .Where(c => !c.IsDeleted && c.CreatedAt >= start && c.CreatedAt <= end && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId)))
             .CountAsync();
         var newLeads = await _db.Leads
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && l.CreatedAt >= start && l.CreatedAt <= end && (isManager || l.AssignedRepId == userId))
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && l.CreatedAt >= start && l.CreatedAt <= end && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)))
             .CountAsync();
 
         // Open deals (all-time)
         var openDeals = await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isManager || o.OwnerId == userId))
+            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .CountAsync();
 
         // Pipeline value (all open)
         var pipelineValue = (double)(await _db.Opportunities
             .Include(o => o.OpportunityStage)
-            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isManager || o.OwnerId == userId))
+            .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)) && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .SumAsync(o => (decimal?)o.EstimatedValue) ?? 0m);
 
         // Revenue won in period
@@ -209,19 +214,19 @@ public class ReportsController : ControllerBase
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end
-                     && (isManager || o.OwnerId == userId))
+                     && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .SumAsync(o => (decimal?)o.EstimatedValue) ?? 0m);
 
         // Conversion rate in period
         var leadsInPeriod = await _db.Leads
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && l.CreatedAt >= start && l.CreatedAt <= end && (isManager || l.AssignedRepId == userId))
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && l.CreatedAt >= start && l.CreatedAt <= end && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)))
             .CountAsync();
         var convertedInPeriod = await _db.Leads
             .Include(l => l.LeadStatus)
             .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null)
                      && l.CreatedAt >= start && l.CreatedAt <= end
                      && l.LeadStatus != null && l.LeadStatus.Name == "Converted"
-                     && (isManager || l.AssignedRepId == userId))
+                     && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)))
             .CountAsync();
         var conversionRate = leadsInPeriod > 0
             ? (double)convertedInPeriod / leadsInPeriod * 100
@@ -243,9 +248,10 @@ public class ReportsController : ControllerBase
     // ── 6. Rep Performance ────────────────────────────────────────────────────
     [HttpGet("rep-performance")]
     public async Task<IActionResult> GetRepPerformance(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
         var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
@@ -257,7 +263,7 @@ public class ReportsController : ControllerBase
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end
-                     && (isManager || o.OwnerId == userId))
+                     && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .Select(o => new { o.OwnerId, OwnerName = o.Owner.Name, o.EstimatedValue })
             .ToListAsync();
 
@@ -268,7 +274,7 @@ public class ReportsController : ControllerBase
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && (o.OpportunityStage.IsWon || o.OpportunityStage.IsLost)
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end
-                     && (isManager || o.OwnerId == userId))
+                     && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .Select(o => new { o.OwnerId, OwnerName = o.Owner.Name, IsWon = o.OpportunityStage!.IsWon })
             .ToListAsync();
 
@@ -277,7 +283,7 @@ public class ReportsController : ControllerBase
             .Include(o => o.OpportunityStage)
             .Include(o => o.Owner)
             .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost))
-                     && (isManager || o.OwnerId == userId))
+                     && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .Select(o => new { o.OwnerId, OwnerName = o.Owner.Name, o.EstimatedValue })
             .ToListAsync();
 
@@ -286,7 +292,7 @@ public class ReportsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && l.AssignedRepId.HasValue
                      && l.CreatedAt >= start && l.CreatedAt <= end
-                     && (isManager || l.AssignedRepId == userId))
+                     && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)))
             .GroupBy(l => new { l.AssignedRepId, RepName = l.AssignedRep != null ? l.AssignedRep.Name : "Unknown" })
             .Select(g => new { RepId = g.Key.AssignedRepId, RepName = g.Key.RepName, Count = g.Count() })
             .ToListAsync();
@@ -297,7 +303,7 @@ public class ReportsController : ControllerBase
                      && (a.CustomerId == null || a.Customer != null)
                      && (a.LeadId == null || a.Lead != null)
                      && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null)))
-                     && (isManager || a.CreatedById == userId))
+                     && (isAdmin || a.CreatedById == userId || (isManager && a.CreatedBy.ManagerId == userId)))
             .GroupBy(a => a.CreatedById)
             .Select(g => new { RepId = g.Key, Count = g.Count() })
             .ToListAsync();
@@ -336,16 +342,17 @@ public class ReportsController : ControllerBase
     // ── 7. Lead Funnel ────────────────────────────────────────────────────────
     [HttpGet("funnel")]
     public async Task<IActionResult> GetLeadFunnel(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
         var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
 
         var leads = await _db.Leads
             .Include(l => l.LeadStatus)
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (l.CreatedAt >= start && l.CreatedAt <= end || (l.ConvertedAt.HasValue && l.ConvertedAt.Value >= start && l.ConvertedAt.Value <= end)) && (isManager || l.AssignedRepId == userId))
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (l.CreatedAt >= start && l.CreatedAt <= end || (l.ConvertedAt.HasValue && l.ConvertedAt.Value >= start && l.ConvertedAt.Value <= end)) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)))
             .Select(l => new { StatusName = l.LeadStatus != null ? l.LeadStatus.Name : "New", IsTerminal = l.LeadStatus != null && l.LeadStatus.IsTerminal })
             .ToListAsync();
 
@@ -354,7 +361,7 @@ public class ReportsController : ControllerBase
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsLost
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= start
                      && (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) <= end
-                     && (isManager || o.OwnerId == userId))
+                     && (isAdmin || o.OwnerId == userId || (isManager && o.Owner.ManagerId == userId)))
             .CountAsync();
 
         var total     = leads.Count;
@@ -379,9 +386,10 @@ public class ReportsController : ControllerBase
     // ── 8. Activity Summary ───────────────────────────────────────────────────
     [HttpGet("activity-summary")]
     public async Task<IActionResult> GetActivitySummary(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
         var end   = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.UtcNow;
@@ -393,7 +401,7 @@ public class ReportsController : ControllerBase
                      && (a.CustomerId == null || a.Customer != null)
                      && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null)))
                      && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null)))
-                     && (isManager || a.CreatedById == userId))
+                     && (isAdmin || a.CreatedById == userId || (isManager && a.CreatedBy.ManagerId == userId)))
             .CountAsync();
 
         // Activities by type in period
@@ -403,7 +411,7 @@ public class ReportsController : ControllerBase
                      && (a.CustomerId == null || a.Customer != null)
                      && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null)))
                      && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null)))
-                     && (isManager || a.CreatedById == userId))
+                     && (isAdmin || a.CreatedById == userId || (isManager && a.CreatedBy.ManagerId == userId)))
             .GroupBy(a => a.ActivityType != null ? a.ActivityType.Name : "Other")
             .Select(g => new { Type = g.Key, Count = g.Count() })
             .ToListAsync();
@@ -441,13 +449,14 @@ public class ReportsController : ControllerBase
     // ── 9. Lead Priority Breakdown ────────────────────────────────────────────
     [HttpGet("lead-priority")]
     public async Task<IActionResult> GetLeadPriorityBreakdown(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var query = _db.Leads
             .Include(l => l.LeadStatus)
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isManager || l.AssignedRepId == userId));
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)));
 
         if (startDate.HasValue)
         {
@@ -482,16 +491,17 @@ public class ReportsController : ControllerBase
     // ── 10. Follow-Up SLA & Health ────────────────────────────────────────────
     [HttpGet("followup-sla")]
     public async Task<IActionResult> GetFollowUpSlaHealth(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var now = DateTime.UtcNow;
         var today = now.Date;
 
         var query = _db.Leads
             .Include(l => l.LeadStatus)
-            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal) && (isManager || l.AssignedRepId == userId));
+            .Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId)));
 
         if (startDate.HasValue)
         {
@@ -530,9 +540,10 @@ public class ReportsController : ControllerBase
     // ── 11. Invoice Revenue & Financial Report ─────────────────────────────────
     [HttpGet("invoice-revenue")]
     public async Task<IActionResult> GetInvoiceRevenueReport(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.Invoices
@@ -579,9 +590,10 @@ public class ReportsController : ControllerBase
     // ── 12. Contract Analytics Report ──────────────────────────────────────────
     [HttpGet("contracts")]
     public async Task<IActionResult> GetContractsReport(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
         var query = _db.Contracts
@@ -635,13 +647,14 @@ public class ReportsController : ControllerBase
     // ── 13. Data Import Activity Report ───────────────────────────────────────
     [HttpGet("imports")]
     public async Task<IActionResult> GetImportReport(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isManager = _currentUser.IsManagerOrAbove;
+        var isAdmin = _currentUser.IsAdmin && scope != "personal";
+        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
         var userId = _currentUser.UserId;
-        var totalLeadsImported = await _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isManager || l.AssignedRepId == userId)).CountAsync();
-        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted && (isManager || c.AssignedRepId == userId)).CountAsync();
-        var totalCompanies = await _db.Companies.Where(c => !c.IsDeleted && (isManager || c.AssignedRepId == userId)).CountAsync();
+        var totalLeadsImported = await _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId))).CountAsync();
+        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId))).CountAsync();
+        var totalCompanies = await _db.Companies.Where(c => !c.IsDeleted && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId))).CountAsync();
         var totalProducts = await _db.Products.CountAsync();
 
         return Ok(new

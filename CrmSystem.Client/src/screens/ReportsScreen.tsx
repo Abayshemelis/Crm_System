@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Layout } from '../components/layout/Layout';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import {
   AreaChart, Area, BarChart, Bar,
@@ -731,6 +732,7 @@ const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode; group: str
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export const ReportsScreen: React.FC = () => {
+  const { user, isManagerOrAbove } = useAuth();
   const today  = new Date().toISOString().split('T')[0];
   const m30    = new Date(Date.now() -  30 * 86400_000).toISOString().split('T')[0];
   const m90    = new Date(Date.now() -  90 * 86400_000).toISOString().split('T')[0];
@@ -756,6 +758,7 @@ export const ReportsScreen: React.FC = () => {
   const [endDate,      setEndDate]      = useState(today);
   const [activePreset, setActivePreset] = useState<string>('Last 30 days');
   const [section,      setSectionState]  = useState<Section>(getInitialSection);
+  const [dataScope,    setDataScope]    = useState<'personal' | 'team'>(isManagerOrAbove ? 'team' : 'personal');
   const [loading,      setLoading]      = useState(true);
 
   const setSection = useCallback((s: Section) => {
@@ -873,7 +876,7 @@ export const ReportsScreen: React.FC = () => {
   const load = useCallback(async (s: string, e: string) => {
     setLoading(true);
     try {
-      const q = `?startDate=${s}&endDate=${e}`;
+      const q = `?startDate=${s}&endDate=${e}&scope=${dataScope}`;
       const [pipe, win, time, src, ov, rep, fn, act, pri, sla, invRep, cntRep, impRep] = await Promise.all([
         api.get<PipelineItem[]>(`/api/reports/pipeline-by-stage${q}`),
         api.get<{ overallWinRate: number; byMonth: WinRateItem[] }>(`/api/reports/win-rate${q}`),
@@ -908,7 +911,7 @@ export const ReportsScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dataScope]);
 
   useEffect(() => { load(startDate, endDate); }, [startDate, endDate, load]);
 
@@ -956,6 +959,17 @@ export const ReportsScreen: React.FC = () => {
           </div>
 
           <div className="rpt-filter-bar">
+            {isManagerOrAbove && (
+              <select 
+                className="rpt-preset-btn" 
+                value={dataScope} 
+                onChange={(e) => setDataScope(e.target.value as any)} 
+                style={{ background: '#1e293b', border: '1px solid #334155', color: 'white' }}
+              >
+                <option value="personal">View: My Data</option>
+                <option value="team">View: Team/Company Data</option>
+              </select>
+            )}
             {PRESETS.map(p => (
               <button key={p.label}
                 className={`rpt-preset-btn ${activePreset === p.label ? 'active' : ''}`}

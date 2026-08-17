@@ -10,6 +10,7 @@ import { api } from '../lib/api';
 import { Building2, Globe, MapPin, Briefcase, Plus, Building, Search, X, Trash2, LayoutGrid, List, Eye } from 'lucide-react';
 import { showToast } from '../lib/toast';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 interface CompanyApiResponse {
   companyId?: number;
@@ -153,7 +154,7 @@ export const CompaniesScreen: React.FC = () => {
 
   const handleDeleteCompany = async (e: React.MouseEvent, id: number, name: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
+    if (!await confirmAction(`Are you sure you want to delete "${name}"?`)) return;
     try {
       await api.delete(`/api/companies/${id}`);
       showToast('Company deleted successfully', 'success');

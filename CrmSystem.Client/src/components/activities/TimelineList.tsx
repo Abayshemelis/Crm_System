@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Phone, Mail, Users, FileText, Monitor, RefreshCw, Calendar, Clock, Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../../lib/api';
+import { confirmAction } from '../../lib/confirm';
 
 interface ActivityType { id: number; name: string; icon?: string; }
 interface ActivityReadDto {
@@ -111,7 +112,7 @@ export const TimelineList: React.FC<TimelineListProps> = ({
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this activity?')) return;
+    if (!await confirmAction('Delete this activity?')) return;
     try {
       await api.delete(`/api/activities/${id}`);
       onActivityDeleted(id);

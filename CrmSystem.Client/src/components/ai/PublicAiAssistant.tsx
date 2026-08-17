@@ -8,6 +8,7 @@ import {
   Settings, ShieldCheck, Sliders, Search, ChevronDown, ChevronUp
 } from 'lucide-react';
 import './copilot.css';
+import { confirmAction } from '../../lib/confirm';
 
 export interface PublicFileAttachment {
   fileName: string;
@@ -232,8 +233,8 @@ export const PublicAiAssistant: React.FC = () => {
     }
   };
 
-  const handleClearAllHistory = () => {
-    if (window.confirm('Clear all conversation history?')) {
+  const handleClearAllHistory = async () => {
+    if (await confirmAction('Clear all conversation history?')) {
       const fresh = createDefaultSession();
       setSessions([fresh]);
       setActiveSessionId(fresh.id);

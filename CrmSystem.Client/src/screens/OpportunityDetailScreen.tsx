@@ -20,6 +20,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
 import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 interface Opportunity {
   opportunityId: number;
@@ -284,7 +285,7 @@ export const OpportunityDetailScreen: React.FC = () => {
   };
 
   const deleteOpportunity = async () => {
-    if (!opportunity || !window.confirm(`Are you sure you want to delete opportunity "${opportunity.title}"?`)) return;
+    if (!opportunity || !await confirmAction(`Are you sure you want to delete opportunity "${opportunity.title}"?`)) return;
     try {
       await api.delete(`/api/opportunities/${opportunity.opportunityId}`);
       triggerToast('Opportunity deleted successfully', 'success');
@@ -641,6 +642,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                     upcoming={groupedTasks.upcoming}
                     completed={groupedTasks.completed}
                     onTaskComplete={handleTaskComplete}
+                    onTaskDelete={loadData}
                     onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
                   />
                 </div>

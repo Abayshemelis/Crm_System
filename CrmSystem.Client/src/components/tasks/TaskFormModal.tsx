@@ -5,6 +5,7 @@ import { TaskReadDto } from './TaskListGroup';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { confirmAction } from '../../lib/confirm';
 
 interface Lookup { id: number; name: string; }
 
@@ -103,7 +104,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (isEditing && pastDateWarning) {
-      if (!window.confirm('Set due date to a past date? The task will appear as Overdue.')) return;
+      if (!await confirmAction('Set due date to a past date? The task will appear as Overdue.')) return;
     }
     const errs = validate();
     if (Object.keys(errs).length) {
@@ -178,7 +179,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   const handleDelete = async () => {
     if (!task || !onDeleted) return;
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    if (!await confirmAction('Are you sure you want to delete this task?')) return;
     setDeleting(true);
     try {
       await api.delete(`/api/tasks/${task.crmTaskId}`);

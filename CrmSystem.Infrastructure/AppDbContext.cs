@@ -84,6 +84,10 @@ public class AppDbContext : DbContext
              .WithOne(ir => ir.Identity)
              .HasForeignKey(ir => ir.IdentityId)
              .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(i => i.Manager)
+             .WithMany()
+             .HasForeignKey(i => i.ManagerId)
+             .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<IdentityRole>(e =>

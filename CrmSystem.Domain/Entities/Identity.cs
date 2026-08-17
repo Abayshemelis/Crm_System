@@ -13,4 +13,7 @@ public class Identity
     public ICollection<IdentityRole> IdentityRoles { get; set; } = new List<IdentityRole>();
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public int? ManagerId { get; set; }
+    public Identity? Manager { get; set; }
 }

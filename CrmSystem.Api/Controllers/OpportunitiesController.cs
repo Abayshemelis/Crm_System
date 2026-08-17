@@ -49,7 +49,7 @@ public class OpportunitiesController : ControllerBase
             createdDateFrom, createdDateTo,
             minValue, maxValue,
             lastActivityFrom, lastActivityTo,
-            sourceId);
+            sourceId, _currentUser.UserId, _currentUser.IsManagerOrAbove, _currentUser.IsAdmin);
         return Ok(list);
     }
 

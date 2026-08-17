@@ -41,6 +41,7 @@ type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'them
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
 
 import { ThemePreset, ATTRACTIVE_THEMES, applyThemePreset } from '../lib/theme';
+import { confirmAction } from '../lib/confirm';
 export type { ThemePreset };
 
 // ── Generic inline-edit row ────────────────────────────────────────────────────
@@ -177,7 +178,7 @@ const CustomFieldsAdminTab: React.FC = () => {
   };
 
   const deleteField = async (id: number) => {
-    if (!confirm('Delete this custom field? Existing data will not be removed from records, but the field will no longer appear in forms.')) return;
+    if (!await confirmAction('Delete this custom field? Existing data will not be removed from records, but the field will no longer appear in forms.')) return;
     try {
       await api.delete(`/api/custom-field-definitions/${id}`);
       fields.refresh();
@@ -363,7 +364,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const deleteStage = async (id: number) => {
-    if (!confirm('Delete this stage?')) return;
+    if (!await confirmAction('Delete this stage?')) return;
     try { await api.delete(`/api/opportunitystages/${id}`); stages.refresh(); toast('Stage deleted'); }
     catch (e: any) { toast(e?.message || 'Failed', 'error'); }
   };
@@ -394,7 +395,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const deleteTag = async (id: number) => {
-    if (!confirm('Delete this tag?')) return;
+    if (!await confirmAction('Delete this tag?')) return;
     try { await api.delete(`/api/tags/${id}`); tags.refresh(); toast('Tag deleted'); }
     catch (e: any) { toast(e?.message || 'Failed', 'error'); }
   };
@@ -483,7 +484,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const deleteProduct = async (id: number) => {
-    if (!confirm('Delete this product?')) return;
+    if (!await confirmAction('Delete this product?')) return;
     try {
       await api.delete(`/api/products/${id}`);
       setProducts(prev => prev.filter(p => p.id !== id));
@@ -562,7 +563,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const deleteSource = async (id: number) => {
-    if (!confirm('Delete this source?')) return;
+    if (!await confirmAction('Delete this source?')) return;
     try { await api.delete(`/api/sources/${id}`); sources.refresh(); toast('Source deleted'); }
     catch (e: any) { toast(e?.message || 'Failed', 'error'); }
   };
@@ -990,7 +991,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={s.id} label={`${s.name}  ·  Order ${s.sortOrder}`}
                         badge={s.isTerminal ? <Badge label="Terminal" color="#3b82f6" /> : undefined}
-                        onEdit={() => setEditingLeadStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/leadstatuses/${s.id}`); leadStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
+                        onEdit={() => setEditingLeadStatus(s)} onDelete={async () => { if (await confirmAction('Delete?')) { await api.delete(`/api/leadstatuses/${s.id}`); leadStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -1018,7 +1019,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={s.id} label={s.name}
                         badge={s.isTerminal ? <Badge label="Terminal" color="#3b82f6" /> : undefined}
-                        onEdit={() => setEditingTaskStatus(s)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/taskstatuses/${s.id}`); taskStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
+                        onEdit={() => setEditingTaskStatus(s)} onDelete={async () => { if (await confirmAction('Delete?')) { await api.delete(`/api/taskstatuses/${s.id}`); taskStatuses.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -1046,7 +1047,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={a.id} label={a.name}
                         badge={a.icon ? <Badge label={a.icon} color="#a78bfa" /> : undefined}
-                        onEdit={() => setEditingActivity(a)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/activitytypes/${a.id}`); activityTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
+                        onEdit={() => setEditingActivity(a)} onDelete={async () => { if (await confirmAction('Delete?')) { await api.delete(`/api/activitytypes/${a.id}`); activityTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>
@@ -1074,7 +1075,7 @@ export const SettingsScreen: React.FC = () => {
                     ) : (
                       <LookupRow key={n.id} label={n.name}
                         badge={n.defaultChannel ? <Badge label={n.defaultChannel} color="#06b6d4" /> : undefined}
-                        onEdit={() => setEditingNotif(n)} onDelete={async () => { if (confirm('Delete?')) { await api.delete(`/api/notificationtypes/${n.id}`); notifTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
+                        onEdit={() => setEditingNotif(n)} onDelete={async () => { if (await confirmAction('Delete?')) { await api.delete(`/api/notificationtypes/${n.id}`); notifTypes.refresh(); toast('Deleted'); } }} canEdit={isManagerOrAboveSelected} />
                     )
                   ))}
                 </div>

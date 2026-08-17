@@ -31,6 +31,7 @@ import { PublicInvoicePayScreen } from './screens/PublicInvoicePayScreen';
 import { SignalRProvider } from './context/SignalRContext';
 import { Toast } from './components/ui/Toast';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { GlobalConfirmDialog } from './components/ui/GlobalConfirmDialog';
 import LandingPage from './screens/LandingPage';
 import { PipelineStagesScreen } from './screens/PipelineStagesScreen';
 import { SearchResultsScreen } from './screens/SearchResultsScreen';
@@ -89,6 +90,7 @@ function AppRoutes() {
 
 function AppShell() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [confirmState, setConfirmState] = useState<{ message: string; resolve: (val: boolean) => void } | null>(null);
 
   // Initialize theme from localStorage on mount
   const isHexColor = (value: string) => /^#([a-f\d]{6})$/i.test(value);
@@ -112,13 +114,31 @@ function AppShell() {
     }) as EventListener;
 
     window.addEventListener('app:toast', handler);
-    return () => window.removeEventListener('app:toast', handler);
+
+    const confirmHandler = ((event: Event) => {
+      const customEvent = event as CustomEvent<{ message: string; resolve: (val: boolean) => void }>;
+      setConfirmState(customEvent.detail);
+    }) as EventListener;
+
+    window.addEventListener('app:confirm', confirmHandler);
+
+    return () => {
+      window.removeEventListener('app:toast', handler);
+      window.removeEventListener('app:confirm', confirmHandler);
+    };
   }, []);
 
   return (
     <ErrorBoundary>
       <AppRoutes />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmState && (
+        <GlobalConfirmDialog 
+           message={confirmState.message} 
+           onConfirm={() => { confirmState.resolve(true); setConfirmState(null); }}
+           onCancel={() => { confirmState.resolve(false); setConfirmState(null); }}
+        />
+      )}
     </ErrorBoundary>
   );
 }

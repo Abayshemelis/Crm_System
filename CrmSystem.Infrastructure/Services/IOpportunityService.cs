@@ -21,7 +21,10 @@ namespace CrmSystem.Infrastructure.Services
             decimal? maxValue = null,
             DateTime? lastActivityFrom = null,
             DateTime? lastActivityTo = null,
-            int? sourceId = null);
+            int? sourceId = null,
+            int? currentUserId = null,
+            bool isManager = false,
+            bool isAdmin = false);
         Task<bool> UpdateAsync(int id, OpportunityUpdateDto dto);
         Task<bool> DeleteAsync(int id);
     }

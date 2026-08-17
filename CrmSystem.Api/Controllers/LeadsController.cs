@@ -54,11 +54,19 @@ public class LeadsController : ControllerBase
             leads = leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null));
         }
 
-        if (!_currentUser.IsManagerOrAbove)
+        if (!_currentUser.IsAdmin)
         {
-            leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId);
+            if (_currentUser.IsManagerOrAbove)
+            {
+                leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId || (l.AssignedRep != null && l.AssignedRep.ManagerId == _currentUser.UserId));
+            }
+            else
+            {
+                leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId);
+            }
         }
-        else if (query.RepId is not null)
+
+        if (query.RepId is not null)
         {
             leads = leads.Where(l => l.AssignedRepId == query.RepId);
         }
@@ -325,9 +333,16 @@ public class LeadsController : ControllerBase
             .Include(l => l.LeadStatus)
             .AsQueryable();
 
-        if (!_currentUser.IsManagerOrAbove)
+        if (!_currentUser.IsAdmin)
         {
-            leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId);
+            if (_currentUser.IsManagerOrAbove)
+            {
+                leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId || (l.AssignedRep != null && l.AssignedRep.ManagerId == _currentUser.UserId));
+            }
+            else
+            {
+                leads = leads.Where(l => l.AssignedRepId == _currentUser.UserId);
+            }
         }
 
         var today = DateTime.UtcNow.Date;

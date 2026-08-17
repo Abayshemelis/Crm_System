@@ -67,9 +67,24 @@ namespace CrmSystem.Infrastructure.Services
             decimal? maxValue = null,
             DateTime? lastActivityFrom = null,
             DateTime? lastActivityTo = null,
-            int? sourceId = null)
+            int? sourceId = null,
+            int? currentUserId = null,
+            bool isManager = false,
+            bool isAdmin = false)
         {
             var query = QueryWithDetails();
+
+            if (currentUserId.HasValue && !isAdmin)
+            {
+                if (isManager)
+                {
+                    query = query.Where(o => o.OwnerId == currentUserId.Value || (o.Owner != null && o.Owner.ManagerId == currentUserId.Value));
+                }
+                else
+                {
+                    query = query.Where(o => o.OwnerId == currentUserId.Value);
+                }
+            }
 
             if (customerId.HasValue)
                 query = query.Where(o => o.CustomerId == customerId.Value);

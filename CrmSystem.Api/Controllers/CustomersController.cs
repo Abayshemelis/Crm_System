@@ -52,11 +52,19 @@ public class CustomersController : ControllerBase
             customers = customers.Where(c => !c.IsDeleted);
         }
 
-        if (!_currentUser.IsManagerOrAbove)
+        if (!_currentUser.IsAdmin)
         {
-            customers = customers.Where(c => c.AssignedRepId == _currentUser.UserId);
+            if (_currentUser.IsManagerOrAbove)
+            {
+                customers = customers.Where(c => c.AssignedRepId == _currentUser.UserId || (c.AssignedRep != null && c.AssignedRep.ManagerId == _currentUser.UserId));
+            }
+            else
+            {
+                customers = customers.Where(c => c.AssignedRepId == _currentUser.UserId);
+            }
         }
-        else if (query.RepId is not null)
+
+        if (query.RepId is not null)
         {
             customers = customers.Where(c => c.AssignedRepId == query.RepId);
         }

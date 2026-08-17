@@ -9,6 +9,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 export const ProductsScreen: React.FC = () => {
   const { isManagerOrAbove } = useAuth();
@@ -106,7 +107,7 @@ export const ProductsScreen: React.FC = () => {
   };
 
   const handleDeleteProduct = async (id: number) => {
-    if (!window.confirm('Delete this product?')) return;
+    if (!await confirmAction('Delete this product?')) return;
     try {
       await api.delete(`/api/products/${id}`);
       setProducts(products.filter(p => p.id !== id));

@@ -47,11 +47,19 @@ public class CompaniesController : ControllerBase
             companies = companies.Where(c => !c.IsDeleted);
         }
 
-        if (!_currentUser.IsManagerOrAbove)
+        if (!_currentUser.IsAdmin)
         {
-            companies = companies.Where(c => c.AssignedRepId == _currentUser.UserId);
+            if (_currentUser.IsManagerOrAbove)
+            {
+                companies = companies.Where(c => c.AssignedRepId == _currentUser.UserId || (c.AssignedRep != null && c.AssignedRep.ManagerId == _currentUser.UserId));
+            }
+            else
+            {
+                companies = companies.Where(c => c.AssignedRepId == _currentUser.UserId);
+            }
         }
-        else if (query.RepId is not null)
+
+        if (query.RepId is not null)
         {
             companies = companies.Where(c => c.AssignedRepId == query.RepId);
         }

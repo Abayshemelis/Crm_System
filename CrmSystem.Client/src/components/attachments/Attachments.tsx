@@ -3,6 +3,7 @@ import { Paperclip, Trash2, Upload } from 'lucide-react';
 import { api, resolveUrl } from '../../lib/api';
 import ImageLightbox from './ImageLightbox';
 import PreviewModal from './PreviewModal';
+import { confirmAction } from '../../lib/confirm';
 
 interface Attachment {
     attachmentId: number;
@@ -108,7 +109,7 @@ export const Attachments: React.FC<Props> = ({ entity, entityId, canEdit = true,
     };
 
     const remove = async (id: number) => {
-        if (!window.confirm('Delete this attachment?')) return;
+        if (!await confirmAction('Delete this attachment?')) return;
         await api.delete(`/api/attachments/${id}`);
         await load();
     };

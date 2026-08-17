@@ -7,6 +7,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 export const PipelineStagesScreen: React.FC = () => {
   const { isManagerOrAbove } = useAuth();
@@ -62,7 +63,7 @@ export const PipelineStagesScreen: React.FC = () => {
   };
 
   const handleDeleteStage = async (id: number) => {
-    if (!window.confirm('Delete this stage?')) return;
+    if (!await confirmAction('Delete this stage?')) return;
     try {
       await api.delete(`/api/opportunitystages/${id}`);
       setOpportunityStages(opportunityStages.filter(s => s.id !== id));

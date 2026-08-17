@@ -23,6 +23,7 @@ import { AiLeadAssistant } from '../components/ai/AiLeadAssistant';
 import Attachments from '../components/attachments/Attachments';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 interface LeadDetail {
     leadId: number;
@@ -163,7 +164,7 @@ export const LeadDetailScreen: React.FC = () => {
     }, []);
 
     const deleteLead = async () => {
-        if (!id || !window.confirm('Are you sure you want to delete this lead?')) return;
+        if (!id || !await confirmAction('Are you sure you want to delete this lead?')) return;
         try {
             await api.delete(`/api/leads/${id}`);
             showToast('Lead deleted successfully', 'success');
@@ -895,6 +896,7 @@ export const LeadDetailScreen: React.FC = () => {
                                             fetchTasks();
                                         }
                                     }}
+                                    onTaskDelete={() => fetchTasks()}
                                     onTaskClick={(t: TaskReadDto) => { setEditTask(t); setShowTaskModal(true); }}
                                 />
                             </Card.Content>

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { showToast } from '../lib/toast';
 import { api } from '../lib/api';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { confirmAction } from '../lib/confirm';
 import {
   History,
   Trash2,
@@ -164,7 +165,7 @@ export const AuditLogsScreen: React.FC = () => {
 
   const handleDeleteSingleLog = async (e: React.MouseEvent, logId: number) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this audit log entry?')) return;
+    if (!await confirmAction('Delete this audit log entry?')) return;
     try {
       await api.delete(`/api/audit-logs/${logId}`);
       showToast('Audit record deleted.', 'success');

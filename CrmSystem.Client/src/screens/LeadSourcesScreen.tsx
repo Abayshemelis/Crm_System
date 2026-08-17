@@ -7,6 +7,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 export const LeadSourcesScreen: React.FC = () => {
   const { isManagerOrAbove } = useAuth();
@@ -44,7 +45,7 @@ export const LeadSourcesScreen: React.FC = () => {
   };
 
   const handleDeleteSource = async (id: number) => {
-    if (!window.confirm('Delete this source?')) return;
+    if (!await confirmAction('Delete this source?')) return;
     try {
       await api.delete(`/api/sources/${id}`);
       setSources(sources.filter(s => s.id !== id));

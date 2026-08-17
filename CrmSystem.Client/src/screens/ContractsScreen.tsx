@@ -12,6 +12,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
+import { confirmAction } from '../lib/confirm';
 
 const ContractActionMenu: React.FC<{
   contract: ContractItem;
@@ -364,7 +365,7 @@ export const ContractsScreen: React.FC = () => {
   };
 
   const handleDeleteContract = async (c: ContractItem) => {
-    if (!window.confirm(`Are you sure you want to delete contract ${c.contractNumber} ("${c.title}")?\nThis action cannot be undone.`)) {
+    if (!await confirmAction(`Are you sure you want to delete contract ${c.contractNumber} ("${c.title}")?\nThis action cannot be undone.`)) {
       return;
     }
     try {
