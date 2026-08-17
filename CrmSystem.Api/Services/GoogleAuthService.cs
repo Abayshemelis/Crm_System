@@ -21,15 +21,7 @@ public class GoogleAuthService : IGoogleAuthService
             return null;
         }
 
-        // Support local dev / demo testing tokens
-        if (idToken.StartsWith("mock_google_id_token"))
-        {
-            var parts = idToken.Split(':');
-            var mockEmail = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1] : "google.user@example.com";
-            var mockName = mockEmail.Split('@')[0];
-            _logger.LogInformation("Using mock Google auth token for email: {Email}", mockEmail);
-            return new GoogleUserInfo(mockEmail, mockName, "google-mock-sub-12345", true);
-        }
+
 
         try
         {

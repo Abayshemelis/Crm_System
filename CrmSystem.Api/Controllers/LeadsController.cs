@@ -261,8 +261,9 @@ public class LeadsController : ControllerBase
             return BadRequest(new { message = "Source not found." });
         }
 
-        // Default status = "New" (id=1) if not provided
-        int? leadStatusId = request.LeadStatusId ?? 1;
+        // Default status = "New" if not provided
+        var newStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "New");
+        int? leadStatusId = request.LeadStatusId ?? newStatus?.LeadStatusId ?? 1;
 
         var lead = new Lead
         {
@@ -373,6 +374,11 @@ public class LeadsController : ControllerBase
     [HttpPost("{id:int}/follow-up")]
     public async Task<ActionResult<LeadDetailDto>> ScheduleFollowUp(int id, [FromBody] ScheduleFollowUpRequest request)
     {
+        if (request.FollowUpDate < DateTime.UtcNow.AddMinutes(-5))
+        {
+            return BadRequest(new { message = "Follow-up date and time cannot be in the past." });
+        }
+
         var lead = await _db.Leads
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
