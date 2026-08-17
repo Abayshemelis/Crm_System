@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
@@ -146,6 +146,14 @@ export const LeadDetailScreen: React.FC = () => {
         fetchActivities();
         fetchTasks();
     }, [id, fetchLead, fetchActivities, fetchTasks]);
+
+    const parseUtcDate = (dateStr?: string | null): Date | null => {
+        if (!dateStr) return null;
+        const iso = dateStr.endsWith('Z') || dateStr.includes('+') || (dateStr.includes('-') && dateStr.length > 19)
+            ? dateStr
+            : dateStr + 'Z';
+        return new Date(iso);
+    };
 
     useEffect(() => {
         api.get<{ id: number; name: string }[]>('/api/leadstatuses')
@@ -302,6 +310,13 @@ export const LeadDetailScreen: React.FC = () => {
         }
     };
 
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     const groupedTasks = React.useMemo(() => {
         const overdue: TaskReadDto[] = [];
         const dueToday: TaskReadDto[] = [];
@@ -329,8 +344,9 @@ export const LeadDetailScreen: React.FC = () => {
         return { overdue, dueToday, upcoming, completed };
     }, [tasks]);
 
-    const isFollowUpOverdue = lead?.nextFollowUpDate && lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && lead.leadStatusName !== 'Closed' && new Date(lead.nextFollowUpDate) < new Date();
-    const isFollowUpToday = lead?.nextFollowUpDate && new Date(lead.nextFollowUpDate).toDateString() === new Date().toDateString();
+    const isFollowUpOverdue = !!(lead?.nextFollowUpDate && lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && lead.leadStatusName !== 'Closed' && parseUtcDate(lead.nextFollowUpDate)!.getTime() < now.getTime());
+    const isFollowUpToday = !!(lead?.nextFollowUpDate && parseUtcDate(lead.nextFollowUpDate)!.toDateString() === now.toDateString());
+    const isFollowUpFuture = !!(lead?.nextFollowUpDate && parseUtcDate(lead.nextFollowUpDate)!.getTime() > now.getTime());
 
     if (isLoading || !lead) {
         return (
@@ -607,7 +623,19 @@ export const LeadDetailScreen: React.FC = () => {
                     </div>
                     {lead.nextFollowUpDate ? (
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <Button size="sm" variant="primary" style={{ background: '#16a34a', borderColor: '#15803d' }} onClick={handleCompleteFollowUp}>
+                            <Button 
+                                size="sm" 
+                                variant="primary" 
+                                style={{ 
+                                    background: '#16a34a', 
+                                    borderColor: '#15803d',
+                                    opacity: isFollowUpFuture ? 0.5 : 1,
+                                    cursor: isFollowUpFuture ? 'not-allowed' : 'pointer'
+                                }} 
+                                onClick={handleCompleteFollowUp}
+                                disabled={isFollowUpFuture}
+                                title={isFollowUpFuture ? "Cannot complete a follow-up before its scheduled date and time." : ""}
+                            >
                                 <CheckCircle size={14} style={{ marginRight: 4 }} /> Complete Follow-Up
                             </Button>
                             <Button size="sm" variant="secondary" onClick={() => setShowFollowUpModal(true)}>

@@ -116,6 +116,9 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
             setIsSubmitting(false);
         }
     };
+    const todayObj = new Date();
+    const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+    const nowTimeStr = `${String(todayObj.getHours()).padStart(2, '0')}:${String(todayObj.getMinutes()).padStart(2, '0')}`;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -150,7 +153,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                                     className="filter-input"
                                     style={{ width: '100%' }}
                                     value={date || ''}
-                                    min={new Date().toISOString().split('T')[0]}
+                                    min={todayStr}
                                     onChange={(e) => setDate(e.target.value)}
                                     required
                                 />
@@ -165,6 +168,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                                     className="filter-input"
                                     style={{ width: '100%' }}
                                     value={time || '10:00'}
+                                    min={date === todayStr ? nowTimeStr : undefined}
                                     onChange={(e) => setTime(e.target.value)}
                                     required
                                 />

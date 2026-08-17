@@ -289,8 +289,6 @@ public class AppDbContext : DbContext
             e.Property(l => l.Notes).HasMaxLength(2000);
             e.Property(l => l.Priority).HasMaxLength(20);
             e.Property(l => l.LostReason).HasMaxLength(1000);
-            e.Property(l => l.NextFollowUpType).HasMaxLength(50);
-            e.Property(l => l.NextFollowUpNotes).HasMaxLength(2000);
             e.HasOne(l => l.Source)
              .WithMany()
              .HasForeignKey(l => l.SourceId)
@@ -303,10 +301,6 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(l => l.AssignedRepId)
              .OnDelete(DeleteBehavior.SetNull);
-            e.HasOne(l => l.NextFollowUpAssignedTo)
-             .WithMany()
-             .HasForeignKey(l => l.NextFollowUpAssignedToId)
-             .OnDelete(DeleteBehavior.NoAction);
 
             e.HasOne(l => l.ConvertedCustomer)
              .WithMany()

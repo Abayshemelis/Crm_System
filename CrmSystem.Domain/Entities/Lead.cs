@@ -30,11 +30,7 @@ public class Lead
     public int LeadScore { get; set; } = 0;
     public bool IsManualScore { get; set; } = false;
     public string? LostReason { get; set; }
-    public DateTime? NextFollowUpDate { get; set; }
-    public string? NextFollowUpType { get; set; }
-    public string? NextFollowUpNotes { get; set; }
-    public int? NextFollowUpAssignedToId { get; set; }
-    public Identity? NextFollowUpAssignedTo { get; set; }
+
     public DateTime? LastActivityAt { get; set; }
 
     public bool IsDeleted { get; set; } = false;

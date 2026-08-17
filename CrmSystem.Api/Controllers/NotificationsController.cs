@@ -6,6 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CrmSystem.Api.Controllers;
 
+public class CustomNotificationRequest
+{
+    public string Message { get; set; } = string.Empty;
+}
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Policy = "RepOrAbove")]
@@ -53,5 +58,14 @@ public class NotificationsController : ControllerBase
         if (!_currentUser.UserId.HasValue) return Unauthorized();
         await _service.MarkAllReadAsync(_currentUser.UserId.Value);
         return NoContent();
+    }
+
+    /// <summary>POST /api/notifications/custom</summary>
+    [HttpPost("custom")]
+    public async Task<IActionResult> CreateCustom([FromBody] CustomNotificationRequest request)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        await _service.CreateNotificationAsync(_currentUser.UserId.Value, "SystemAlert", request.Message);
+        return Ok();
     }
 }

@@ -42,7 +42,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
-            .Include(l => l.NextFollowUpAssignedTo)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .AsQueryable();
 
         if (query.IncludeDeleted)
@@ -117,15 +117,15 @@ public class LeadsController : ControllerBase
             var now = DateTime.UtcNow;
             if (query.FollowUpFilter == "today")
             {
-                leads = leads.Where(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value.Date == today && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+                leads = leads.Where(l => l.Tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value.Date == today && !t.CrmTaskStatus!.IsTerminal && t.Title.StartsWith("Follow-up")) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
             }
             else if (query.FollowUpFilter == "overdue")
             {
-                leads = leads.Where(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value < now && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+                leads = leads.Where(l => l.Tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value < now && !t.CrmTaskStatus!.IsTerminal && t.Title.StartsWith("Follow-up")) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
             }
             else if (query.FollowUpFilter == "upcoming")
             {
-                leads = leads.Where(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value >= now && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+                leads = leads.Where(l => l.Tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value >= now && !t.CrmTaskStatus!.IsTerminal && t.Title.StartsWith("Follow-up")) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
             }
         }
 
@@ -188,7 +188,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
-            .Include(l => l.NextFollowUpAssignedTo)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .IgnoreQueryFilters()
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
@@ -212,6 +212,7 @@ public class LeadsController : ControllerBase
         var lead = await _db.Leads
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .Include(l => l.Activities)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
@@ -279,10 +280,6 @@ public class LeadsController : ControllerBase
             Notes = request.Notes?.Trim(),
             Priority = string.IsNullOrWhiteSpace(request.Priority) ? "Medium" : request.Priority.Trim(),
             LeadScore = request.LeadScore,
-            NextFollowUpDate = request.NextFollowUpDate,
-            NextFollowUpType = request.NextFollowUpType?.Trim(),
-            NextFollowUpNotes = request.NextFollowUpNotes?.Trim(),
-            NextFollowUpAssignedToId = request.NextFollowUpAssignedToId ?? assignedRepId,
             CreatedAt = DateTime.UtcNow,
             CreatedById = _currentUser.UserId,
             CustomFieldsJson = request.CustomFieldsJson
@@ -332,6 +329,7 @@ public class LeadsController : ControllerBase
             .AsNoTracking()
             .Where(l => !l.IsDeleted)
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .AsQueryable();
 
         if (!_currentUser.IsAdmin)
@@ -351,8 +349,8 @@ public class LeadsController : ControllerBase
 
         var totalLeads = await leads.CountAsync();
         var newLeads = await leads.CountAsync(l => l.LeadStatus != null && l.LeadStatus.Name == "New");
-        var followUpToday = await leads.CountAsync(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value.Date == today && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
-        var overdueFollowUp = await leads.CountAsync(l => l.NextFollowUpDate.HasValue && l.NextFollowUpDate.Value < now && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+        var followUpToday = await leads.CountAsync(l => l.Tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value.Date == today && !t.CrmTaskStatus!.IsTerminal && t.Title.StartsWith("Follow-up")) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
+        var overdueFollowUp = await leads.CountAsync(l => l.Tasks.Any(t => t.DueDate.HasValue && t.DueDate.Value < now && !t.CrmTaskStatus!.IsTerminal && t.Title.StartsWith("Follow-up")) && (l.LeadStatus == null || !l.LeadStatus.IsTerminal));
         var qualifiedLeads = await leads.CountAsync(l => l.LeadStatus != null && l.LeadStatus.Name == "Qualified");
         var convertedLeads = await leads.CountAsync(l => l.LeadStatus != null && l.LeadStatus.Name == "Converted");
         var lostLeads = await leads.CountAsync(l => l.LeadStatus != null && l.LeadStatus.Name == "Lost");
@@ -383,6 +381,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -397,10 +396,22 @@ public class LeadsController : ControllerBase
 
         var targetRepId = request.AssignedToId ?? lead.AssignedRepId ?? _currentUser.UserId;
 
-        lead.NextFollowUpDate = request.FollowUpDate;
-        lead.NextFollowUpType = request.FollowUpType;
-        lead.NextFollowUpNotes = request.Notes;
-        lead.NextFollowUpAssignedToId = targetRepId;
+        var status = await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => s.Name == "Pending" && !s.IsTerminal)
+            ?? await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => !s.IsTerminal);
+            
+        var task = new CrmTask
+        {
+            Title = $"Follow-up: {request.FollowUpType}",
+            Description = request.Notes,
+            DueDate = request.FollowUpDate,
+            AssignedToId = targetRepId,
+            LeadId = lead.LeadId,
+            CrmTaskStatusId = status?.CrmTaskStatusId ?? 1,
+            CreatedById = _currentUser.UserId.Value,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.CrmTasks.Add(task);
+
         lead.LastActivityAt = DateTime.UtcNow;
 
         if (lead.LeadStatus == null || !lead.LeadStatus.IsTerminal)
@@ -466,14 +477,12 @@ public class LeadsController : ControllerBase
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
             if (entityType != null)
             {
-                await _auditService.LogFieldChangeAsync(entityType.EntityTypeId, lead.LeadId, "NextFollowUpDate", null, request.FollowUpDate.ToString("o"), "Update", _currentUser.UserId.Value);
             }
         }
 
         await _db.Entry(lead).Reference(l => l.AssignedRep).LoadAsync();
         await _db.Entry(lead).Reference(l => l.Source).LoadAsync();
         await _db.Entry(lead).Reference(l => l.LeadStatus).LoadAsync();
-        await _db.Entry(lead).Reference(l => l.NextFollowUpAssignedTo).LoadAsync();
 
         return Ok(ToDetailDto(lead));
     }
@@ -485,7 +494,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
-            .Include(l => l.NextFollowUpAssignedTo)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -498,42 +507,42 @@ public class LeadsController : ControllerBase
             return Forbid();
         }
 
-        var oldType = lead.NextFollowUpType ?? "Follow-Up";
-        var oldDate = lead.NextFollowUpDate;
+        var pendingTask = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Where(t => t.LeadId == lead.LeadId && t.Title.StartsWith("Follow-up") && t.DueDate.HasValue && !t.CrmTaskStatus!.IsTerminal)
+            .OrderBy(t => t.DueDate)
+            .FirstOrDefaultAsync();
 
-        // Clear next follow up date
-        lead.NextFollowUpDate = null;
-        lead.NextFollowUpType = null;
-        lead.NextFollowUpNotes = null;
-        lead.NextFollowUpAssignedToId = null;
-        lead.LastActivityAt = DateTime.UtcNow;
-
-        // Complete matching CrmTask if exists
-        var existingTask = await _db.CrmTasks
-            .FirstOrDefaultAsync(t => t.LeadId == lead.LeadId && t.Title.StartsWith("Follow-up"));
-
-        if (existingTask != null)
+        if (pendingTask == null)
         {
-            var completedStatus = await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => s.IsTerminal)
-                ?? await _db.CrmTaskStatuses.FirstAsync();
-            existingTask.CrmTaskStatusId = completedStatus.CrmTaskStatusId;
+            return BadRequest(new { message = "No pending follow-up scheduled for this lead." });
         }
 
-        // Auto log activity for completion
-        var callActivityType = await _db.ActivityTypes.FirstOrDefaultAsync(a => a.Name == "Call")
-            ?? await _db.ActivityTypes.FirstAsync();
+        if (pendingTask.DueDate.HasValue && pendingTask.DueDate.Value > DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "Cannot complete follow-up before its scheduled time." });
+        }
+
+        var completedStatus = await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => s.Name == "Completed" && s.IsTerminal)
+            ?? await _db.CrmTaskStatuses.FirstOrDefaultAsync(s => s.IsTerminal);
+
+        pendingTask.CrmTaskStatusId = completedStatus?.CrmTaskStatusId ?? pendingTask.CrmTaskStatusId;
+
+        // Create an activity indicating the follow-up was completed
+        var activityType = await _db.ActivityTypes.FirstOrDefaultAsync(at => at.Name == "Follow-up Completed")
+                           ?? await _db.ActivityTypes.FirstOrDefaultAsync();
+
         var activity = new Activity
         {
             LeadId = lead.LeadId,
-            ActivityTypeId = callActivityType.ActivityTypeId,
-            Subject = $"Follow-up Completed ({oldType})",
-            Description = oldDate.HasValue ? $"Completed follow-up originally scheduled for {oldDate.Value:yyyy-MM-dd HH:mm}." : "Completed follow-up.",
-            ActivityDate = DateTime.UtcNow,
-            DurationMinutes = 15,
-            CreatedById = _currentUser.UserId ?? 1,
-            CreatedAt = DateTime.UtcNow
+            ActivityTypeId = activityType?.ActivityTypeId ?? 1,
+            CreatedById = _currentUser.UserId.Value,
+            CreatedAt = DateTime.UtcNow,
+            Description = null ?? $"Completed follow-up: {pendingTask.Title}"
         };
         _db.Activities.Add(activity);
+
+        lead.LastActivityAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
 
@@ -542,7 +551,6 @@ public class LeadsController : ControllerBase
             var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Lead");
             if (entityType != null)
             {
-                await _auditService.LogFieldChangeAsync(entityType.EntityTypeId, lead.LeadId, "NextFollowUpDate", oldDate?.ToString("o"), null, "Update", _currentUser.UserId.Value);
             }
         }
 
@@ -556,6 +564,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -618,6 +627,7 @@ public class LeadsController : ControllerBase
             .Include(l => l.AssignedRep)
             .Include(l => l.Source)
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -849,7 +859,6 @@ public class LeadsController : ControllerBase
         await _db.Entry(lead).Reference(l => l.AssignedRep).LoadAsync();
         await _db.Entry(lead).Reference(l => l.Source).LoadAsync();
         await _db.Entry(lead).Reference(l => l.LeadStatus).LoadAsync();
-        await _db.Entry(lead).Reference(l => l.NextFollowUpAssignedTo).LoadAsync();
 
         if (oldAssignedRepId != lead.AssignedRepId && lead.AssignedRep != null)
         {
@@ -929,6 +938,7 @@ public class LeadsController : ControllerBase
     {
         var lead = await _db.Leads
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -1126,6 +1136,7 @@ public class LeadsController : ControllerBase
     {
         var lead = await _db.Leads
             .Include(l => l.LeadStatus)
+            .Include(l => l.Tasks).ThenInclude(t => t.CrmTaskStatus)
             .SingleOrDefaultAsync(l => l.LeadId == id);
 
         if (lead is null)
@@ -1203,11 +1214,11 @@ public class LeadsController : ControllerBase
             lead.Priority,
             lead.LeadScore,
             lead.LostReason,
-            lead.NextFollowUpDate,
-            lead.NextFollowUpType,
-            lead.NextFollowUpNotes,
-            lead.NextFollowUpAssignedToId,
-            lead.NextFollowUpAssignedTo?.Name,
+            lead.Tasks.Where(t => t.DueDate.HasValue && t.CrmTaskStatus != null && !t.CrmTaskStatus.IsTerminal && t.Title.StartsWith("Follow-up")).Min(t => t.DueDate),
+            null,
+            null,
+            null,
+            null,
             lead.LastActivityAt,
             lead.CreatedAt,
             lead.IsDeleted,
@@ -1237,13 +1248,13 @@ public class LeadsController : ControllerBase
             lead.Priority,
             lead.LeadScore,
             lead.LostReason,
-            lead.NextFollowUpDate,
-            lead.NextFollowUpType,
-            lead.NextFollowUpNotes,
-            lead.NextFollowUpAssignedToId,
-            lead.NextFollowUpAssignedTo?.Name,
+            lead.Tasks.Where(t => t.DueDate.HasValue && t.CrmTaskStatus != null && !t.CrmTaskStatus.IsTerminal && t.Title.StartsWith("Follow-up")).Min(t => t.DueDate),
+            null,
+            null,
+            null,
+            null,
             lead.LastActivityAt,
             lead.CreatedAt,
             lead.IsDeleted,
             lead.CustomFieldsJson);
-}
+}

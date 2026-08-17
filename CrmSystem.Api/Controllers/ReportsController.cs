@@ -513,7 +513,7 @@ public class ReportsController : ControllerBase
             .Select(l => new
             {
                 l.LeadId,
-                l.NextFollowUpDate,
+                NextFollowUpDate = l.Tasks.Where(t => t.DueDate.HasValue && t.CrmTaskStatus != null && !t.CrmTaskStatus.IsTerminal && t.Title.StartsWith("Follow-up")).Min(t => t.DueDate),
                 l.CreatedAt
             })
             .ToListAsync();

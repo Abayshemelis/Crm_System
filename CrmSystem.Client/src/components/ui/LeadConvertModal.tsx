@@ -81,7 +81,7 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
         })
         .catch(() => setCompanies([]));
     }
-  }, [isOpen, leadData]);
+  }, [isOpen, leadData.firstName, leadData.lastName, leadData.email, leadData.phone, leadData.companyName]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};

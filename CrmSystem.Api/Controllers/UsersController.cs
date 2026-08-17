@@ -326,13 +326,12 @@ public class UsersController : ControllerBase
         var companies = await _db.Companies.IgnoreQueryFilters().Where(c => c.AssignedRepId == id).ToListAsync();
         foreach (var c in companies) c.AssignedRepId = currentUserId;
 
-        var leads = await _db.Leads.IgnoreQueryFilters().Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id || l.NextFollowUpAssignedToId == id).ToListAsync();
+        var leads = await _db.Leads.IgnoreQueryFilters().Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id).ToListAsync();
         foreach (var l in leads)
         {
             if (l.AssignedRepId == id) l.AssignedRepId = currentUserId;
             if (l.CreatedById == id) l.CreatedById = currentUserId;
             if (l.ConvertedById == id) l.ConvertedById = currentUserId;
-            if (l.NextFollowUpAssignedToId == id) l.NextFollowUpAssignedToId = currentUserId;
         }
 
         var opportunities = await _db.Opportunities.IgnoreQueryFilters().Where(o => o.OwnerId == id).ToListAsync();

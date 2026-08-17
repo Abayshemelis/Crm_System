@@ -140,16 +140,30 @@ export const LeadsScreen: React.FC = () => {
             .catch(() => setUsers([]));
     }, []);
 
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 30000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const parseUtcDate = (dateStr?: string | null): Date | null => {
+        if (!dateStr) return null;
+        const iso = dateStr.endsWith('Z') || dateStr.includes('+') || (dateStr.includes('-') && dateStr.length > 19)
+            ? dateStr
+            : dateStr + 'Z';
+        return new Date(iso);
+    };
+
     const isOverdue = (dateStr?: string, statusName?: string) => {
         if (!dateStr || statusName === 'Converted' || statusName === 'Lost' || statusName === 'Closed') return false;
-        return new Date(dateStr) < new Date();
+        return parseUtcDate(dateStr)!.getTime() < now.getTime();
     };
 
     const isToday = (dateStr?: string) => {
         if (!dateStr) return false;
-        const d = new Date(dateStr);
-        const today = new Date();
-        return d.toDateString() === today.toDateString();
+        const d = parseUtcDate(dateStr)!;
+        return d.toDateString() === now.toDateString();
     };
 
     if (isLoading && leads.length === 0) {

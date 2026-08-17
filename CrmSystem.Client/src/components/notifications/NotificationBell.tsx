@@ -45,7 +45,43 @@ export const NotificationBell: React.FC = () => {
     } catch { /* ignore */ }
   }, []);
 
+  const alertedLeadsRef = useRef<Set<string>>(new Set());
+  const isFirstRun = useRef(true);
+
   useEffect(() => {
+    const checkFollowUps = async () => {
+      try {
+        const res = await api.get<any>('/api/leads?limit=100');
+        const leads = res.items || res;
+        const now = new Date();
+        leads.forEach((lead: any) => {
+          if (lead.nextFollowUpDate && lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && lead.leadStatusName !== 'Closed') {
+            const parsedIso = lead.nextFollowUpDate.endsWith('Z') || lead.nextFollowUpDate.includes('+') || (lead.nextFollowUpDate.includes('-') && lead.nextFollowUpDate.length > 19) ? lead.nextFollowUpDate : lead.nextFollowUpDate + 'Z';
+            const time = new Date(parsedIso).getTime();
+            const alertKey = `${lead.leadId}_${lead.nextFollowUpDate}`;
+            if (now.getTime() >= time) {
+                if (!alertedLeadsRef.current.has(alertKey)) {
+                    if (!isFirstRun.current && now.getTime() - time < 300000) {
+                         const msg = `Follow-up for ${lead.firstName} ${lead.lastName} is now due!`;
+                         window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg, type: 'info' } }));
+                         
+                         api.post('/api/notifications/custom', { message: msg }).then(() => {
+                             fetchCount();
+                             fetchNotifications();
+                         }).catch(() => {});
+                    }
+                    alertedLeadsRef.current.add(alertKey);
+                }
+            }
+          }
+        });
+        isFirstRun.current = false;
+      } catch (err) {}
+    };
+
+    checkFollowUps();
+    const followUpTimer = setInterval(checkFollowUps, 30000);
+
     fetchCount();
     const interval = setInterval(fetchCount, 30000);
 
@@ -58,6 +94,7 @@ export const NotificationBell: React.FC = () => {
 
     return () => {
       clearInterval(interval);
+      clearInterval(followUpTimer);
       window.removeEventListener('app:notification', onLiveNotif);
     };
   }, [fetchCount]);
