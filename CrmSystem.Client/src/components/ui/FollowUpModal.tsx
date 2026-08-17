@@ -90,6 +90,12 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
             return;
         }
 
+        const dateObj = new Date(`${date}T${time}:00`);
+        if (dateObj < new Date()) {
+            setError('Follow-up date and time cannot be in the past.');
+            return;
+        }
+
         setIsSubmitting(true);
         setError(null);
 
@@ -144,6 +150,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
                                     className="filter-input"
                                     style={{ width: '100%' }}
                                     value={date || ''}
+                                    min={new Date().toISOString().split('T')[0]}
                                     onChange={(e) => setDate(e.target.value)}
                                     required
                                 />
