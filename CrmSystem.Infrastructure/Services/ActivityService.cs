@@ -15,16 +15,14 @@ public class ActivityService : IActivityService
 
     public async Task<IReadOnlyList<ActivityReadDto>> GetAllAsync()
     {
-        var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-
         var list = await _db.Activities
             .Include(a => a.ActivityType)
             .Include(a => a.CreatedBy)
             .Include(a => a.Customer)
             .Include(a => a.Opportunity)
             .Include(a => a.Lead)
-            .Where(a => a.ActivityDate >= thirtyDaysAgo)
             .OrderByDescending(a => a.ActivityDate)
+            .Take(100)
             .ToListAsync();
 
         return list.Select(MapToDto).ToList();

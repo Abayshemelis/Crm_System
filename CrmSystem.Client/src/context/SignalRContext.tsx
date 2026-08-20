@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import * as signalR from '@microsoft/signalr';
 import { useAuth } from './AuthContext';
 import { showToast } from '../lib/toast';
+import { playNotificationSound } from '../lib/sound';
 
 interface SignalRContextType {
     connected: boolean;
@@ -59,16 +60,19 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Attach event handlers
         connection.on('ReceiveNotification', (data: { title?: string; message: string; type?: string }) => {
             setUnreadCount(prev => prev + 1);
+            playNotificationSound(data.type === 'warning' ? 'alert' : 'default');
             showToast(data.message || data.title || 'New Notification Received', 'info');
             window.dispatchEvent(new CustomEvent('app:notification', { detail: data }));
         });
 
         connection.on('ContractSigned', (data: { contractId: number; title: string; clientName: string }) => {
+            playNotificationSound('success');
             showToast(`Contract "${data.title}" was signed by ${data.clientName}!`, 'success');
             window.dispatchEvent(new CustomEvent('app:notification', { detail: data }));
         });
 
         connection.on('LeadAssigned', (data: { leadId: number; leadName: string }) => {
+            playNotificationSound('default');
             showToast(`New Lead assigned to you: ${data.leadName}`, 'info');
             window.dispatchEvent(new CustomEvent('app:notification', { detail: data }));
         });
@@ -79,8 +83,18 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         // Start connection safely
         connection.start()
-            .then(() => {
+            .then(async () => {
                 setConnected(true);
+                // Fetch initial unread count so the badge is correct immediately on login
+                try {
+                    const res = await fetch('/api/notifications/count', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setUnreadCount(data.unreadCount ?? 0);
+                    }
+                } catch { /* ignore */ }
             })
             .catch(() => {
                 setConnected(false);

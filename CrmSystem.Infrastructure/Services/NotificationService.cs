@@ -4,13 +4,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CrmSystem.Infrastructure.Services;
 
+/// <summary>Marker interface so Infrastructure can reference the hub without a circular project dependency.</summary>
+public interface INotificationHubContext
+{
+    Task PushToUserGroupAsync(string groupName, string message, string type);
+}
+
 public class NotificationService : INotificationService
 {
     private readonly AppDbContext _db;
+    private readonly INotificationHubContext _hub;
 
-    public NotificationService(AppDbContext db)
+    public NotificationService(AppDbContext db, INotificationHubContext hub)
     {
         _db = db;
+        _hub = hub;
     }
 
     public async Task<IReadOnlyList<NotificationReadDto>> GetForUserAsync(int identityId)
@@ -56,121 +64,219 @@ public class NotificationService : INotificationService
     }
 
     /// <summary>
-    /// Idempotent — safe to call on every background tick.
-    /// Generates TaskDue (due today), TaskOverdue, and OpportunityStalled notifications
-    /// only if a matching notification was not already created today.
+    /// Idempotent — safe to call on every background tick and on-demand.
+    /// Generates Due Today, Overdue, and Stalled notifications.
     /// </summary>
     public async Task GenerateAsync()
     {
         var now = DateTime.UtcNow;
         var today = now.Date;
-        var stalledThreshold = DateTime.UtcNow.AddDays(-14);
+        var tomorrow = today.AddDays(1);
+        var stalledThreshold = now.AddDays(-14);
 
-        // Resolve notification type IDs
-        var types = await _db.NotificationTypes.ToListAsync();
-        int? taskDueTypeId = types.FirstOrDefault(t => t.Name == "TaskDue")?.NotificationTypeId;
-        int? taskOverdueTypeId = types.FirstOrDefault(t => t.Name == "TaskOverdue")?.NotificationTypeId;
-        int? stalledTypeId = types.FirstOrDefault(t => t.Name == "OpportunityStalled")?.NotificationTypeId;
-
-        var allUsers = await _db.Identities.Select(i => i.IdentityId).ToListAsync();
-
-        // ── Task Due Today ───────────────────────────────────────────────────
-        if (taskDueTypeId.HasValue)
+        // Helper to resolve or seed NotificationType
+        async Task<int> GetOrCreateTypeAsync(string name)
         {
-            var dueTodayTasks = await _db.CrmTasks
-                .Include(t => t.CrmTaskStatus)
-                .Where(t => t.DueDate.HasValue
-                         && t.DueDate.Value.Date == today
-                         && t.DueDate.Value <= now
-                         && t.AssignedToId.HasValue
-                         && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
-                .ToListAsync();
+            var t = await _db.NotificationTypes.FirstOrDefaultAsync(x => x.Name == name);
+            if (t == null)
+            {
+                t = new NotificationType { Name = name, DefaultChannel = "InApp" };
+                _db.NotificationTypes.Add(t);
+                await _db.SaveChangesAsync();
+            }
+            return t.NotificationTypeId;
+        }
 
-            foreach (var task in dueTodayTasks)
+        int taskDueTypeId = await GetOrCreateTypeAsync("TaskDue");
+        int taskOverdueTypeId = await GetOrCreateTypeAsync("TaskOverdue");
+        int stalledTypeId = await GetOrCreateTypeAsync("OpportunityStalled");
+        int followUpOverdueTypeId = await GetOrCreateTypeAsync("FollowUpOverdue");
+        int followUpDueTypeId = await GetOrCreateTypeAsync("FollowUpDue");
+
+        // Clean up any test/dummy notifications from the database
+        var testNotifs = await _db.Notifications
+            .Where(n => n.Message.Contains("Test notification") || n.Message.Contains("seed-test"))
+            .ToListAsync();
+        if (testNotifs.Count > 0)
+        {
+            _db.Notifications.RemoveRange(testNotifs);
+            await _db.SaveChangesAsync();
+        }
+
+        var adminAndManagerIds = await _db.Identities
+            .Include(i => i.Role)
+            .Include(i => i.IdentityRoles).ThenInclude(ir => ir.Role)
+            .Where(i => i.IsActive && (
+                (i.Role != null && (i.Role.Name == "Admin" || i.Role.Name == "Manager")) ||
+                i.IdentityRoles.Any(ir => ir.Role != null && (ir.Role.Name == "Admin" || ir.Role.Name == "Manager"))))
+            .Select(i => i.IdentityId)
+            .ToListAsync();
+
+        var newNotificationsList = new List<(int IdentityId, string Message)>();
+
+        // ── 1. Tasks Due Today (both regular tasks and follow-up tasks) ───────
+        var dueTodayTasks = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Include(t => t.Lead)
+            .Where(t => t.DueDate.HasValue
+                     && t.DueDate.Value >= today
+                     && t.DueDate.Value < tomorrow
+                     && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .ToListAsync();
+
+        foreach (var task in dueTodayTasks)
+        {
+            var recipientIds = new HashSet<int>();
+            if (task.AssignedToId.HasValue && task.AssignedToId.Value > 0)
+                recipientIds.Add(task.AssignedToId.Value);
+            if (task.Lead != null && task.Lead.AssignedRepId.HasValue && task.Lead.AssignedRepId.Value > 0)
+                recipientIds.Add(task.Lead.AssignedRepId.Value);
+            if (task.CreatedById > 0)
+                recipientIds.Add(task.CreatedById);
+
+            foreach (var adminId in adminAndManagerIds)
+                recipientIds.Add(adminId);
+
+            if (recipientIds.Count == 0) continue;
+
+            bool isFollowUp = task.LeadId.HasValue || task.Title.StartsWith("Follow-up", StringComparison.OrdinalIgnoreCase);
+            int notifTypeId = isFollowUp ? followUpDueTypeId : taskDueTypeId;
+
+            string msg = isFollowUp && task.Lead != null
+                ? $"Follow-up due today: {task.Lead.FirstName} {task.Lead.LastName} ({task.Title})"
+                : $"Task due today: {task.Title}";
+
+            foreach (var userId in recipientIds)
             {
                 var alreadyExists = await _db.Notifications.AnyAsync(n =>
-                    n.RelatedTaskId == task.CrmTaskId
-                    && n.NotificationTypeId == taskDueTypeId.Value
-                    && n.CreatedAt.Date == today);
+                    n.IdentityId == userId
+                    && n.RelatedTaskId == task.CrmTaskId
+                    && (n.NotificationTypeId == taskDueTypeId || n.NotificationTypeId == followUpDueTypeId)
+                    && n.CreatedAt >= today
+                    && n.CreatedAt < tomorrow);
 
                 if (!alreadyExists)
                 {
                     _db.Notifications.Add(new Notification
                     {
-                        IdentityId = task.AssignedToId!.Value,
-                        NotificationTypeId = taskDueTypeId.Value,
-                        Message = $"Task due today: {task.Title}",
+                        IdentityId = userId,
+                        NotificationTypeId = notifTypeId,
+                        Message = msg,
                         RelatedTaskId = task.CrmTaskId,
                         IsRead = false,
                         CreatedAt = DateTime.UtcNow
                     });
+                    newNotificationsList.Add((userId, msg));
                 }
             }
         }
 
-        // ── Task Overdue ─────────────────────────────────────────────────────
-        if (taskOverdueTypeId.HasValue)
-        {
-            var overdueTasks = await _db.CrmTasks
-                .Include(t => t.CrmTaskStatus)
-                .Where(t => t.DueDate.HasValue
-                         && t.DueDate.Value < now
-                         && t.AssignedToId.HasValue
-                         && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
-                .ToListAsync();
+        // ── 2. Overdue Tasks (both regular tasks and follow-up tasks) ─────────
+        var overdueTasks = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Include(t => t.Lead)
+            .Where(t => t.DueDate.HasValue
+                     && t.DueDate.Value < today
+                     && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .ToListAsync();
 
-            foreach (var task in overdueTasks)
+        foreach (var task in overdueTasks)
+        {
+            var recipientIds = new HashSet<int>();
+            if (task.AssignedToId.HasValue && task.AssignedToId.Value > 0)
+                recipientIds.Add(task.AssignedToId.Value);
+            if (task.Lead != null && task.Lead.AssignedRepId.HasValue && task.Lead.AssignedRepId.Value > 0)
+                recipientIds.Add(task.Lead.AssignedRepId.Value);
+            if (task.CreatedById > 0)
+                recipientIds.Add(task.CreatedById);
+
+            foreach (var adminId in adminAndManagerIds)
+                recipientIds.Add(adminId);
+
+            if (recipientIds.Count == 0) continue;
+
+            bool isFollowUp = task.LeadId.HasValue || task.Title.StartsWith("Follow-up", StringComparison.OrdinalIgnoreCase);
+            int notifTypeId = isFollowUp ? followUpOverdueTypeId : taskOverdueTypeId;
+
+            string msg = isFollowUp && task.Lead != null
+                ? $"Overdue follow-up for {task.Lead.FirstName} {task.Lead.LastName} (was due {task.DueDate!.Value:MMM d, yyyy})"
+                : $"Overdue task: {task.Title} (was due {task.DueDate!.Value:MMM d, yyyy})";
+
+            foreach (var userId in recipientIds)
             {
                 var alreadyExists = await _db.Notifications.AnyAsync(n =>
-                    n.RelatedTaskId == task.CrmTaskId
-                    && n.NotificationTypeId == taskOverdueTypeId.Value
-                    && n.CreatedAt.Date == today);
+                    n.IdentityId == userId
+                    && n.RelatedTaskId == task.CrmTaskId
+                    && (n.NotificationTypeId == taskOverdueTypeId || n.NotificationTypeId == followUpOverdueTypeId)
+                    && n.CreatedAt >= today
+                    && n.CreatedAt < tomorrow);
 
                 if (!alreadyExists)
                 {
                     _db.Notifications.Add(new Notification
                     {
-                        IdentityId = task.AssignedToId!.Value,
-                        NotificationTypeId = taskOverdueTypeId.Value,
-                        Message = $"Overdue task: {task.Title} (was due {task.DueDate!.Value:MMM d})",
+                        IdentityId = userId,
+                        NotificationTypeId = notifTypeId,
+                        Message = msg,
                         RelatedTaskId = task.CrmTaskId,
                         IsRead = false,
                         CreatedAt = DateTime.UtcNow
                     });
+                    newNotificationsList.Add((userId, msg));
                 }
             }
         }
 
-        // ── Opportunity Stalled ──────────────────────────────────────────────
-        if (stalledTypeId.HasValue)
-        {
-            var stalledOpps = await _db.Opportunities
-                .Where(o => o.UpdatedAt < stalledThreshold)
-                .ToListAsync();
+        // ── 3. Opportunity Stalled ───────────────────────────────────────────
+        var stalledOpps = await _db.Opportunities
+            .Include(o => o.OpportunityStage)
+            .Where(o => o.UpdatedAt < stalledThreshold
+                     && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
+            .ToListAsync();
 
-            foreach (var opp in stalledOpps)
+        foreach (var opp in stalledOpps)
+        {
+            var recipientIds = new HashSet<int>();
+            if (opp.OwnerId > 0) recipientIds.Add(opp.OwnerId);
+            foreach (var adminId in adminAndManagerIds) recipientIds.Add(adminId);
+
+            var msg = $"Opportunity stalled: \"{opp.Title}\" — no update in 14 days";
+
+            foreach (var userId in recipientIds)
             {
                 var alreadyExists = await _db.Notifications.AnyAsync(n =>
-                    n.RelatedOpportunityId == opp.OpportunityId
-                    && n.NotificationTypeId == stalledTypeId.Value
-                    && n.CreatedAt.Date == today);
+                    n.IdentityId == userId
+                    && n.RelatedOpportunityId == opp.OpportunityId
+                    && n.NotificationTypeId == stalledTypeId
+                    && n.CreatedAt >= today
+                    && n.CreatedAt < tomorrow);
 
                 if (!alreadyExists)
                 {
                     _db.Notifications.Add(new Notification
                     {
-                        IdentityId = opp.OwnerId,
-                        NotificationTypeId = stalledTypeId.Value,
-                        Message = $"Opportunity stalled: \"{opp.Title}\" — no update in 14 days",
+                        IdentityId = userId,
+                        NotificationTypeId = stalledTypeId,
+                        Message = msg,
                         RelatedOpportunityId = opp.OpportunityId,
                         IsRead = false,
                         CreatedAt = DateTime.UtcNow
                     });
+                    newNotificationsList.Add((userId, msg));
                 }
             }
         }
 
-        await _db.SaveChangesAsync();
+        if (newNotificationsList.Count > 0)
+        {
+            await _db.SaveChangesAsync();
+
+            // Push real-time SignalR alerts to users who received notifications
+            foreach (var (identityId, message) in newNotificationsList)
+            {
+                await _hub.PushToUserGroupAsync($"user_{identityId}", message, "warning");
+            }
+        }
     }
 
     public async Task CreateNotificationAsync(int identityId, string typeName, string message, int? taskId = null, int? opportunityId = null)
@@ -195,6 +301,14 @@ public class NotificationService : INotificationService
 
         _db.Notifications.Add(notif);
         await _db.SaveChangesAsync();
+
+        // Push real-time notification via SignalR
+        await PushToUserAsync(identityId, message);
+    }
+
+    public async Task PushToUserAsync(int identityId, string message, string type = "info")
+    {
+        await _hub.PushToUserGroupAsync($"user_{identityId}", message, type);
     }
 
     private static NotificationReadDto MapToDto(Notification n) => new()

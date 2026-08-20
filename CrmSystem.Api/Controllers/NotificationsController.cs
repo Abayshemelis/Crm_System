@@ -30,6 +30,7 @@ public class NotificationsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<NotificationReadDto>>> GetMine()
     {
         if (!_currentUser.UserId.HasValue) return Unauthorized();
+        await _service.GenerateAsync();
         return Ok(await _service.GetForUserAsync(_currentUser.UserId.Value));
     }
 
@@ -38,6 +39,7 @@ public class NotificationsController : ControllerBase
     public async Task<ActionResult<NotificationCountDto>> GetUnreadCount()
     {
         if (!_currentUser.UserId.HasValue) return Unauthorized();
+        await _service.GenerateAsync();
         var count = await _service.GetUnreadCountAsync(_currentUser.UserId.Value);
         return Ok(new NotificationCountDto { UnreadCount = count });
     }
@@ -67,5 +69,14 @@ public class NotificationsController : ControllerBase
         if (!_currentUser.UserId.HasValue) return Unauthorized();
         await _service.CreateNotificationAsync(_currentUser.UserId.Value, "SystemAlert", request.Message);
         return Ok();
+    }
+
+    /// <summary>POST /api/notifications/trigger-generate — manually run the background notification generator</summary>
+    [HttpPost("trigger-generate")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> TriggerGenerate()
+    {
+        await _service.GenerateAsync();
+        return Ok(new { message = "Notification generation pass completed." });
     }
 }

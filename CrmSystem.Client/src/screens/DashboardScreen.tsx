@@ -39,9 +39,15 @@ interface FilteredDashboardStats {
         activityId: number;
         subject: string;
         activityDate: string;
+        customerId?: number;
+        opportunityId?: number;
+        leadId?: number;
         customerName?: string;
         companyName?: string;
         opportunityTitle?: string;
+        leadName?: string;
+        typeName?: string;
+        description?: string;
     }>;
     topOpportunities?: Array<{
         opportunityId: number;
@@ -674,17 +680,32 @@ export const DashboardScreen: React.FC = () => {
                                 <div className="dashboard-list">
                                     {filteredStats.recentActivities && filteredStats.recentActivities.length > 0 ? (
                                         filteredStats.recentActivities.map((activity) => (
-                                            <div key={activity.activityId} className="dashboard-list-item">
-                                                <div>
-                                                    <div className="dashboard-list-item-title">{activity.subject}</div>
+                                            <div
+                                                key={activity.activityId}
+                                                className="dashboard-list-item"
+                                                onClick={() => {
+                                                    if (activity.opportunityId) navigate(`/opportunities/${activity.opportunityId}`);
+                                                    else if (activity.customerId) navigate(`/customers/${activity.customerId}`);
+                                                    else if (activity.leadId) navigate(`/leads`);
+                                                }}
+                                            >
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div className="dashboard-list-item-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                                        {activity.typeName && (
+                                                            <span style={{ fontSize: '0.68rem', padding: '0.12rem 0.4rem', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: 600 }}>
+                                                                {activity.typeName}
+                                                            </span>
+                                                        )}
+                                                        <span>{activity.subject || activity.description || 'Activity logged'}</span>
+                                                    </div>
                                                     <div className="dashboard-list-item-meta">
-                                                        {[activity.customerName, activity.companyName, activity.opportunityTitle]
+                                                        {[activity.customerName, activity.companyName, activity.opportunityTitle, activity.leadName ? `Lead: ${activity.leadName}` : null]
                                                             .filter(Boolean)
-                                                            .join(' · ')}
+                                                            .join(' · ') || (activity.description ? activity.description.slice(0, 60) : 'General update')}
                                                     </div>
                                                 </div>
-                                                <div className="dashboard-list-item-value">
-                                                    {new Date(activity.activityDate).toLocaleDateString()}
+                                                <div className="dashboard-list-item-value" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                    {new Date(activity.activityDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                                 </div>
                                             </div>
                                         ))

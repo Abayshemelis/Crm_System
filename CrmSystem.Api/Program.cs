@@ -77,6 +77,7 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<INotificationHubContext, NotificationHubContextAdapter>();
 builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();
 builder.Services.AddScoped<IImportService, ImportService>();
 builder.Services.AddScoped<IAiInsightService, AiInsightService>();
@@ -285,7 +286,7 @@ using (var scope = app.Services.CreateScope())
     await db.SaveChangesAsync();
 
     // ── NotificationTypes ─────────────────────────────────────────────────
-    var notifTypeSeeds = new[] { ("TaskDue", "InApp"), ("TaskOverdue", "InApp"), ("TaskAssigned", "InApp"), ("OpportunityWon", "InApp"), ("OpportunityLost", "InApp"), ("OpportunityStalled", "InApp"), ("LeadAssigned", "InApp"), ("MentionedInNote", "InApp") };
+    var notifTypeSeeds = new[] { ("TaskDue", "InApp"), ("TaskOverdue", "InApp"), ("TaskAssigned", "InApp"), ("OpportunityWon", "InApp"), ("OpportunityLost", "InApp"), ("OpportunityStalled", "InApp"), ("LeadAssigned", "InApp"), ("MentionedInNote", "InApp"), ("FollowUpOverdue", "InApp"), ("SystemAlert", "InApp") };
     foreach (var (name, channel) in notifTypeSeeds)
     {
         if (!await db.NotificationTypes.AnyAsync(x => x.Name == name))

@@ -283,19 +283,27 @@ public class ContactRequestDto
 
         // Recent activities
         var recentActivities = await activitiesQuery
+            .Include(a => a.ActivityType)
             .Include(a => a.Customer)
             .ThenInclude(c => c!.Company)
             .Include(a => a.Opportunity)
+            .Include(a => a.Lead)
             .OrderByDescending(a => a.ActivityDate)
-            .Take(5)
+            .Take(10)
             .Select(a => new
             {
                 a.ActivityId,
-                a.Subject,
+                Subject = !string.IsNullOrWhiteSpace(a.Subject) ? a.Subject : (a.ActivityType != null ? a.ActivityType.Name : "Activity"),
                 a.ActivityDate,
-                CustomerName = a.Customer != null ? $"{a.Customer.FirstName} {a.Customer.LastName}" : null,
+                a.CustomerId,
+                a.OpportunityId,
+                a.LeadId,
+                CustomerName = a.Customer != null ? $"{a.Customer.FirstName} {a.Customer.LastName}".Trim() : null,
                 CompanyName = a.Customer != null && a.Customer.Company != null ? a.Customer.Company.Name : null,
-                OpportunityTitle = a.Opportunity != null ? a.Opportunity.Title : null
+                OpportunityTitle = a.Opportunity != null ? a.Opportunity.Title : null,
+                LeadName = a.Lead != null ? $"{a.Lead.FirstName} {a.Lead.LastName}".Trim() : null,
+                TypeName = a.ActivityType != null ? a.ActivityType.Name : "Activity",
+                a.Description
             })
             .ToListAsync();
 

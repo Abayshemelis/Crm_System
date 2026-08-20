@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, X, CheckCheck, ExternalLink } from 'lucide-react';
+import { Bell, X, CheckCheck, ExternalLink, Volume2, VolumeX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useSignalR } from '../../context/SignalRContext';
+import { playNotificationSound, isSoundEnabled, setSoundEnabled } from '../../lib/sound';
 
 interface NotificationDto {
   notificationId: number;
@@ -34,49 +36,60 @@ export const NotificationBell: React.FC = () => {
   const [count, setCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  // Poll unread count every 30 seconds for responsive alerts
+  // Use SignalR context — unreadCount is updated in real-time via WebSocket
+  const { unreadCount: signalRCount, setUnreadCount } = useSignalR();
+
+  // Keep local count in sync with SignalR context
+  useEffect(() => {
+    setCount(signalRCount);
+  }, [signalRCount]);
+
+  // Poll unread count every 30 seconds as a fallback (SignalR handles real-time)
   const fetchCount = useCallback(async () => {
     try {
       const res = await api.get<{ unreadCount: number }>('/api/notifications/count');
       setCount(res.unreadCount);
+      setUnreadCount(res.unreadCount);
     } catch { /* ignore */ }
-  }, []);
+  }, [setUnreadCount]);
 
   const alertedLeadsRef = useRef<Set<string>>(new Set());
-  const isFirstRun = useRef(true);
 
   useEffect(() => {
     const checkFollowUps = async () => {
       try {
-        const res = await api.get<any>('/api/leads?limit=100');
+        const res = await api.get<any>('/api/leads?limit=200');
         const leads = res.items || res;
         const now = new Date();
         leads.forEach((lead: any) => {
-          if (lead.nextFollowUpDate && lead.leadStatusName !== 'Converted' && lead.leadStatusName !== 'Lost' && lead.leadStatusName !== 'Closed') {
-            const parsedIso = lead.nextFollowUpDate.endsWith('Z') || lead.nextFollowUpDate.includes('+') || (lead.nextFollowUpDate.includes('-') && lead.nextFollowUpDate.length > 19) ? lead.nextFollowUpDate : lead.nextFollowUpDate + 'Z';
+          if (
+            lead.nextFollowUpDate &&
+            lead.leadStatusName !== 'Converted' &&
+            lead.leadStatusName !== 'Lost' &&
+            lead.leadStatusName !== 'Closed'
+          ) {
+            const raw = lead.nextFollowUpDate;
+            const parsedIso =
+              raw.endsWith('Z') || raw.includes('+') || (raw.includes('-') && raw.length > 19)
+                ? raw
+                : raw + 'Z';
             const time = new Date(parsedIso).getTime();
             const alertKey = `${lead.leadId}_${lead.nextFollowUpDate}`;
-            if (now.getTime() >= time) {
-                if (!alertedLeadsRef.current.has(alertKey)) {
-                    if (!isFirstRun.current && now.getTime() - time < 300000) {
-                         const msg = `Follow-up for ${lead.firstName} ${lead.lastName} is now due!`;
-                         window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg, type: 'info' } }));
-                         
-                         api.post('/api/notifications/custom', { message: msg }).then(() => {
-                             fetchCount();
-                             fetchNotifications();
-                         }).catch(() => {});
-                    }
-                    alertedLeadsRef.current.add(alertKey);
-                }
+
+            // Show toast for ANY overdue follow-up not already alerted this session
+            if (now.getTime() >= time && !alertedLeadsRef.current.has(alertKey)) {
+              alertedLeadsRef.current.add(alertKey);
+              playNotificationSound('alert');
+              const msg = `Overdue follow-up: ${lead.firstName} ${lead.lastName} (was due ${new Date(parsedIso).toLocaleDateString()})`;
+              window.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg, type: 'warning' } }));
             }
           }
         });
-        isFirstRun.current = false;
-      } catch (err) {}
+      } catch { /* ignore */ }
     };
 
     checkFollowUps();
@@ -98,6 +111,15 @@ export const NotificationBell: React.FC = () => {
       window.removeEventListener('app:notification', onLiveNotif);
     };
   }, [fetchCount]);
+
+  const toggleSound = () => {
+    const nextState = !soundOn;
+    setSoundOn(nextState);
+    setSoundEnabled(nextState);
+    if (nextState) {
+      playNotificationSound('default');
+    }
+  };
 
   const fetchNotifications = async () => {
     setLoading(true);
@@ -129,7 +151,9 @@ export const NotificationBell: React.FC = () => {
     try {
       await api.patch(`/api/notifications/${id}/read`, {});
       setNotifications(ns => ns.map(n => n.notificationId === id ? { ...n, isRead: true } : n));
-      setCount(c => Math.max(0, c - 1));
+      const newCount = Math.max(0, count - 1);
+      setCount(newCount);
+      setUnreadCount(newCount);
     } catch { /* ignore */ }
   };
 
@@ -138,6 +162,7 @@ export const NotificationBell: React.FC = () => {
       await api.post('/api/notifications/read-all', {});
       setNotifications(ns => ns.map(n => ({ ...n, isRead: true })));
       setCount(0);
+      setUnreadCount(0);
     } catch { /* ignore */ }
   };
 
@@ -145,8 +170,10 @@ export const NotificationBell: React.FC = () => {
     if (!n.isRead) await markRead(n.notificationId);
     setOpen(false);
     const msg = n.message.toLowerCase();
+    const type = (n.typeName || '').toLowerCase();
     if (msg.includes('contract')) navigate('/contracts');
     else if (msg.includes('invoice') || msg.includes('payment')) navigate('/invoices');
+    else if (type.includes('followup') || type.includes('follow-up') || msg.includes('follow-up') || msg.includes('lead')) navigate('/leads');
     else if (n.relatedTaskId || msg.includes('task')) navigate('/tasks');
     else if (n.relatedOpportunityId || msg.includes('opportunity') || msg.includes('deal')) {
       if (n.relatedOpportunityId) navigate(`/opportunities/${n.relatedOpportunityId}`);
@@ -166,6 +193,15 @@ export const NotificationBell: React.FC = () => {
           <div className="notif-panel-header">
             <span className="notif-panel-title">Notifications</span>
             <div className="notif-panel-actions">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={toggleSound}
+                title={soundOn ? 'Sound enabled (click to mute)' : 'Sound muted (click to enable)'}
+                style={{ opacity: soundOn ? 1 : 0.5 }}
+              >
+                {soundOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
+              </button>
               {count > 0 && (
                 <button type="button" className="notif-action-btn" onClick={markAllRead} title="Mark all read">
                   <CheckCheck size={14} /> Mark all read

@@ -10,4 +10,6 @@ public interface INotificationService
     Task MarkAllReadAsync(int identityId);
     Task CreateNotificationAsync(int identityId, string typeName, string message, int? taskId = null, int? opportunityId = null);
     Task GenerateAsync();
+    /// <summary>Push a real-time SignalR message to a specific user group.</summary>
+    Task PushToUserAsync(int identityId, string message, string type = "info");
 }
