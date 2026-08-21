@@ -241,6 +241,52 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
+    if (db.Database.IsRelational())
+    {
+        try
+        {
+            await db.Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Migrate] Warning: {ex.Message}");
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CompanySignatureDataUrl')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CompanySignatureDataUrl] NVARCHAR(MAX) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CompanySignedByName')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CompanySignedByName] NVARCHAR(200) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CompanySignedAt')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CompanySignedAt] DATETIME2 NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CustomerSignatureDataUrl')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CustomerSignatureDataUrl] NVARCHAR(MAX) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CustomerSignedByName')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CustomerSignedByName] NVARCHAR(200) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CustomerSignedAt')
+                BEGIN
+                    ALTER TABLE [Contracts] ADD [CustomerSignedAt] DATETIME2 NULL;
+                END
+            ");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SchemaSync] Info: {ex.Message}");
+        }
+    }
+
     // ── Seed Roles ────────────────────────────────────────────────────────
     var roleSeeds = new[] {
         ("Admin", "System Administrator"),

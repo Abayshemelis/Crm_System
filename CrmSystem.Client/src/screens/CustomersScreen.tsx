@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 import SearchableMultiSelect from '../components/ui/SearchableMultiSelect';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { showToast } from '../lib/toast';
+import { confirmAction } from '../lib/confirm';
 import './screens.css';
 
 interface TagItem { id: number; name: string; }
@@ -145,7 +146,72 @@ export const CustomersScreen: React.FC = () => {
   const toggleSelection = (id: number) => setSelected(current => {
     const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
-  const selectAll = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(c => c.customerId)));
+
+  const selectAll = () => {
+    const selectable = filtered.filter(c => !c.isDeleted);
+    if (selectable.length === 0) return;
+    if (selected.size === selectable.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(selectable.map(c => c.customerId)));
+    }
+  };
+
+  const handleDeleteSingle = async (e: React.MouseEvent, customer: Customer) => {
+    e.stopPropagation();
+    const confirmed = await confirmAction(
+      `Are you sure you want to delete customer "${customer.firstName} ${customer.lastName}"?`
+    );
+    if (!confirmed) return;
+
+    const prev = customers.slice();
+    if (!includeDeleted) {
+      setCustomers(cs => cs.filter(c => c.customerId !== customer.customerId));
+    } else {
+      setCustomers(cs => cs.map(c => c.customerId === customer.customerId ? { ...c, isDeleted: true } : c));
+    }
+
+    try {
+      await api.delete(`/api/customers/${customer.customerId}`);
+      showToast(`Customer "${customer.firstName} ${customer.lastName}" deleted.`, 'success');
+      load();
+    } catch (err: any) {
+      setCustomers(prev);
+      showToast(err?.message || 'Failed to delete customer.', 'error');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    const confirmed = await confirmAction(
+      `Are you sure you want to delete all ${count} selected customer${count > 1 ? 's' : ''}? This will move them to the deleted archive.`
+    );
+    if (!confirmed) return;
+
+    setBulkLoading(true);
+    const prev = customers.slice();
+    if (!includeDeleted) {
+      setCustomers(cs => cs.filter(c => !selected.has(c.customerId)));
+    } else {
+      setCustomers(cs => cs.map(c => selected.has(c.customerId) ? { ...c, isDeleted: true } : c));
+    }
+
+    try {
+      await api.post('/api/customers/bulk', {
+        customerIds: [...selected],
+        action: 'delete'
+      });
+      showToast(`Successfully deleted ${count} customer${count > 1 ? 's' : ''}.`, 'success');
+      setSelected(new Set());
+      load();
+    } catch (e: any) {
+      setCustomers(prev);
+      showToast(e?.message || 'Failed to delete selected customers.', 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const filteredReps = reps.filter(rep => repRoleFilter === 'All' || rep.role === repRoleFilter);
 
@@ -437,10 +503,26 @@ export const CustomersScreen: React.FC = () => {
         </select>
         <Button size="sm" disabled={bulkLoading} onClick={() => bulk('assign_company')}><Building size={14} /> Assign Company</Button>
       </>}
+      <Button 
+        size="sm" 
+        disabled={bulkLoading} 
+        onClick={handleBulkDelete}
+        style={{ 
+          background: 'rgba(239, 68, 68, 0.15)', 
+          color: '#ef4444', 
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          fontWeight: 600
+        }}
+      >
+        <Trash2 size={14} /> Delete ({selected.size})
+      </Button>
       <Button size="sm" variant="secondary" onClick={exportSelected}><Download size={14} /> Export CSV</Button>
       <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X size={14} /></Button>
     </div>}
     {filtered.length === 0 && !error ? <EmptyState title="No customers found" description="Adjust your filters or create a new customer." icon={Users} actionText="New Customer" onActionClick={() => navigate('/customers/new')} /> :
-      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.length > 0 && selected.size === filtered.length} onChange={selectAll} /></th><th>Name</th><th>Job Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)} style={customer.isDeleted ? { opacity: 0.6, background: 'var(--bg-secondary)' } : {}}><td onClick={e => e.stopPropagation()}><input type="checkbox" disabled={customer.isDeleted} checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName} {customer.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>Deleted</span>}</td><td>{customer.jobTitle ?? '—'}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td></tr>)}</tbody></table></div>}
+      <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th><input type="checkbox" aria-label="Select all customers" checked={filtered.filter(c => !c.isDeleted).length > 0 && selected.size === filtered.filter(c => !c.isDeleted).length} onChange={selectAll} /></th><th>Name</th><th>Job Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Assigned rep</th><th>Source</th><th>Tags</th><th style={{ textAlign: 'right' }}>Actions</th></tr></thead><tbody>{filtered.map(customer => <tr key={customer.customerId} onClick={() => navigate(`/customers/${customer.customerId}`)} style={customer.isDeleted ? { opacity: 0.6, background: 'var(--bg-secondary)' } : {}}><td onClick={e => e.stopPropagation()}><input type="checkbox" disabled={customer.isDeleted} checked={selected.has(customer.customerId)} onChange={() => toggleSelection(customer.customerId)} aria-label={`Select ${customer.firstName} ${customer.lastName}`} /></td><td>{customer.firstName} {customer.lastName} {customer.isDeleted && <span className="deleted-badge" style={{ marginLeft: 6, fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>Deleted</span>}</td><td>{customer.jobTitle ?? '—'}</td><td>{customer.companyName ?? '—'}</td><td>{customer.email}</td><td>{customer.phone ?? '—'}</td><td>{customer.assignedRepName}</td><td>{customer.sourceName ?? '—'}</td><td><div className="tag-list">{customer.tags.map(tag => <span className="tag-badge" key={tag.tagId}>{tag.name}</span>)}</div></td><td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>{!customer.isDeleted && <button type="button" onClick={e => handleDeleteSingle(e, customer)} title="Delete customer" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}><Trash2 size={15} /></button>}</td></tr>)}</tbody></table></div>}
   </Layout>;
 };

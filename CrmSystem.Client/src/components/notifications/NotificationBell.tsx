@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, X, CheckCheck, ExternalLink, Volume2, VolumeX } from 'lucide-react';
+import { 
+  Bell, X, CheckCheck, ExternalLink, Volume2, VolumeX, 
+  CreditCard, CheckSquare, Briefcase, FileText, UserCheck, 
+  Info, Trash2, CheckCircle2, Clock, Calendar, ArrowRight, Eye
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useSignalR } from '../../context/SignalRContext';
 import { playNotificationSound, isSoundEnabled, setSoundEnabled } from '../../lib/sound';
+import { showToast } from '../../lib/toast';
 
-interface NotificationDto {
+export interface NotificationDto {
   notificationId: number;
   message: string;
   typeName: string;
@@ -31,12 +36,107 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
+function formatFullDate(iso: string): string {
+  if (!iso) return '';
+  const parsedIso = iso.endsWith('Z') || iso.includes('+') || (iso.includes('-') && iso.length > 19)
+    ? iso
+    : iso + 'Z';
+  const d = new Date(parsedIso);
+  return d.toLocaleString(undefined, {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function getNotificationCategory(n: NotificationDto): {
+  icon: React.ReactNode;
+  color: string;
+  bg: string;
+  label: string;
+  targetUrl: string;
+  targetLabel: string;
+} {
+  const msg = (n.message || '').toLowerCase();
+  const type = (n.typeName || '').toLowerCase();
+
+  if (msg.includes('invoice') || msg.includes('payment') || type.includes('payment') || type.includes('invoice')) {
+    return {
+      icon: <CreditCard size={16} color="#10b981" />,
+      color: '#10b981',
+      bg: 'rgba(16, 185, 129, 0.15)',
+      label: 'Payment & Invoice',
+      targetUrl: '/invoices',
+      targetLabel: 'Open Invoices Screen'
+    };
+  }
+
+  if (msg.includes('contract') || type.includes('contract')) {
+    return {
+      icon: <FileText size={16} color="#ec4899" />,
+      color: '#ec4899',
+      bg: 'rgba(236, 72, 153, 0.15)',
+      label: 'Contract Agreement',
+      targetUrl: '/contracts',
+      targetLabel: 'Open Contracts Screen'
+    };
+  }
+
+  if (type.includes('followup') || type.includes('follow-up') || msg.includes('follow-up') || msg.includes('lead') || type.includes('lead')) {
+    return {
+      icon: <UserCheck size={16} color="#818cf8" />,
+      color: '#818cf8',
+      bg: 'rgba(129, 140, 248, 0.15)',
+      label: 'Lead Follow-up',
+      targetUrl: '/leads',
+      targetLabel: 'Open Leads Screen'
+    };
+  }
+
+  if (n.relatedTaskId || msg.includes('task') || type.includes('task')) {
+    return {
+      icon: <CheckSquare size={16} color="#38bdf8" />,
+      color: '#38bdf8',
+      bg: 'rgba(56, 189, 248, 0.15)',
+      label: 'Task Due',
+      targetUrl: '/tasks',
+      targetLabel: 'View Task Manager'
+    };
+  }
+
+  if (n.relatedOpportunityId || msg.includes('opportunity') || msg.includes('deal') || type.includes('opportunity')) {
+    return {
+      icon: <Briefcase size={16} color="#f59e0b" />,
+      color: '#f59e0b',
+      bg: 'rgba(245, 158, 11, 0.15)',
+      label: 'Opportunity / Deal',
+      targetUrl: n.relatedOpportunityId ? `/opportunities/${n.relatedOpportunityId}` : '/opportunities',
+      targetLabel: n.relatedOpportunityTitle ? `View Deal: ${n.relatedOpportunityTitle}` : 'View Opportunities'
+    };
+  }
+
+  return {
+    icon: <Bell size={16} color="#a855f7" />,
+    color: '#a855f7',
+    bg: 'rgba(168, 85, 247, 0.15)',
+    label: n.typeName || 'System Alert',
+    targetUrl: '',
+    targetLabel: ''
+  };
+}
+
 export const NotificationBell: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [soundOn, setSoundOn] = useState<boolean>(() => isSoundEnabled());
+  const [filterTab, setFilterTab] = useState<'all' | 'unread'>('all');
+  const [selectedNotif, setSelectedNotif] = useState<NotificationDto | null>(null);
+
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -151,9 +251,36 @@ export const NotificationBell: React.FC = () => {
     try {
       await api.patch(`/api/notifications/${id}/read`, {});
       setNotifications(ns => ns.map(n => n.notificationId === id ? { ...n, isRead: true } : n));
+      setSelectedNotif(curr => curr && curr.notificationId === id ? { ...curr, isRead: true } : curr);
       const newCount = Math.max(0, count - 1);
       setCount(newCount);
       setUnreadCount(newCount);
+    } catch { /* ignore */ }
+  };
+
+  const markUnread = async (id: number) => {
+    try {
+      await api.patch(`/api/notifications/${id}/unread`, {});
+      setNotifications(ns => ns.map(n => n.notificationId === id ? { ...n, isRead: false } : n));
+      setSelectedNotif(curr => curr && curr.notificationId === id ? { ...curr, isRead: false } : curr);
+      const newCount = count + 1;
+      setCount(newCount);
+      setUnreadCount(newCount);
+    } catch { /* ignore */ }
+  };
+
+  const deleteNotif = async (id: number) => {
+    try {
+      await api.delete(`/api/notifications/${id}`);
+      const wasUnread = notifications.find(n => n.notificationId === id)?.isRead === false;
+      setNotifications(ns => ns.filter(n => n.notificationId !== id));
+      if (selectedNotif?.notificationId === id) setSelectedNotif(null);
+      if (wasUnread) {
+        const newCount = Math.max(0, count - 1);
+        setCount(newCount);
+        setUnreadCount(newCount);
+      }
+      showToast('Notification removed', 'info');
     } catch { /* ignore */ }
   };
 
@@ -168,73 +295,326 @@ export const NotificationBell: React.FC = () => {
 
   const handleNotifClick = async (n: NotificationDto) => {
     if (!n.isRead) await markRead(n.notificationId);
-    setOpen(false);
-    const msg = n.message.toLowerCase();
-    const type = (n.typeName || '').toLowerCase();
-    if (msg.includes('contract')) navigate('/contracts');
-    else if (msg.includes('invoice') || msg.includes('payment')) navigate('/invoices');
-    else if (type.includes('followup') || type.includes('follow-up') || msg.includes('follow-up') || msg.includes('lead')) navigate('/leads');
-    else if (n.relatedTaskId || msg.includes('task')) navigate('/tasks');
-    else if (n.relatedOpportunityId || msg.includes('opportunity') || msg.includes('deal')) {
-      if (n.relatedOpportunityId) navigate(`/opportunities/${n.relatedOpportunityId}`);
-      else navigate('/opportunities');
-    }
+    setSelectedNotif(n);
   };
 
-  return (
-    <div className="notif-bell-wrapper" ref={panelRef}>
-      <button type="button" className="notif-bell-btn" onClick={handleOpen} aria-label="Notifications">
-        <Bell size={18} />
-        {count > 0 && <span className="notif-badge">{count > 99 ? '99+' : count}</span>}
-      </button>
+  const handleNavigateToTarget = (url: string) => {
+    if (!url) return;
+    setOpen(false);
+    setSelectedNotif(null);
+    navigate(url);
+  };
 
-      {open && (
-        <div className="notif-panel">
-          <div className="notif-panel-header">
-            <span className="notif-panel-title">Notifications</span>
-            <div className="notif-panel-actions">
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={toggleSound}
-                title={soundOn ? 'Sound enabled (click to mute)' : 'Sound muted (click to enable)'}
-                style={{ opacity: soundOn ? 1 : 0.5 }}
-              >
-                {soundOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
-              </button>
-              {count > 0 && (
-                <button type="button" className="notif-action-btn" onClick={markAllRead} title="Mark all read">
-                  <CheckCheck size={14} /> Mark all read
+  const displayedNotifications = filterTab === 'unread' 
+    ? notifications.filter(n => !n.isRead) 
+    : notifications;
+
+  return (
+    <>
+      <div className="notif-bell-wrapper" ref={panelRef}>
+        <button type="button" className="notif-bell-btn" onClick={handleOpen} aria-label="Notifications">
+          <Bell size={18} />
+          {count > 0 && <span className="notif-badge">{count > 99 ? '99+' : count}</span>}
+        </button>
+
+        {open && (
+          <div className="notif-panel">
+            <div className="notif-panel-header">
+              <span className="notif-panel-title">
+                <Bell size={16} /> Notifications
+                {count > 0 && <span style={{ fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '0.1rem 0.4rem', borderRadius: '10px' }}>{count} new</span>}
+              </span>
+              <div className="notif-panel-actions">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={toggleSound}
+                  title={soundOn ? 'Sound enabled (click to mute)' : 'Sound muted (click to enable)'}
+                  style={{ opacity: soundOn ? 1 : 0.5 }}
+                >
+                  {soundOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
                 </button>
+                {count > 0 && (
+                  <button type="button" className="notif-action-btn" onClick={markAllRead} title="Mark all read">
+                    <CheckCheck size={13} /> Mark all read
+                  </button>
+                )}
+                <button type="button" className="icon-btn" onClick={() => setOpen(false)}><X size={14} /></button>
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="notif-filter-tabs">
+              <button 
+                type="button" 
+                className={`notif-filter-tab ${filterTab === 'all' ? 'active' : ''}`}
+                onClick={() => setFilterTab('all')}
+              >
+                All ({notifications.length})
+              </button>
+              <button 
+                type="button" 
+                className={`notif-filter-tab ${filterTab === 'unread' ? 'active' : ''}`}
+                onClick={() => setFilterTab('unread')}
+              >
+                Unread ({count})
+              </button>
+            </div>
+
+            <div className="notif-panel-body">
+              {loading && <div className="notif-loading">Loading notifications…</div>}
+              {!loading && displayedNotifications.length === 0 && (
+                <div className="notif-empty">
+                  {filterTab === 'unread' ? 'No unread notifications 🥳' : "You're all caught up 🎉"}
+                </div>
               )}
-              <button type="button" className="icon-btn" onClick={() => setOpen(false)}><X size={14} /></button>
+              {!loading && displayedNotifications.map(n => {
+                const cat = getNotificationCategory(n);
+                return (
+                  <div
+                    key={n.notificationId}
+                    className={`notif-row ${n.isRead ? 'notif-row-read' : 'notif-row-unread'}`}
+                    onClick={() => handleNotifClick(n)}
+                    title="Click to view full details"
+                  >
+                    <div className="notif-row-icon" style={{ background: cat.bg }}>
+                      {cat.icon}
+                    </div>
+                    <div className="notif-row-body">
+                      <div className="notif-row-top">
+                        <span className="notif-type-badge" style={{ color: cat.color, background: cat.bg }}>
+                          {cat.label}
+                        </span>
+                        <span className="notif-time">{timeAgo(n.createdAt)}</span>
+                      </div>
+                      <p className="notif-message">{n.message}</p>
+                    </div>
+
+                    <div className="notif-row-actions" onClick={e => e.stopPropagation()}>
+                      <button 
+                        type="button" 
+                        className="notif-row-btn" 
+                        title="View details"
+                        onClick={() => handleNotifClick(n)}
+                      >
+                        <Eye size={13} />
+                      </button>
+                      {cat.targetUrl && (
+                        <button 
+                          type="button" 
+                          className="notif-row-btn" 
+                          title={cat.targetLabel || 'Go to page'}
+                          onClick={() => handleNavigateToTarget(cat.targetUrl)}
+                        >
+                          <ExternalLink size={13} />
+                        </button>
+                      )}
+                      <button 
+                        type="button" 
+                        className="notif-row-btn" 
+                        title="Delete notification"
+                        onClick={() => deleteNotif(n.notificationId)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        )}
+      </div>
 
-          <div className="notif-panel-body">
-            {loading && <div className="notif-loading">Loading…</div>}
-            {!loading && notifications.length === 0 && (
-              <div className="notif-empty">You're all caught up 🎉</div>
-            )}
-            {!loading && notifications.map(n => (
-              <div
-                key={n.notificationId}
-                className={`notif-row ${n.isRead ? 'notif-row-read' : 'notif-row-unread'}`}
-                onClick={() => handleNotifClick(n)}
-              >
-                <div className="notif-row-body">
-                  <span className="notif-type-badge">{n.typeName}</span>
-                  <p className="notif-message">{n.message}</p>
-                  <span className="notif-time">{timeAgo(n.createdAt)}</span>
+      {/* ── NOTIFICATION DETAIL VIEW MODAL ────────────────────────────────────── */}
+      {selectedNotif && (() => {
+        const cat = getNotificationCategory(selectedNotif);
+        return (
+          <div className="notif-detail-backdrop" onClick={() => setSelectedNotif(null)}>
+            <div className="notif-detail-modal" onClick={e => e.stopPropagation()}>
+              <div className="notif-detail-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <div className="notif-row-icon" style={{ background: cat.bg }}>
+                    {cat.icon}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-primary, #f8fafc)', fontWeight: 700 }}>
+                      Notification Details
+                    </h3>
+                    <span style={{ fontSize: '0.75rem', color: cat.color, fontWeight: 600 }}>
+                      {cat.label}
+                    </span>
+                  </div>
                 </div>
-                {(n.relatedTaskId || n.relatedOpportunityId) && (
-                  <ExternalLink size={12} className="notif-link-icon" />
+                <button 
+                  type="button" 
+                  className="icon-btn" 
+                  onClick={() => setSelectedNotif(null)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted, #94a3b8)', cursor: 'pointer' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="notif-detail-body">
+                {/* Full Message Box */}
+                <div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted, #94a3b8)', fontWeight: 600, marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Message Content
+                  </div>
+                  <div className="notif-detail-content-box">
+                    {selectedNotif.message}
+                  </div>
+                </div>
+
+                {/* Metadata Cards */}
+                <div className="notif-detail-info-grid">
+                  <div className="notif-detail-info-card">
+                    <span className="notif-detail-info-label">
+                      <Calendar size={12} style={{ display: 'inline', marginRight: '4px' }} /> Received
+                    </span>
+                    <span className="notif-detail-info-val">
+                      {formatFullDate(selectedNotif.createdAt)}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted, #94a3b8)' }}>
+                      ({timeAgo(selectedNotif.createdAt)})
+                    </span>
+                  </div>
+
+                  <div className="notif-detail-info-card">
+                    <span className="notif-detail-info-label">
+                      <CheckCircle2 size={12} style={{ display: 'inline', marginRight: '4px' }} /> Status
+                    </span>
+                    <span className="notif-detail-info-val" style={{ color: selectedNotif.isRead ? '#10b981' : '#818cf8' }}>
+                      {selectedNotif.isRead ? '🟢 Read' : '🔵 Unread'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Related Resource Quick Jump */}
+                {cat.targetUrl && (
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.08)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '1rem'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#818cf8' }}>
+                        Related CRM Resource
+                      </div>
+                      <div style={{ fontSize: '0.88rem', color: 'var(--text-primary, #f8fafc)', fontWeight: 700, marginTop: '0.15rem' }}>
+                        {cat.targetLabel}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateToTarget(cat.targetUrl)}
+                      style={{
+                        padding: '0.5rem 0.9rem',
+                        borderRadius: '8px',
+                        background: '#6366f1',
+                        color: '#fff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Open <ArrowRight size={14} />
+                    </button>
+                  </div>
                 )}
               </div>
-            ))}
+
+              <div className="notif-detail-footer">
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {selectedNotif.isRead ? (
+                    <button
+                      type="button"
+                      onClick={() => markUnread(selectedNotif.notificationId)}
+                      style={{
+                        padding: '0.45rem 0.8rem',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        color: 'var(--text-secondary, #94a3b8)',
+                        border: '1px solid var(--border-color, #334155)',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Mark as Unread
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => markRead(selectedNotif.notificationId)}
+                      style={{
+                        padding: '0.45rem 0.8rem',
+                        borderRadius: '6px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#10b981',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => deleteNotif(selectedNotif.notificationId)}
+                    style={{
+                      padding: '0.45rem 0.8rem',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotif(null)}
+                  style={{
+                    padding: '0.45rem 1rem',
+                    borderRadius: '6px',
+                    background: 'var(--bg-tertiary, #334155)',
+                    color: 'var(--text-primary, #f8fafc)',
+                    border: '1px solid var(--border-color, #334155)',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        );
+      })()}
+    </>
   );
 };

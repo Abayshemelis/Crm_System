@@ -59,6 +59,24 @@ public class NotificationService : INotificationService
         await _db.SaveChangesAsync();
     }
 
+    public async Task MarkUnreadAsync(int notificationId, int identityId)
+    {
+        var n = await _db.Notifications
+            .FirstOrDefaultAsync(n => n.NotificationId == notificationId && n.IdentityId == identityId);
+        if (n is null) return;
+        n.IsRead = false;
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task DeleteNotificationAsync(int notificationId, int identityId)
+    {
+        var n = await _db.Notifications
+            .FirstOrDefaultAsync(n => n.NotificationId == notificationId && n.IdentityId == identityId);
+        if (n is null) return;
+        _db.Notifications.Remove(n);
+        await _db.SaveChangesAsync();
+    }
+
     // ── 4. MARK ALL NOTIFICATIONS READ ────────────────────────────────────────
     public async Task MarkAllReadAsync(int identityId)
     {

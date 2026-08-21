@@ -50,6 +50,7 @@ function AppRoutes() {
         <Route path="/sign/contract/:token" element={<PublicContractSignScreen />} />
         <Route path="/contract/sign/:token" element={<PublicContractSignScreen />} />
         <Route path="/contracts/sign/:token" element={<PublicContractSignScreen />} />
+        <Route path="/sign/:token" element={<PublicContractSignScreen />} />
         <Route path="/public/invoices/:id" element={<PublicInvoicePayScreen />} />
         <Route path="/invoice/pay/:id" element={<PublicInvoicePayScreen />} />
         <Route path="/invoices/pay/:id" element={<PublicInvoicePayScreen />} />

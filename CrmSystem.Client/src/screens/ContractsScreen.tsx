@@ -379,7 +379,7 @@ export const ContractsScreen: React.FC = () => {
 
   const handleGenerateInvoice = async (c: ContractItem) => {
     try {
-      await api.post('/api/invoices', {
+      const res = await api.post<any>('/api/invoices', {
         customerId: c.customerId,
         contractId: c.contractId,
         opportunityId: c.opportunityId ?? null,
@@ -390,10 +390,14 @@ export const ContractsScreen: React.FC = () => {
         notes: `Generated from Contract #${c.contractNumber} (${c.title})`,
         terms: 'Standard commercial billing terms apply. Payment Net 30 days.',
       });
-      showToast('Invoice generated successfully!');
+      if (res?.invoiceNumber) {
+        showToast(`Invoice #${res.invoiceNumber} opened!`);
+      } else {
+        showToast('Invoice ready!');
+      }
       navigate('/invoices');
     } catch {
-      showToast('Failed to generate invoice for contract', 'error');
+      showToast('Failed to process invoice for contract', 'error');
     }
   };
 
@@ -475,6 +479,14 @@ export const ContractsScreen: React.FC = () => {
       label = s === 'active' ? 'Active' : 'Signed & Executed';
     } else if (s === 'draft') {
       label = 'Draft';
+    } else if (s === 'pendingcustomer') {
+      bg = 'rgba(99, 102, 241, 0.12)';
+      color = '#818cf8';
+      label = 'Pending Client Sign';
+    } else if (s === 'pendingseller') {
+      bg = 'rgba(245, 158, 11, 0.12)';
+      color = '#f59e0b';
+      label = 'Pending Company Sign';
     } else if (s === 'sentforsignature' || s === 'pending' || s === 'awaiting') {
       bg = 'rgba(56, 189, 248, 0.12)';
       color = '#38bdf8';
@@ -717,14 +729,49 @@ export const ContractsScreen: React.FC = () => {
                         </td>
                         <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>{statusBadge(c)}</td>
                         <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {c.signedByName ? (
-                            <div>
-                              <strong style={{ color: '#10b981' }}>{c.signedByName}</strong>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.signedAt ? new Date(c.signedAt).toLocaleDateString() : ''}</div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Awaiting client signature</span>
-                          )}
+                          {(() => {
+                            const isSigned = c.status === 'Signed' || c.status === 'Active' || !!c.customerSignedByName || !!c.signedByName;
+                            const hasCompany = !!c.companySignatureDataUrl || !!c.companySignedByName;
+                            const hasCustomer = !!c.customerSignatureDataUrl || !!c.customerSignedByName || !!c.signatureDataUrl || !!c.signedByName;
+
+                            if (isSigned || (hasCompany && hasCustomer)) {
+                              return (
+                                <div>
+                                  <strong style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <CheckCircle size={13} /> {c.customerSignedByName || c.signedByName || c.customerName}
+                                  </strong>
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    {c.customerSignedAt || c.signedAt ? new Date(c.customerSignedAt || c.signedAt || '').toLocaleDateString() : 'Fully Executed'}
+                                    {c.companySignedByName && ` · Rep: ${c.companySignedByName}`}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (c.status === 'PendingCustomer' || hasCompany) {
+                              return (
+                                <div>
+                                  <div style={{ color: '#818cf8', fontWeight: 600, fontSize: '0.78rem' }}>
+                                    🏢 Signed by {c.companySignedByName || 'Company'}
+                                  </div>
+                                  <span style={{ color: '#f59e0b', fontSize: '0.75rem' }}>⏳ Awaiting client signature</span>
+                                </div>
+                              );
+                            }
+
+                            if (c.status === 'PendingSeller' || hasCustomer) {
+                              return (
+                                <div>
+                                  <div style={{ color: '#10b981', fontWeight: 600, fontSize: '0.78rem' }}>
+                                    👤 Signed by {c.customerSignedByName || c.customerName}
+                                  </div>
+                                  <span style={{ color: '#818cf8', fontSize: '0.75rem' }}>✍️ Awaiting company sign</span>
+                                </div>
+                              );
+                            }
+
+                            return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>⚪ Draft (Unsigned)</span>;
+                          })()}
                         </td>
                         <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
                           <ContractActionMenu

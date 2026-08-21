@@ -53,6 +53,24 @@ public class NotificationsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>PATCH /api/notifications/{id}/unread</summary>
+    [HttpPatch("{id:int}/unread")]
+    public async Task<IActionResult> MarkUnread(int id)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        await _service.MarkUnreadAsync(id, _currentUser.UserId.Value);
+        return NoContent();
+    }
+
+    /// <summary>DELETE /api/notifications/{id}</summary>
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> DeleteNotification(int id)
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        await _service.DeleteNotificationAsync(id, _currentUser.UserId.Value);
+        return NoContent();
+    }
+
     /// <summary>POST /api/notifications/read-all</summary>
     [HttpPost("read-all")]
     public async Task<IActionResult> MarkAllRead()

@@ -47,6 +47,8 @@ public class InvoicesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<InvoiceReadDto>>> GetAll(
         [FromQuery] int? customerId,
+        [FromQuery] int? opportunityId,
+        [FromQuery] int? contractId,
         [FromQuery] string? status)
     {
         var query = _db.Invoices
@@ -60,6 +62,12 @@ public class InvoicesController : ControllerBase
 
         if (customerId.HasValue)
             query = query.Where(i => i.CustomerId == customerId.Value);
+
+        if (opportunityId.HasValue)
+            query = query.Where(i => i.OpportunityId == opportunityId.Value);
+
+        if (contractId.HasValue)
+            query = query.Where(i => i.ContractId == contractId.Value);
 
         if (!string.IsNullOrWhiteSpace(status) && !status.Equals("All", StringComparison.OrdinalIgnoreCase))
             query = query.Where(i => i.Status.ToLower() == status.ToLower());
@@ -102,6 +110,22 @@ public class InvoicesController : ControllerBase
             contract = await _db.Contracts.FindAsync(dto.ContractId.Value);
             if (contract == null || contract.IsDeleted)
                 return BadRequest(new { message = "Linked contract not found." });
+
+            // Prevent duplicate invoices: If an active invoice already exists for this contract, return it immediately.
+            var existingContractInvoice = await _db.Invoices
+                .Where(i => !i.IsDeleted && i.ContractId == dto.ContractId.Value && i.Status != "Cancelled")
+                .Include(i => i.Customer)
+                    .ThenInclude(cust => cust.Company)
+                .Include(i => i.Contract)
+                .Include(i => i.Opportunity)
+                .Include(i => i.CreatedBy)
+                .OrderByDescending(i => i.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (existingContractInvoice != null)
+            {
+                return Ok(MapToReadDto(existingContractInvoice));
+            }
         }
 
         Opportunity? opp = null;
@@ -110,6 +134,24 @@ public class InvoicesController : ControllerBase
             opp = await _db.Opportunities.FindAsync(dto.OpportunityId.Value);
             if (opp == null)
                 return BadRequest(new { message = "Linked opportunity not found." });
+
+            if (!dto.ContractId.HasValue)
+            {
+                var existingOppInvoice = await _db.Invoices
+                    .Where(i => !i.IsDeleted && i.OpportunityId == dto.OpportunityId.Value && i.ContractId == null && i.Status != "Cancelled")
+                    .Include(i => i.Customer)
+                        .ThenInclude(cust => cust.Company)
+                    .Include(i => i.Contract)
+                    .Include(i => i.Opportunity)
+                    .Include(i => i.CreatedBy)
+                    .OrderByDescending(i => i.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (existingOppInvoice != null)
+                {
+                    return Ok(MapToReadDto(existingOppInvoice));
+                }
+            }
         }
 
         var userId = _currentUser.UserId ?? 1;
@@ -304,6 +346,7 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
     [HttpPost("verify-stripe-session")]
     public async Task<IActionResult> VerifyStripeSession([FromQuery] string sessionId)
     {
@@ -316,7 +359,9 @@ public class InvoicesController : ControllerBase
             return BadRequest(new { message = "Payment session could not be verified or is unpaid." });
         }
 
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId.Value && !i.IsDeleted);
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+            .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId.Value && !i.IsDeleted);
         if (invoice == null) return NotFound(new { message = "Invoice not found." });
 
         if (invoice.Status != "Paid")
@@ -326,6 +371,31 @@ public class InvoicesController : ControllerBase
             invoice.PaymentMethod = "Stripe Credit Card";
             invoice.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            // Send Payment Receipt Email to Customer
+            try
+            {
+                if (invoice.Customer != null && !string.IsNullOrWhiteSpace(invoice.Customer.Email))
+                {
+                    var custName = $"{invoice.Customer.FirstName} {invoice.Customer.LastName}".Trim();
+                    var html = _templateService.BuildInvoicePaymentReceiptHtml(
+                        custName,
+                        invoice.InvoiceNumber,
+                        invoice.TotalAmount,
+                        invoice.PaidAt.Value,
+                        invoice.PaymentMethod
+                    );
+                    await _emailSender.SendEmailAsync(
+                        invoice.Customer.Email,
+                        $"Payment Receipt for Invoice #{invoice.InvoiceNumber}",
+                        html
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Email] Could not send payment receipt email: {ex.Message}");
+            }
 
             try
             {
@@ -344,6 +414,72 @@ public class InvoicesController : ControllerBase
         }
 
         return Ok(new { message = "Payment verified successfully.", invoiceId = invoice.InvoiceId, invoiceNumber = invoice.InvoiceNumber });
+    }
+
+    [HttpPost("{id:int}/sync-stripe")]
+    public async Task<IActionResult> SyncStripePayment(int id)
+    {
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+            .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
+        if (invoice == null) return NotFound(new { message = "Invoice not found." });
+
+        if (invoice.Status == "Paid")
+            return Ok(new { message = "Invoice is already marked as Paid.", status = "Paid" });
+
+        var isPaid = await _stripePaymentService.CheckInvoicePaidInStripeAsync(invoice);
+        if (isPaid)
+        {
+            invoice.Status = "Paid";
+            invoice.PaidAt = DateTime.UtcNow;
+            invoice.PaymentMethod = "Stripe Credit Card";
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            // Send Payment Receipt Email to Customer
+            try
+            {
+                if (invoice.Customer != null && !string.IsNullOrWhiteSpace(invoice.Customer.Email))
+                {
+                    var custName = $"{invoice.Customer.FirstName} {invoice.Customer.LastName}".Trim();
+                    var html = _templateService.BuildInvoicePaymentReceiptHtml(
+                        custName,
+                        invoice.InvoiceNumber,
+                        invoice.TotalAmount,
+                        invoice.PaidAt.Value,
+                        invoice.PaymentMethod
+                    );
+                    await _emailSender.SendEmailAsync(
+                        invoice.Customer.Email,
+                        $"Payment Receipt for Invoice #{invoice.InvoiceNumber}",
+                        html
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Email] Could not send payment receipt email: {ex.Message}");
+            }
+
+            try
+            {
+                var msg = $"💳 Payment of ${invoice.TotalAmount:N2} confirmed via Stripe sync for Invoice #{invoice.InvoiceNumber}.";
+                await _notificationService.CreateNotificationAsync(
+                    invoice.CreatedById,
+                    "TaskDue",
+                    msg,
+                    opportunityId: invoice.OpportunityId
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Notification] Error creating payment notification: {ex.Message}");
+            }
+
+            return Ok(new { message = $"Stripe confirmed payment! Invoice #{invoice.InvoiceNumber} is now marked as Paid & Settled.", status = "Paid" });
+        }
+
+        return Ok(new { message = "No completed payment session was found in Stripe for this invoice yet.", status = invoice.Status });
     }
 
     [AllowAnonymous]
@@ -392,6 +528,20 @@ public class InvoicesController : ControllerBase
 
     private static InvoiceReadDto MapToReadDto(Invoice i)
     {
+        var status = i.Status;
+        if (!string.Equals(status, "Paid", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (i.DueDate.Date < DateTime.UtcNow.Date)
+            {
+                status = "Overdue";
+            }
+            else if (string.Equals(status, "Overdue", StringComparison.OrdinalIgnoreCase))
+            {
+                status = "Sent";
+            }
+        }
+
         return new InvoiceReadDto
         {
             InvoiceId = i.InvoiceId,
@@ -409,7 +559,7 @@ public class InvoicesController : ControllerBase
             TaxRate = i.TaxRate,
             TaxAmount = i.TaxAmount,
             TotalAmount = i.TotalAmount,
-            Status = i.Status,
+            Status = status,
             IssueDate = i.IssueDate,
             DueDate = i.DueDate,
             PaidAt = i.PaidAt,

@@ -96,8 +96,8 @@ public class OpportunityLineItemsController : ControllerBase
         _db.OpportunityLineItems.Add(lineItem);
         await _db.SaveChangesAsync();
 
-        // Recalculate opportunity estimated value
-        await RecalculateEstimatedValueAsync(request.OpportunityId);
+        // Refresh opportunity timestamp without overwriting manual estimated value
+        await TouchOpportunityAsync(request.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
         if (lineItem.Product != null)
@@ -160,8 +160,8 @@ public class OpportunityLineItemsController : ControllerBase
 
         await _db.SaveChangesAsync();
 
-        // Recalculate opportunity estimated value
-        await RecalculateEstimatedValueAsync(lineItem.OpportunityId);
+        // Refresh opportunity timestamp without overwriting manual estimated value
+        await TouchOpportunityAsync(lineItem.OpportunityId);
 
         await _db.Entry(lineItem).Reference(li => li.Product).LoadAsync();
         if (lineItem.Product != null)
@@ -212,26 +212,19 @@ public class OpportunityLineItemsController : ControllerBase
         _db.OpportunityLineItems.Remove(lineItem);
         await _db.SaveChangesAsync();
 
-        // Recalculate opportunity estimated value
-        await RecalculateEstimatedValueAsync(opportunityId);
+        // Refresh opportunity timestamp without overwriting manual estimated value
+        await TouchOpportunityAsync(opportunityId);
 
         return NoContent();
     }
 
-    private async Task RecalculateEstimatedValueAsync(int opportunityId)
+    private async Task TouchOpportunityAsync(int opportunityId)
     {
         var opportunity = await _db.Opportunities.FindAsync(opportunityId);
         if (opportunity == null)
             return;
 
-        var lineItems = await _db.OpportunityLineItems
-            .Where(li => li.OpportunityId == opportunityId)
-            .ToListAsync();
-
-        var totalValue = lineItems.Sum(li => li.TotalPrice);
-        opportunity.EstimatedValue = totalValue;
         opportunity.UpdatedAt = DateTime.UtcNow;
-
         await _db.SaveChangesAsync();
     }
 }

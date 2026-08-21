@@ -602,7 +602,14 @@ public class CustomersController : ControllerBase
 
         var customers = await _db.Customers.Include(c => c.Tags)
             .Where(c => customerIds.Contains(c.CustomerId)).ToListAsync();
-        if (customers.Count != customerIds.Count || customers.Any(c => !_currentUser.CanAccessOwnedRecord(c.AssignedRepId))) return Forbid();
+
+        if (customers.Count == 0) return NotFound(new { message = "No matching customers found." });
+
+        if (!_currentUser.IsManagerOrAbove)
+        {
+            customers = customers.Where(c => _currentUser.CanAccessOwnedRecord(c.AssignedRepId)).ToList();
+            if (customers.Count == 0) return Forbid();
+        }
 
         if (string.Equals(request.Action, "tag", StringComparison.OrdinalIgnoreCase))
         {
@@ -704,9 +711,52 @@ public class CustomersController : ControllerBase
                     }
                 }
             }
-            else
+        }
+        else if (string.Equals(request.Action, "delete", StringComparison.OrdinalIgnoreCase))
+        {
+            var customerEntityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Customer");
+            var targetIds = customers.Select(c => c.CustomerId).ToList();
+
+            foreach (var customer in customers)
             {
-                foreach (var customer in customers) customer.CompanyId = null;
+                customer.IsDeleted = true;
+                if (customerEntityType is not null && _currentUser.UserId is not null)
+                {
+                    try
+                    {
+                        await _auditService.LogDeletionAsync(customerEntityType.EntityTypeId, customer.CustomerId, _currentUser.UserId.Value);
+                    }
+                    catch
+                    {
+                        // ignore audit logging errors during bulk deletion
+                    }
+                }
+            }
+
+            try
+            {
+                var openTasks = await _db.CrmTasks
+                    .Include(t => t.CrmTaskStatus)
+                    .Where(t => t.CustomerId.HasValue && targetIds.Contains(t.CustomerId.Value) && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+                    .ToListAsync();
+                _db.CrmTasks.RemoveRange(openTasks);
+            }
+            catch
+            {
+                // ignore open task cleanup issues if foreign constraints prevent hard removal
+            }
+
+            try
+            {
+                var openOpps = await _db.Opportunities
+                    .Include(o => o.OpportunityStage)
+                    .Where(o => targetIds.Contains(o.CustomerId) && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
+                    .ToListAsync();
+                _db.Opportunities.RemoveRange(openOpps);
+            }
+            catch
+            {
+                // ignore opportunity cleanup issues if foreign constraints prevent hard removal
             }
         }
         else return BadRequest(new { message = "Unsupported bulk action." });

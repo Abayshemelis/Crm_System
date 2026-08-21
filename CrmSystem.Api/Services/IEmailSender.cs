@@ -62,7 +62,7 @@ public class SmtpEmailSender : IEmailSender
                 DeliveryMethod = SmtpDeliveryMethod.Network,
                 UseDefaultCredentials = false,
                 Credentials = new NetworkCredential(username, password),
-                Timeout = 3500
+                Timeout = 20000
             };
 
             await client.SendMailAsync(message, cancellationToken);

@@ -24,6 +24,15 @@ interface PublicContract {
   signatureDataUrl?: string;
   signedByName?: string;
   signedAt?: string;
+  companySignatureDataUrl?: string;
+  companySignedByName?: string;
+  companySignedAt?: string;
+  customerSignatureDataUrl?: string;
+  customerSignedByName?: string;
+  customerSignedAt?: string;
+  isFullySigned?: boolean;
+  isCompanySigned?: boolean;
+  isCustomerSigned?: boolean;
   termsAndConditions?: string;
   notes?: string;
   createdByName: string;
@@ -69,7 +78,9 @@ export const PublicContractSignScreen: React.FC = () => {
       .then(res => {
         setContract(res);
         if (res.customerName) setSignerName(res.customerName);
-        if (res.status === 'Signed') setSignedSuccess(true);
+        if (res.customerSignatureDataUrl || res.signatureDataUrl || res.status === 'Signed') {
+          setSignedSuccess(true);
+        }
       })
       .catch(err => {
         console.error('Failed to load contract', err);
@@ -173,6 +184,7 @@ export const PublicContractSignScreen: React.FC = () => {
         body: JSON.stringify({
           signatureDataUrl: signatureUrl,
           signedByName: signerName.trim(),
+          signerRole: 'Customer'
         }),
       });
       if (!rawRes.ok) throw new Error(`HTTP ${rawRes.status}`);
@@ -180,14 +192,17 @@ export const PublicContractSignScreen: React.FC = () => {
 
       setContract(prev => prev ? {
         ...prev,
-        status: 'Signed',
+        status: res.status || 'Signed',
+        customerSignatureDataUrl: signatureUrl,
+        customerSignedByName: signerName.trim(),
+        customerSignedAt: res.signedAt || new Date().toISOString(),
         signatureDataUrl: signatureUrl,
         signedByName: signerName.trim(),
         signedAt: res.signedAt || new Date().toISOString()
       } : null);
 
       setSignedSuccess(true);
-      showToast('Contract signed successfully!');
+      showToast(res.message || 'Contract signed successfully!');
     } catch {
       showToast('Failed to submit signature. Please try again.', 'error');
     } finally {
@@ -224,6 +239,10 @@ export const PublicContractSignScreen: React.FC = () => {
     );
   }
 
+  const isCustomerSigned = !!(contract.customerSignatureDataUrl || contract.signatureDataUrl || signedSuccess);
+  const isCompanySigned = !!contract.companySignatureDataUrl;
+  const isFullySigned = isCustomerSigned && isCompanySigned;
+
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f8fafc', padding: '2rem 1rem', fontFamily: 'Segoe UI, sans-serif' }}>
       
@@ -248,9 +267,11 @@ export const PublicContractSignScreen: React.FC = () => {
           <div style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '12px', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <ShieldCheck size={36} style={{ color: '#10b981', flexShrink: 0 }} />
             <div>
-              <h4 style={{ margin: '0 0 0.2rem 0', color: '#10b981', fontSize: '1.1rem' }}>Document Signed Successfully!</h4>
+              <h4 style={{ margin: '0 0 0.2rem 0', color: '#10b981', fontSize: '1.1rem' }}>
+                {isFullySigned ? '🎉 Contract Fully Executed by Both Parties!' : '✅ Your Signature Has Been Recorded!'}
+              </h4>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>
-                Thank you, <strong>{contract.signedByName || contract.customerName}</strong>. This legal agreement was digitally executed on {new Date(contract.signedAt || Date.now()).toLocaleString()}.
+                Thank you, <strong>{contract.customerSignedByName || contract.signedByName || contract.customerName}</strong>. This legal agreement was digitally executed on {new Date(contract.customerSignedAt || contract.signedAt || Date.now()).toLocaleString()}.
               </p>
             </div>
           </div>
@@ -270,8 +291,8 @@ export const PublicContractSignScreen: React.FC = () => {
               <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1e1b4b' }}>
                 ${contract.contractValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </div>
-              <div style={{ display: 'inline-block', marginTop: '0.4rem', padding: '0.2rem 0.75rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', background: contract.status === 'Signed' ? '#dcfce7' : '#fef3c7', color: contract.status === 'Signed' ? '#15803d' : '#b45309' }}>
-                {contract.status}
+              <div style={{ display: 'inline-block', marginTop: '0.4rem', padding: '0.2rem 0.75rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', background: isFullySigned ? '#dcfce7' : '#fef3c7', color: isFullySigned ? '#15803d' : '#b45309' }}>
+                {isFullySigned ? 'Signed & Executed' : isCompanySigned ? 'Pending Client Sign' : isCustomerSigned ? 'Pending Company Sign' : 'Draft'}
               </div>
             </div>
           </div>
@@ -308,24 +329,59 @@ export const PublicContractSignScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Signature Display (If Already Signed) */}
-          {contract.signatureDataUrl && (
-            <div style={{ borderTop: '2px dashed #cbd5e1', paddingTop: '1.5rem', marginTop: '2rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem' }}>DIGITAL SIGNATURE EXECUTION RECORD</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.5rem 1rem', background: '#fff' }}>
-                  <img src={contract.signatureDataUrl} alt="Customer Signature" style={{ maxHeight: '70px', maxWidth: '240px', objectFit: 'contain' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>Signed by: {contract.signedByName}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Date: {new Date(contract.signedAt || Date.now()).toLocaleString()}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
-                    <ShieldCheck size={14} /> Verified Legal E-Signature
-                  </div>
-                </div>
-              </div>
+          {/* DUAL-PARTY SIGNATURE DISPLAY */}
+          <div style={{ borderTop: '2px dashed #cbd5e1', paddingTop: '1.5rem', marginTop: '2rem' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '1rem' }}>
+              MUTUAL DIGITAL SIGNATURE EXECUTION RECORD
             </div>
-          )}
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+              
+              {/* Box 1: Seller / Company Representative */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                  SERVICE PROVIDER (SELLER)
+                </div>
+                {contract.companySignatureDataUrl ? (
+                  <div>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.4rem', background: '#fff', marginBottom: '0.5rem' }}>
+                      <img src={contract.companySignatureDataUrl} alt="Seller Signature" style={{ maxHeight: '55px', maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>Signed by: {contract.companySignedByName || contract.createdByName}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {contract.companySignedAt ? new Date(contract.companySignedAt).toLocaleString() : 'Executed'}</div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', textAlign: 'center', background: '#f1f5f9', borderRadius: '6px', color: '#64748b', fontSize: '0.8rem' }}>
+                    ✍️ Authorized Company Signature recorded upon issuance
+                  </div>
+                )}
+              </div>
+
+              {/* Box 2: Client / Customer Signatory */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                  CLIENT (CUSTOMER SIGNATORY)
+                </div>
+                {isCustomerSigned ? (
+                  <div>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.4rem', background: '#fff', marginBottom: '0.5rem' }}>
+                      <img src={contract.customerSignatureDataUrl || contract.signatureDataUrl} alt="Customer Signature" style={{ maxHeight: '55px', maxWidth: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>Signed by: {contract.customerSignedByName || contract.signedByName || signerName}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Date: {new Date(contract.customerSignedAt || contract.signedAt || Date.now()).toLocaleString()}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                      <ShieldCheck size={13} /> Verified Legal E-Signature
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', textAlign: 'center', background: '#fefce8', border: '1px dashed #fde047', borderRadius: '6px', color: '#854d0e', fontSize: '0.8rem' }}>
+                    ⏳ Your signature is required in the box below
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
 
         </div>
 

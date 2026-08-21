@@ -13,9 +13,11 @@ import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { QuoteModal } from '../components/opportunities/QuoteModal';
+import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { EmailComposerModal } from '../components/email/EmailComposerModal';
 import { showToast } from '../lib/toast';
-import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send, Package, ShoppingBag, CheckCircle2, AlertTriangle, FileSignature, Receipt, Eye, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
 import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
@@ -82,7 +84,7 @@ interface Product {
   price: number;
 }
 
-type TabId = 'details' | 'lineItems' | 'activities' | 'tasks' | 'attachments' | 'audit';
+type TabId = 'details' | 'lineItems' | 'contracts' | 'activities' | 'tasks' | 'attachments' | 'audit';
 
 export const OpportunityDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -95,6 +97,16 @@ export const OpportunityDetailScreen: React.FC = () => {
   const [stages, setStages] = useState<Stage[]>([]);
   const [users, setUsers] = useState<UserLookup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Contracts & Invoices states
+  const [contracts, setContracts] = useState<ContractItem[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [selectedContractForModal, setSelectedContractForModal] = useState<ContractItem | null>(null);
+  const [showCreateContractModal, setShowCreateContractModal] = useState(false);
+  const [newContractTitle, setNewContractTitle] = useState('');
+  const [newContractValue, setNewContractValue] = useState(0);
+  const [newContractTerms, setNewContractTerms] = useState('Standard commercial terms apply. Payment Net 30 days.');
+  const [creatingContract, setCreatingContract] = useState(false);
 
   // Phase 4 states
   const [activities, setActivities] = useState<any[]>([]);
@@ -126,14 +138,16 @@ export const OpportunityDetailScreen: React.FC = () => {
     if (!id) return;
     setIsLoading(true);
     try {
-      const [oppData, lineItemsData, productsData, stagesData, usersData, actTypes, taskStats] = await Promise.all([
+      const [oppData, lineItemsData, productsData, stagesData, usersData, actTypes, taskStats, contractsData, invoicesData] = await Promise.all([
         api.get<Opportunity>(`/api/opportunities/${id}`),
         api.get<OpportunityLineItem[]>(`/api/opportunitylineitems/${id}`).catch(() => []),
         api.get<Product[]>('/api/products').catch(() => []),
         api.get<Stage[]>('/api/opportunitystages').catch(() => []),
         api.get<UserLookup[]>('/api/users').catch(() => []),
         api.get<any[]>('/api/activitytypes').catch(() => []),
-        api.get<any[]>('/api/taskstatuses').catch(() => [])
+        api.get<any[]>('/api/taskstatuses').catch(() => []),
+        api.get<ContractItem[]>(`/api/contracts?opportunityId=${id}`).catch(() => []),
+        api.get<any[]>(`/api/invoices?opportunityId=${id}`).catch(() => [])
       ]);
       setOpportunity(oppData);
       setEditedOpportunity(oppData);
@@ -141,6 +155,8 @@ export const OpportunityDetailScreen: React.FC = () => {
       setProducts((productsData || []).filter(p => p.productStatus?.isSelectable));
       setStages(stagesData || []);
       setUsers(usersData || []);
+      setContracts(Array.isArray(contractsData) ? contractsData : []);
+      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
       setActivityTypes((actTypes || []).map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })));
       setTaskStatuses((taskStats || []).map(x => ({ id: x.id, name: x.name, isTerminal: x.isTerminal })));
 
@@ -202,10 +218,111 @@ export const OpportunityDetailScreen: React.FC = () => {
       await loadData();
       setAuditRefreshTrigger(t => t + 1);
       triggerToast('Opportunity marked as Won 🎉', 'success');
+      if (contracts.length === 0) {
+        if (await confirmAction('Deal marked as Won 🎉! Would you like to create the commercial Contract for this deal now?')) {
+          handleOpenCreateContract();
+        }
+      }
     } catch (error) {
       console.error('Failed to mark as won:', error);
       triggerToast('Failed to update stage', 'error');
     }
+  };
+
+  const handleOpenCreateContract = () => {
+    if (!opportunity) return;
+    const defaultValue = calculatedTotal > 0 ? calculatedTotal : opportunity.estimatedValue;
+    setNewContractTitle(`Service Agreement: ${opportunity.title}`);
+    setNewContractValue(defaultValue);
+    setShowCreateContractModal(true);
+  };
+
+  const handleCreateContractSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!opportunity || !id) return;
+    if (!newContractTitle.trim()) {
+      showToast('Please enter a contract title', 'error');
+      return;
+    }
+    setCreatingContract(true);
+    try {
+      await api.post('/api/contracts', {
+        customerId: opportunity.customerId,
+        opportunityId: Number(id),
+        title: newContractTitle.trim(),
+        contractValue: newContractValue,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        termsAndConditions: newContractTerms
+      });
+      showToast('Contract created successfully! Ready for e-signature.');
+      setShowCreateContractModal(false);
+      await loadData();
+      setActiveTab('contracts');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create contract', 'error');
+    } finally {
+      setCreatingContract(false);
+    }
+  };
+
+  const handleGenerateInvoiceFromContract = async (contract: ContractItem) => {
+    try {
+      const res = await api.post<any>('/api/invoices', {
+        customerId: contract.customerId,
+        contractId: contract.contractId,
+        opportunityId: Number(id),
+        amount: contract.contractValue,
+        taxRate: 0,
+        status: 'Draft',
+        issueDate: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        notes: `Billing invoice for signed contract ${contract.contractNumber} (${contract.title})`
+      });
+      if (res?.invoiceNumber) {
+        showToast(`Invoice #${res.invoiceNumber} ready!`);
+      } else {
+        showToast('Invoice ready!');
+      }
+      await loadData();
+      setActiveTab('contracts');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to generate invoice', 'error');
+    }
+  };
+
+  const [sendingContractEmailId, setSendingContractEmailId] = useState<number | null>(null);
+
+  const handleEmailContract = async (contract: ContractItem) => {
+    let targetEmail = contract.customerEmail || opportunity?.customerEmail;
+    if (!targetEmail || !targetEmail.trim()) {
+      const input = window.prompt('Please enter the customer email address to send the contract to:');
+      if (!input || !input.trim()) return;
+      targetEmail = input.trim();
+    }
+
+    setSendingContractEmailId(contract.contractId);
+    try {
+      const res = await api.post<{ message?: string }>(`/api/contracts/${contract.contractId}/send-email`, {
+        recipientEmail: targetEmail
+      });
+      showToast(res.message || `Signing link emailed to ${targetEmail}!`);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to email signing link', 'error');
+    } finally {
+      setSendingContractEmailId(null);
+    }
+  };
+
+  const handleCopySigningLink = (contract: ContractItem) => {
+    if (!contract.signingToken) {
+      showToast('No signing link available', 'error');
+      return;
+    }
+    const link = `${window.location.origin}/sign/contract/${contract.signingToken}`;
+    navigator.clipboard.writeText(link);
+    showToast('Client e-signing link copied to clipboard!');
   };
 
   const handleMarkAsLost = async () => {
@@ -396,7 +513,26 @@ export const OpportunityDetailScreen: React.FC = () => {
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setEmailSubject(`Regarding: ${opportunity.title}`);
+              setEmailBody(`Dear ${opportunity.customerFirstName},\n\nI hope this email finds you well.\n\nBest regards,\n${opportunity.ownerName || currentUser?.name || 'Sales Team'}`);
+              setShowEmailComposer(true);
+            }}
+            style={{ border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8' }}
+            title="Compose and send an email to customer"
+          >
+            <Mail size={16} style={{ marginRight: 4 }} /> Email Customer
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleOpenCreateContract}
+            style={{ border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8' }}
+          >
+            <FileSignature size={16} style={{ marginRight: 4 }} /> Create Contract
+          </Button>
           <Button variant="ghost" onClick={handleMarkAsWon} style={{ border: '1px solid var(--success)', color: 'var(--success)' }}>
             <Check size={16} style={{ marginRight: 4 }} /> Mark Won
           </Button>
@@ -472,14 +608,15 @@ export const OpportunityDetailScreen: React.FC = () => {
           </div>
 
           <div className="tabs-bar">
-            {(['details', 'lineItems', 'activities', 'tasks', 'attachments', 'audit'] as TabId[]).map(tab => (
+            {(['details', 'lineItems', 'contracts', 'activities', 'tasks', 'attachments', 'audit'] as TabId[]).map(tab => (
               <button
                 key={tab}
                 className={`tab-btn ${activeTab === tab ? 'tab-active' : ''}`}
                 onClick={() => setActiveTab(tab)}
               >
                 {tab === 'details' && <span>Details</span>}
-                {tab === 'lineItems' && <span>Line Items ({lineItems.length})</span>}
+                {tab === 'lineItems' && <span>Products & Quote ({lineItems.length})</span>}
+                {tab === 'contracts' && <span>📜 Contracts & Billing ({contracts.length + invoices.length})</span>}
                 {tab === 'activities' && <span>Activities ({activities.length})</span>}
                 {tab === 'tasks' && <span>Tasks ({tasks.filter(t => !t.isTerminal).length})</span>}
                 {tab === 'attachments' && <span>📎 Attachments</span>}
@@ -583,93 +720,498 @@ export const OpportunityDetailScreen: React.FC = () => {
                 </div>
               )}
 
-              {/* Line Items Tab */}
-              {activeTab === 'lineItems' && (
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Opportunity Products</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                      <strong style={{ fontSize: '1rem', color: 'var(--accent-primary)', marginRight: '0.5rem' }}>
-                        Total Value: ${calculatedTotal.toLocaleString()}
-                      </strong>
-                      <Button variant="secondary" size="sm" onClick={handleSyncEstimatedValue}>
-                        <RefreshCw size={14} style={{ marginRight: 5 }} /> Sync Deal Value
-                      </Button>
-                      <Button variant="primary" size="sm" onClick={() => setShowQuoteModal(true)}>
-                        <FileText size={14} style={{ marginRight: 5 }} /> Generate Proposal Quote
-                      </Button>
+              {/* Line Items / Products Tab */}
+              {activeTab === 'lineItems' && (() => {
+                const grossSubtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+                const totalDiscountSavings = grossSubtotal - calculatedTotal;
+                const totalUnits = lineItems.reduce((sum, item) => sum + item.quantity, 0);
+                const dealEstimatedValue = editedOpportunity?.estimatedValue ?? opportunity?.estimatedValue ?? 0;
+                const variance = dealEstimatedValue - calculatedTotal;
+                const isValueSynced = Math.abs(variance) < 0.01;
+
+                return (
+                  <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {/* Header & Main Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div>
+                        <h3 style={{ margin: '0 0 0.25rem 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <Package size={20} style={{ color: 'var(--accent-primary)' }} /> Opportunity Products & Quotation
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Configure itemized product line items, apply volume discounts, and export proposal quotes.
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleSyncEstimatedValue}
+                          disabled={isValueSynced || calculatedTotal === 0}
+                          title={isValueSynced ? 'Deal value already matches quoted total' : 'Update deal estimated value to match quoted total'}
+                        >
+                          <RefreshCw size={14} style={{ marginRight: 5 }} /> Sync Deal Value
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleOpenCreateContract}
+                          style={{ border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8' }}
+                          title="Generate legal contract with these quoted products"
+                        >
+                          <FileSignature size={14} style={{ marginRight: 5 }} /> Create Contract from Quote
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            const itemsSummary = lineItems.map(i => `- ${i.product?.name || 'Product'} (Qty: ${i.quantity}, Price: $${i.unitPrice}, Total: $${i.totalPrice.toFixed(2)})`).join('\n');
+                            const quoteNumber = `QT-${new Date().getFullYear()}-${String(opportunity.opportunityId).padStart(5, '0')}`;
+                            const emailBody = `Dear ${opportunity.customerFirstName} ${opportunity.customerLastName},\n\nPlease find your proposal quote details below:\n\nQuote Reference: ${quoteNumber}\nDeal: ${opportunity.title}\nDate: ${new Date().toLocaleDateString()}\n\nPROPOSAL ITEMS:\n${itemsSummary || 'Standard Deal Proposal'}\n\nGRAND TOTAL: $${calculatedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nPlease let us know if you have any questions.\n\nBest regards,\n${opportunity.ownerName || currentUser?.name || 'Sales Team'}`;
+                            setEmailSubject(`Proposal Quote: ${opportunity.title} (${quoteNumber})`);
+                            setEmailBody(emailBody);
+                            setShowEmailComposer(true);
+                          }}
+                          disabled={lineItems.length === 0}
+                          style={{ border: '1px solid rgba(99, 102, 241, 0.3)', color: '#818cf8' }}
+                          title="Compose and send quotation details via email"
+                        >
+                          <Mail size={14} style={{ marginRight: 5 }} /> Email Quote
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => setShowQuoteModal(true)}
+                          disabled={lineItems.length === 0}
+                        >
+                          <FileText size={14} style={{ marginRight: 5 }} /> Generate Proposal Quote
+                        </Button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="add-line-item" style={{ marginBottom: '1.5rem' }}>
-                    <select
-                      className="filter-select"
-                      value={newLineItem.productId}
-                      onChange={e => handleProductChange(Number(e.target.value))}
-                    >
-                      <option value="0">Select Product…</option>
-                      {products.map(p => (
-                        <option key={p.productId} value={p.productId}>
-                          {p.name} (${p.price})
-                        </option>
-                      ))}
-                    </select>
-                    <Input
-                      type="number"
-                      min="1"
-                      placeholder="Qty"
-                      value={newLineItem.quantity}
-                      onChange={e => setNewLineItem(prev => ({ ...prev, quantity: Math.max(1, Number(e.target.value)) }))}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Price"
-                      value={newLineItem.unitPrice}
-                      onChange={e => setNewLineItem(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
-                    />
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="Disc %"
-                      value={newLineItem.discountPercent}
-                      onChange={e => setNewLineItem(prev => ({ ...prev, discountPercent: Number(e.target.value) }))}
-                    />
-                    <Button onClick={handleAddLineItem} size="sm">Add</Button>
-                  </div>
-
-                  {lineItems.length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)' }}>No line items added yet.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {lineItems.map(item => (
-                        <div key={item.lineItemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                          <div>
-                            <strong style={{ color: 'var(--text-primary)' }}>{item.product?.name}</strong>
-                            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              SKU: {item.product?.sku || 'N/A'} · Category: {item.product?.productCategory?.name || 'N/A'}
-                            </p>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                              {item.quantity} × ${item.unitPrice}
-                              {item.discountPercent > 0 && ` (-${item.discountPercent}%)`}
-                            </span>
-                            <strong style={{ color: 'var(--text-primary)', minWidth: '70px', textAlign: 'right' }}>
-                              ${item.totalPrice.toLocaleString()}
-                            </strong>
-                            <button
-                              type="button"
-                              className="icon-btn danger"
-                              onClick={() => handleDeleteLineItem(item.lineItemId)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                    {/* Financial Metric Cards Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem' }}>
+                      <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: '1px solid var(--border-color)' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total Quoted Value</span>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981', marginTop: '0.15rem' }}>
+                          ${calculatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
-                      ))}
+                      </div>
+
+                      <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: '1px solid var(--border-color)' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Products / Units</span>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.15rem' }}>
+                          {lineItems.length} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)' }}>({totalUnits} unit{totalUnits === 1 ? '' : 's'})</span>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: '1px solid var(--border-color)' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Discount Savings</span>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: totalDiscountSavings > 0 ? '#f59e0b' : 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                          ${totalDiscountSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: isValueSynced ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)' }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Deal Value Alignment</span>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, marginTop: '0.35rem', color: isValueSynced ? '#10b981' : '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          {isValueSynced ? (
+                            <>
+                              <CheckCircle2 size={16} /> Matches Estimate
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle size={16} /> Variance: ${Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
+
+                    {/* Add Product Form Card */}
+                    <div style={{ padding: '1.1rem', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Plus size={15} style={{ color: 'var(--accent-primary)' }} /> Add Product / Service to Quote
+                        </h4>
+                        {newLineItem.productId > 0 && (
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10b981' }}>
+                            Row Subtotal: ${(newLineItem.quantity * newLineItem.unitPrice * (1 - newLineItem.discountPercent / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 2fr) minmax(85px, 0.8fr) minmax(110px, 1fr) minmax(95px, 0.9fr) auto', gap: '0.75rem', alignItems: 'flex-end' }}>
+                        <div>
+                          <label className="input-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Select Product *</label>
+                          <SearchableSelect
+                            value={newLineItem.productId ? String(newLineItem.productId) : ''}
+                            options={[
+                              { value: '', label: 'Select a product catalog item...' },
+                              ...products.map(p => ({
+                                value: String(p.productId),
+                                label: `${p.name} ($${p.price.toLocaleString()})`
+                              }))
+                            ]}
+                            onChange={val => handleProductChange(Number(val))}
+                            placeholder="Search product..."
+                          />
+                        </div>
+
+                        <div>
+                          <Input
+                            label="Qty *"
+                            type="number"
+                            min="1"
+                            value={newLineItem.quantity}
+                            onChange={e => setNewLineItem(prev => ({ ...prev, quantity: Math.max(1, Number(e.target.value)) }))}
+                          />
+                        </div>
+
+                        <div>
+                          <Input
+                            label="Unit Price ($) *"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newLineItem.unitPrice}
+                            onChange={e => setNewLineItem(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
+                          />
+                        </div>
+
+                        <div>
+                          <Input
+                            label="Discount (%)"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={newLineItem.discountPercent}
+                            onChange={e => setNewLineItem(prev => ({ ...prev, discountPercent: Number(e.target.value) }))}
+                          />
+                        </div>
+
+                        <Button onClick={handleAddLineItem} size="sm" style={{ height: '38px', minWidth: '105px', alignSelf: 'flex-end' }}>
+                          <Plus size={14} style={{ marginRight: 4 }} /> Add Item
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Products Table or Empty State */}
+                    {lineItems.length === 0 ? (
+                      <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px dashed var(--border-color)' }}>
+                        <ShoppingBag size={36} style={{ color: 'var(--text-muted)', margin: '0 auto 0.75rem auto', opacity: 0.6 }} />
+                        <h4 style={{ margin: '0 0 0.35rem 0', fontSize: '1rem', color: 'var(--text-primary)' }}>No Products Added Yet</h4>
+                        <p style={{ margin: '0 auto 1rem auto', maxWidth: '420px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          Add itemized products and services to this deal to calculate precise pricing, generate professional PDF quotes, and boost AI forecast accuracy.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ borderRadius: '0.75rem', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <th style={{ padding: '0.75rem 1rem' }}>Product / Service</th>
+                              <th style={{ padding: '0.75rem 1rem' }}>Category</th>
+                              <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Qty</th>
+                              <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Unit Price</th>
+                              <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Discount</th>
+                              <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Total</th>
+                              <th style={{ padding: '0.75rem 1rem', textAlign: 'center', width: '60px' }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lineItems.map((item, idx) => (
+                              <tr key={item.lineItemId} style={{ borderBottom: idx < lineItems.length - 1 ? '1px solid var(--border-color)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)' }}>
+                                <td style={{ padding: '0.85rem 1rem' }}>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.product?.name || 'Custom Product'}</div>
+                                  {item.product?.sku && (
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.1rem 0.35rem', borderRadius: '3px', marginTop: '2px', display: 'inline-block' }}>
+                                      SKU: {item.product.sku}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                                  {item.product?.productCategory?.name ? (
+                                    <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                                      {item.product.productCategory.name}
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'right', color: 'var(--text-secondary)' }}>${item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                  {item.discountPercent > 0 ? (
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
+                                      {item.discountPercent}% OFF
+                                    </span>
+                                  ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: '0.92rem' }}>
+                                  ${item.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="icon-btn danger"
+                                    onClick={() => handleDeleteLineItem(item.lineItemId)}
+                                    title="Remove item"
+                                    style={{ padding: '0.35rem', color: 'var(--text-muted)', transition: 'color 0.15s ease' }}
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr style={{ background: 'var(--bg-secondary)', borderTop: '2px solid var(--border-color)', fontWeight: 700 }}>
+                              <td colSpan={5} style={{ padding: '0.85rem 1rem', textAlign: 'right', color: 'var(--text-secondary)', textTransform: 'uppercase', fontSize: '0.78rem' }}>
+                                Quotation Grand Total:
+                              </td>
+                              <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontSize: '1.05rem', color: '#10b981', fontWeight: 800 }}>
+                                ${calculatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Contracts & Billing Tab */}
+              {activeTab === 'contracts' && (
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Section 1: Contracts */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div>
+                        <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <FileSignature size={18} style={{ color: '#818cf8' }} /> Legal Contracts & E-Signatures ({contracts.length})
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Official service agreements and digital signature links linked to this opportunity.
+                        </p>
+                      </div>
+
+                      <Button variant="primary" size="sm" onClick={handleOpenCreateContract}>
+                        <Plus size={14} style={{ marginRight: 4 }} /> Draft New Contract
+                      </Button>
+                    </div>
+
+                    {contracts.length === 0 ? (
+                      <div style={{ padding: '2rem 1.5rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px dashed var(--border-color)' }}>
+                        <FileSignature size={36} style={{ color: '#818cf8', margin: '0 auto 0.5rem auto', opacity: 0.7 }} />
+                        <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)' }}>No Contracts Generated Yet</h4>
+                        <p style={{ margin: '0 auto 1rem auto', maxWidth: '400px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          Turn your deal and line item quote into a binding legal contract with online e-signatures.
+                        </p>
+                        <Button variant="secondary" size="sm" onClick={handleOpenCreateContract}>
+                          <Plus size={14} style={{ marginRight: 4 }} /> Create Contract for ${calculatedTotal > 0 ? calculatedTotal.toLocaleString() : opportunity.estimatedValue.toLocaleString()}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {contracts.map(contract => {
+                          const isSigned = contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt;
+                          return (
+                            <div
+                              key={contract.contractId}
+                              style={{
+                                padding: '1rem 1.25rem',
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '0.75rem',
+                                border: isSigned ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '1rem'
+                              }}
+                            >
+                              <div style={{ minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{contract.title}</strong>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                    {contract.contractNumber}
+                                  </span>
+                                  <span
+                                    style={{
+                                      padding: '0.15rem 0.5rem',
+                                      borderRadius: '1rem',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: isSigned ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                      color: isSigned ? '#10b981' : '#f59e0b',
+                                      border: isSigned ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)'
+                                    }}
+                                  >
+                                    {isSigned ? 'Signed & Active' : (contract.status || 'Draft')}
+                                  </span>
+                                </div>
+
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                  <span>Value: <strong style={{ color: '#10b981' }}>${contract.contractValue?.toLocaleString()}</strong></span>
+                                  <span>Start: {contract.startDate ? new Date(contract.startDate).toLocaleDateString() : '—'}</span>
+                                  <span>End: {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : '—'}</span>
+                                  {contract.signedByName && <span>Signed By: <strong>{contract.signedByName}</strong></span>}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedContractForModal(contract)}
+                                  style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                >
+                                  <Eye size={14} style={{ marginRight: 4 }} /> View & Sign
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleCopySigningLink(contract)}
+                                  style={{ border: '1px solid rgba(99, 102, 241, 0.3)', color: '#818cf8', fontSize: '0.8rem' }}
+                                  title="Copy public signing URL to send to client"
+                                >
+                                  <LinkIcon size={14} style={{ marginRight: 4 }} /> Copy E-Sign Link
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEmailContract(contract)}
+                                  disabled={sendingContractEmailId === contract.contractId}
+                                  style={{ border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.8rem' }}
+                                  title="Email contract signing link directly to customer"
+                                >
+                                  <Mail size={14} style={{ marginRight: 4 }} />
+                                  {sendingContractEmailId === contract.contractId ? 'Sending…' : 'Email Contract'}
+                                </Button>
+
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => handleGenerateInvoiceFromContract(contract)}
+                                  style={{ fontSize: '0.8rem' }}
+                                  title="Generate billing invoice from this contract"
+                                >
+                                  <Receipt size={14} style={{ marginRight: 4 }} /> Generate Invoice
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 2: Invoices */}
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div>
+                        <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <Receipt size={18} style={{ color: '#10b981' }} /> Billing Invoices & Stripe ({invoices.length})
+                        </h3>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Financial invoices and payment collections for this opportunity.
+                        </p>
+                      </div>
+                    </div>
+
+                    {invoices.length === 0 ? (
+                      <div style={{ padding: '1.5rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px dashed var(--border-color)' }}>
+                        <Receipt size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          No invoices generated yet. Once a contract is drafted or signed, click <strong>"Generate Invoice"</strong> above to collect payment.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {invoices.map((inv: any) => {
+                          const isPaid = inv.status?.toLowerCase() === 'paid';
+                          return (
+                            <div
+                              key={inv.invoiceId}
+                              style={{
+                                padding: '0.85rem 1.15rem',
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '0.75rem',
+                                border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '1rem'
+                              }}
+                            >
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{inv.invoiceNumber}</strong>
+                                  <span
+                                    style={{
+                                      padding: '0.12rem 0.45rem',
+                                      borderRadius: '1rem',
+                                      fontSize: '0.7rem',
+                                      fontWeight: 700,
+                                      background: isPaid ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                                      color: isPaid ? '#10b981' : '#818cf8',
+                                      border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(99, 102, 241, 0.3)'
+                                    }}
+                                  >
+                                    {inv.status}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  Amount: <strong style={{ color: '#10b981' }}>${(inv.totalAmount ?? inv.amount)?.toLocaleString()}</strong> · Due Date: {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {inv.paymentUrl && !isPaid && (
+                                  <a
+                                    href={inv.paymentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      padding: '0.35rem 0.75rem',
+                                      borderRadius: '6px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: 600,
+                                      background: '#6366f1',
+                                      color: '#ffffff',
+                                      textDecoration: 'none',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.35rem'
+                                    }}
+                                  >
+                                    💳 Pay Online <ExternalLink size={12} />
+                                  </a>
+                                )}
+                                <Link
+                                  to="/invoices"
+                                  style={{
+                                    padding: '0.35rem 0.65rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.78rem',
+                                    border: '1px solid var(--border-color)',
+                                    color: 'var(--text-secondary)',
+                                    textDecoration: 'none'
+                                  }}
+                                >
+                                  View Invoices Screen
+                                </Link>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -763,6 +1305,109 @@ export const OpportunityDetailScreen: React.FC = () => {
           opportunityId={opportunity.opportunityId}
           customerId={opportunity.customerId}
           onEmailSent={() => showToast('Proposal Quote sent via Email')}
+        />
+      )}
+
+      {/* Create Contract from Deal Modal */}
+      {showCreateContractModal && opportunity && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
+            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <FileSignature size={18} style={{ color: '#818cf8' }} /> Create Commercial Contract
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateContractModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateContractSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Contract Title *
+                </label>
+                <Input
+                  value={newContractTitle}
+                  onChange={e => setNewContractTitle(e.target.value)}
+                  required
+                  placeholder="e.g. Master Services Agreement"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Contract Value ($) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newContractValue}
+                    onChange={e => setNewContractValue(Number(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Customer Account
+                  </label>
+                  <div style={{ padding: '0.55rem 0.75rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.85rem', color: '#f8fafc', border: '1px solid #334155' }}>
+                    {opportunity.customerFirstName} {opportunity.customerLastName}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Standard Terms & Conditions
+                </label>
+                <textarea
+                  value={newContractTerms}
+                  onChange={e => setNewContractTerms(e.target.value)}
+                  rows={3}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setShowCreateContractModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={creatingContract}>
+                  {creatingContract ? 'Creating…' : 'Generate Contract'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Contract View & E-Signature Modal */}
+      {selectedContractForModal && (
+        <ContractModal
+          contract={selectedContractForModal}
+          onClose={() => setSelectedContractForModal(null)}
+          onUpdate={() => {
+            loadData();
+            setSelectedContractForModal(null);
+          }}
+          onInvoice={(contract) => {
+            handleGenerateInvoiceFromContract(contract);
+            setSelectedContractForModal(null);
+          }}
         />
       )}
     </Layout>

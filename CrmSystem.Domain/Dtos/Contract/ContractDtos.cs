@@ -24,6 +24,18 @@ public class ContractReadDto
     public string? SignedByName { get; set; }
     public DateTime? SignedAt { get; set; }
 
+    public string? CompanySignatureDataUrl { get; set; }
+    public string? CompanySignedByName { get; set; }
+    public DateTime? CompanySignedAt { get; set; }
+
+    public string? CustomerSignatureDataUrl { get; set; }
+    public string? CustomerSignedByName { get; set; }
+    public DateTime? CustomerSignedAt { get; set; }
+
+    public bool IsFullySigned => !string.IsNullOrEmpty(CompanySignatureDataUrl) && !string.IsNullOrEmpty(CustomerSignatureDataUrl);
+    public bool IsCompanySigned => !string.IsNullOrEmpty(CompanySignatureDataUrl);
+    public bool IsCustomerSigned => !string.IsNullOrEmpty(CustomerSignatureDataUrl);
+
     public string? TermsAndConditions { get; set; }
     public string? Notes { get; set; }
     public string? SigningToken { get; set; }
@@ -61,4 +73,5 @@ public class SignContractDto
 {
     public string SignatureDataUrl { get; set; } = string.Empty;
     public string SignedByName { get; set; } = string.Empty;
+    public string? SignerRole { get; set; } // "Company" or "Customer"
 }

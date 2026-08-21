@@ -37,6 +37,7 @@ public class ContractsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ContractReadDto>>> GetAll(
         [FromQuery] int? customerId,
+        [FromQuery] int? opportunityId,
         [FromQuery] string? status)
     {
         var query = _db.Contracts
@@ -49,6 +50,9 @@ public class ContractsController : ControllerBase
 
         if (customerId.HasValue)
             query = query.Where(c => c.CustomerId == customerId.Value);
+
+        if (opportunityId.HasValue)
+            query = query.Where(c => c.OpportunityId == opportunityId.Value);
 
         if (!string.IsNullOrWhiteSpace(status) && status != "All")
         {
@@ -177,18 +181,59 @@ public class ContractsController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.SignatureDataUrl))
             return BadRequest(new { message = "Signature image data is required." });
 
-        contract.SignatureDataUrl = dto.SignatureDataUrl;
-        contract.SignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? "Authorized Signatory" : dto.SignedByName;
-        contract.SignedAt = DateTime.UtcNow;
-        contract.Status = "Signed";
-        contract.UpdatedAt = DateTime.UtcNow;
+        var isCustomer = string.Equals(dto.SignerRole, "Customer", StringComparison.OrdinalIgnoreCase);
 
+        if (isCustomer)
+        {
+            contract.CustomerSignatureDataUrl = dto.SignatureDataUrl;
+            contract.CustomerSignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? "Customer Signatory" : dto.SignedByName;
+            contract.CustomerSignedAt = DateTime.UtcNow;
+            contract.SignatureDataUrl = dto.SignatureDataUrl;
+            contract.SignedByName = contract.CustomerSignedByName;
+            contract.SignedAt = contract.CustomerSignedAt;
+        }
+        else
+        {
+            contract.CompanySignatureDataUrl = dto.SignatureDataUrl;
+            contract.CompanySignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? "Company Representative" : dto.SignedByName;
+            contract.CompanySignedAt = DateTime.UtcNow;
+        }
+
+        // Determine contract status based on dual signature state
+        var hasCompanySign = !string.IsNullOrEmpty(contract.CompanySignatureDataUrl);
+        var hasCustomerSign = !string.IsNullOrEmpty(contract.CustomerSignatureDataUrl);
+
+        if (hasCompanySign && hasCustomerSign)
+        {
+            contract.Status = "Signed"; // Fully executed by both parties
+            contract.SignedAt ??= DateTime.UtcNow;
+        }
+        else if (hasCompanySign)
+        {
+            contract.Status = "PendingCustomer";
+        }
+        else if (hasCustomerSign)
+        {
+            contract.Status = "PendingSeller";
+        }
+
+        contract.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return Ok(new { message = "Contract digitally signed successfully!", signedAt = contract.SignedAt });
+
+        return Ok(new
+        {
+            message = hasCompanySign && hasCustomerSign 
+                ? "Contract is now fully signed and executed by both parties!" 
+                : isCustomer 
+                    ? "Customer signature recorded. Awaiting company signature." 
+                    : "Company signature recorded. Awaiting customer signature.",
+            status = contract.Status,
+            isFullySigned = hasCompanySign && hasCustomerSign
+        });
     }
 
     [HttpPost("{id:int}/send-email")]
-    public async Task<IActionResult> SendSigningEmail(int id)
+    public async Task<IActionResult> SendSigningEmail(int id, [FromBody] SendContractEmailRequest? req = null)
     {
         var contract = await _db.Contracts
             .Include(c => c.Customer)
@@ -197,10 +242,18 @@ public class ContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { message = "Contract not found." });
 
-        var recipientEmail = contract.Customer?.Email;
+        var recipientEmail = !string.IsNullOrWhiteSpace(req?.RecipientEmail) 
+            ? req.RecipientEmail.Trim() 
+            : contract.Customer?.Email?.Trim();
+
         if (string.IsNullOrWhiteSpace(recipientEmail))
         {
-            recipientEmail = "abayshemelisshiferaw@gmail.com"; // Default fallback email
+            return BadRequest(new { message = "No recipient email address found. Please enter an email address for the customer." });
+        }
+
+        if (contract.Customer != null && !string.IsNullOrWhiteSpace(req?.RecipientEmail) && contract.Customer.Email != req.RecipientEmail.Trim())
+        {
+            contract.Customer.Email = req.RecipientEmail.Trim();
         }
 
         if (string.IsNullOrEmpty(contract.SigningToken))
@@ -246,7 +299,10 @@ public class ContractsController : ControllerBase
                 html
             );
 
-            contract.Status = "SentForSignature";
+            if (contract.Status == "Draft")
+            {
+                contract.Status = !string.IsNullOrEmpty(contract.CompanySignatureDataUrl) ? "PendingCustomer" : "SentForSignature";
+            }
             contract.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
@@ -290,9 +346,15 @@ public class ContractsController : ControllerBase
             StartDate = c.StartDate,
             EndDate = c.EndDate,
             Status = c.Status,
-            SignatureDataUrl = c.SignatureDataUrl,
-            SignedByName = c.SignedByName,
-            SignedAt = c.SignedAt,
+            SignatureDataUrl = c.SignatureDataUrl ?? c.CustomerSignatureDataUrl,
+            SignedByName = c.SignedByName ?? c.CustomerSignedByName,
+            SignedAt = c.SignedAt ?? c.CustomerSignedAt,
+            CompanySignatureDataUrl = c.CompanySignatureDataUrl,
+            CompanySignedByName = c.CompanySignedByName,
+            CompanySignedAt = c.CompanySignedAt,
+            CustomerSignatureDataUrl = c.CustomerSignatureDataUrl ?? c.SignatureDataUrl,
+            CustomerSignedByName = c.CustomerSignedByName ?? c.SignedByName,
+            CustomerSignedAt = c.CustomerSignedAt ?? c.SignedAt,
             TermsAndConditions = c.TermsAndConditions,
             Notes = c.Notes,
             SigningToken = token,
@@ -301,4 +363,9 @@ public class ContractsController : ControllerBase
             CreatedAt = c.CreatedAt,
         };
     }
+}
+
+public class SendContractEmailRequest
+{
+    public string? RecipientEmail { get; set; }
 }

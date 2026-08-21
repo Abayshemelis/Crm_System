@@ -75,18 +75,34 @@ public class PublicContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { message = "Contract not found or invalid link." });
 
-        if (contract.Status == "Signed" || contract.Status == "Active")
-            return BadRequest(new { message = "This contract has already been signed." });
+        if (!string.IsNullOrEmpty(contract.CustomerSignatureDataUrl))
+            return BadRequest(new { message = "The customer signature has already been submitted for this contract." });
 
         if (string.IsNullOrWhiteSpace(dto.SignatureDataUrl))
             return BadRequest(new { message = "Signature image is required." });
 
-        contract.SignatureDataUrl = dto.SignatureDataUrl;
-        contract.SignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) ? "Authorized Signatory" : dto.SignedByName;
-        contract.SignedAt = DateTime.UtcNow;
-        contract.Status = "Signed";
-        contract.UpdatedAt = DateTime.UtcNow;
+        contract.CustomerSignatureDataUrl = dto.SignatureDataUrl;
+        contract.CustomerSignedByName = string.IsNullOrWhiteSpace(dto.SignedByName) 
+            ? (contract.Customer != null ? $"{contract.Customer.FirstName} {contract.Customer.LastName}".Trim() : "Customer Signatory") 
+            : dto.SignedByName;
+        contract.CustomerSignedAt = DateTime.UtcNow;
 
+        // Backward compatibility
+        contract.SignatureDataUrl = dto.SignatureDataUrl;
+        contract.SignedByName = contract.CustomerSignedByName;
+        contract.SignedAt = contract.CustomerSignedAt;
+
+        var hasCompanySign = !string.IsNullOrEmpty(contract.CompanySignatureDataUrl);
+        if (hasCompanySign)
+        {
+            contract.Status = "Signed"; // Both parties have signed
+        }
+        else
+        {
+            contract.Status = "PendingSeller"; // Waiting for company counter-signature
+        }
+
+        contract.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         // Send email notification to creator/rep
@@ -104,10 +120,10 @@ public class PublicContractsController : ControllerBase
                     contract.Title,
                     contract.ContractNumber,
                     contract.ContractValue,
-                    contract.SignedAt.Value,
-                    contract.SignedByName
+                    contract.CustomerSignedAt.Value,
+                    contract.CustomerSignedByName
                 );
-                await _emailSender.SendEmailAsync(repEmail, $"🎉 Contract Signed: {contract.Title} ({contract.ContractNumber})", html);
+                await _emailSender.SendEmailAsync(repEmail, $"🎉 Contract Signed by Client: {contract.Title} ({contract.ContractNumber})", html);
             }
         }
         catch (Exception ex)
@@ -119,7 +135,9 @@ public class PublicContractsController : ControllerBase
         try
         {
             var targetUserId = contract.CreatedById;
-            var msg = $"🎉 Contract #{contract.ContractNumber} ('{contract.Title}') valued at ${contract.ContractValue:N2} was signed by {contract.SignedByName}.";
+            var msg = hasCompanySign
+                ? $"🎉 Contract #{contract.ContractNumber} ('{contract.Title}') is now FULLY SIGNED by both parties!"
+                : $"✍️ Customer {contract.CustomerSignedByName} signed Contract #{contract.ContractNumber} ('{contract.Title}'). Please counter-sign to complete execution.";
             
             await _notificationService.CreateNotificationAsync(
                 targetUserId,
@@ -135,9 +153,13 @@ public class PublicContractsController : ControllerBase
 
         return Ok(new
         {
-            message = "Contract signed successfully!",
-            signedByName = contract.SignedByName,
-            signedAt = contract.SignedAt
+            message = hasCompanySign 
+                ? "Contract is now fully signed by both parties!" 
+                : "Your signature has been submitted successfully! The company representative will counter-sign to complete execution.",
+            signedByName = contract.CustomerSignedByName,
+            signedAt = contract.CustomerSignedAt,
+            status = contract.Status,
+            isFullySigned = hasCompanySign
         });
     }
 
@@ -156,9 +178,15 @@ public class PublicContractsController : ControllerBase
         StartDate = c.StartDate,
         EndDate = c.EndDate,
         Status = c.Status,
-        SignatureDataUrl = c.SignatureDataUrl,
-        SignedByName = c.SignedByName,
-        SignedAt = c.SignedAt,
+        SignatureDataUrl = c.SignatureDataUrl ?? c.CustomerSignatureDataUrl,
+        SignedByName = c.SignedByName ?? c.CustomerSignedByName,
+        SignedAt = c.SignedAt ?? c.CustomerSignedAt,
+        CompanySignatureDataUrl = c.CompanySignatureDataUrl,
+        CompanySignedByName = c.CompanySignedByName,
+        CompanySignedAt = c.CompanySignedAt,
+        CustomerSignatureDataUrl = c.CustomerSignatureDataUrl ?? c.SignatureDataUrl,
+        CustomerSignedByName = c.CustomerSignedByName ?? c.SignedByName,
+        CustomerSignedAt = c.CustomerSignedAt ?? c.SignedAt,
         TermsAndConditions = c.TermsAndConditions,
         Notes = c.Notes,
         SigningToken = c.SigningToken,

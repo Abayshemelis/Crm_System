@@ -5,7 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2, RefreshCw } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
@@ -46,7 +46,8 @@ const InvoiceActionMenu: React.FC<{
   onEdit: (inv: InvoiceItem) => void;
   onDelete: (inv: InvoiceItem) => void;
   onStripePay: (inv: InvoiceItem) => void;
-}> = ({ invoice, onPay, onPrint, onEdit, onDelete, onStripePay }) => {
+  onSyncStripe?: (inv: InvoiceItem) => void;
+}> = ({ invoice, onPay, onPrint, onEdit, onDelete, onStripePay, onSyncStripe }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -159,6 +160,22 @@ const InvoiceActionMenu: React.FC<{
             </button>
           )}
 
+          {invoice.status !== 'Paid' && onSyncStripe && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onSyncStripe(invoice); setOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
+                borderRadius: '6px', border: 'none', background: 'transparent', color: '#38bdf8',
+                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <RefreshCw size={14} /> 🔄 Check Stripe Status
+            </button>
+          )}
+
           {invoice.status !== 'Paid' && (
             <button
               type="button"
@@ -251,13 +268,16 @@ export const InvoicesScreen: React.FC = () => {
     const paidSessionId = urlParams.get('paid_session_id');
 
     if (paidSessionId) {
-      window.history.replaceState({}, document.title, window.location.pathname);
       api.post<{ message: string; invoiceNumber?: string }>(`/api/invoices/verify-stripe-session?sessionId=${encodeURIComponent(paidSessionId)}`, {})
         .then(res => {
+          window.history.replaceState({}, document.title, window.location.pathname);
           showToast(`Payment received! Invoice #${res.invoiceNumber || ''} has been marked as Paid.`);
           fetchInvoices();
         })
-        .catch(() => {
+        .catch((err: any) => {
+          console.error('Stripe verification error:', err);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          showToast(err?.message || 'Could not verify Stripe payment.', 'error');
           fetchInvoices();
         });
     } else {
@@ -374,6 +394,21 @@ export const InvoicesScreen: React.FC = () => {
     }
   };
 
+  const handleSyncStripe = async (inv: InvoiceItem) => {
+    try {
+      showToast('Checking Stripe for recent payments...', 'info');
+      const res = await api.post<{ message: string; status: string }>(`/api/invoices/${inv.invoiceId}/sync-stripe`, {});
+      if (res.status === 'Paid') {
+        showToast(res.message, 'success');
+      } else {
+        showToast(res.message, 'info');
+      }
+      fetchInvoices();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync with Stripe', 'error');
+    }
+  };
+
   const handleOpenEditModal = (inv: InvoiceItem) => {
     setEditingInvoice(inv);
     setEditAmount(inv.amount);
@@ -432,6 +467,36 @@ export const InvoicesScreen: React.FC = () => {
     }
   };
 
+  const isInvoiceOverdue = (inv: InvoiceItem) => {
+    const s = (inv.status || '').toLowerCase();
+    if (s === 'paid' || s === 'cancelled') return false;
+
+    if (inv.dueDate) {
+      const dateOnly = inv.dueDate.split('T')[0];
+      const parts = dateOnly.split('-').map(Number);
+      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        const dueEndOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+        const now = new Date();
+        return now.getTime() > dueEndOfDay.getTime();
+      }
+    }
+    return s === 'overdue';
+  };
+
+  const getOverdueDays = (dueDateStr?: string) => {
+    if (!dueDateStr) return 0;
+    const dateOnly = dueDateStr.split('T')[0];
+    const parts = dateOnly.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      const dueEndOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+      const now = new Date();
+      const diffMs = now.getTime() - dueEndOfDay.getTime();
+      if (diffMs <= 0) return 0;
+      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    }
+    return 0;
+  };
+
   const filteredInvoices = invoices.filter(inv => {
     const term = searchTerm.toLowerCase();
     const matchesSearch =
@@ -443,9 +508,9 @@ export const InvoicesScreen: React.FC = () => {
     if (!matchesSearch) return false;
 
     if (statusFilter === 'Paid') return inv.status === 'Paid';
-    if (statusFilter === 'Sent') return inv.status !== 'Paid' && inv.status !== 'Cancelled';
-    if (statusFilter === 'Overdue') return inv.status === 'Overdue';
-    if (statusFilter === 'Draft') return inv.status === 'Draft';
+    if (statusFilter === 'Sent') return (inv.status === 'Sent' || inv.status === 'Draft') && !isInvoiceOverdue(inv);
+    if (statusFilter === 'Overdue') return isInvoiceOverdue(inv);
+    if (statusFilter === 'Draft') return inv.status === 'Draft' && !isInvoiceOverdue(inv);
     return true;
   });
 
@@ -453,12 +518,14 @@ export const InvoicesScreen: React.FC = () => {
   const totalInvoiced = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
   const totalCollected = invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + i.totalAmount, 0);
   const totalOutstanding = invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').reduce((sum, i) => sum + i.totalAmount, 0);
+  const overdueInvoices = invoices.filter(isInvoiceOverdue);
+  const totalOverdueAmount = overdueInvoices.reduce((sum, i) => sum + i.totalAmount, 0);
   const collectionRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
   const paidCount = invoices.filter(i => i.status === 'Paid').length;
-  const pendingCount = invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').length;
+  const pendingCount = invoices.filter(i => (i.status !== 'Paid' && i.status !== 'Cancelled') && !isInvoiceOverdue(i)).length;
 
-  const statusBadge = (status: string) => {
-    if (status === 'Paid') {
+  const statusBadge = (inv: InvoiceItem) => {
+    if (inv.status === 'Paid') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', whiteSpace: 'nowrap' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
@@ -466,15 +533,15 @@ export const InvoicesScreen: React.FC = () => {
         </span>
       );
     }
-    if (status === 'Overdue') {
+    if (isInvoiceOverdue(inv)) {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', whiteSpace: 'nowrap' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px #ef4444' }} />
-          Overdue
+          🔴 Overdue
         </span>
       );
     }
-    if (status === 'Sent') {
+    if (inv.status === 'Sent') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)', whiteSpace: 'nowrap' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', boxShadow: '0 0 6px #3b82f6' }} />
@@ -733,7 +800,7 @@ export const InvoicesScreen: React.FC = () => {
               color: statusFilter === 'Sent' ? '#fff' : 'var(--text-muted)'
             }}
           >
-            📬 Sent / Pending ({invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').length})
+            📬 Sent / Pending ({pendingCount})
           </button>
           <button
             type="button"
@@ -755,7 +822,7 @@ export const InvoicesScreen: React.FC = () => {
               color: statusFilter === 'Overdue' ? '#fff' : 'var(--text-muted)'
             }}
           >
-            ⚠️ Overdue ({invoices.filter(i => i.status === 'Overdue').length})
+            ⚠️ Overdue ({overdueInvoices.length})
           </button>
           <button
             type="button"
@@ -766,7 +833,7 @@ export const InvoicesScreen: React.FC = () => {
               color: statusFilter === 'Draft' ? '#fff' : 'var(--text-muted)'
             }}
           >
-            📝 Drafts ({invoices.filter(i => i.status === 'Draft').length})
+            📝 Drafts ({invoices.filter(i => i.status === 'Draft' && !isInvoiceOverdue(i)).length})
           </button>
         </div>
 
@@ -843,9 +910,24 @@ export const InvoicesScreen: React.FC = () => {
                         <td style={{ padding: '1rem 1.25rem', fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                           ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>{statusBadge(inv.status)}</td>
-                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {new Date(inv.dueDate).toLocaleDateString()}
+                        <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>{statusBadge(inv)}</td>
+                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const overdue = isInvoiceOverdue(inv);
+                            const daysOverdue = getOverdueDays(inv.dueDate);
+                            return (
+                              <div>
+                                <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500 }}>
+                                  {new Date(inv.dueDate).toLocaleDateString()}
+                                </div>
+                                {overdue && (
+                                  <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+                                    ⚠️ {daysOverdue > 0 ? `${daysOverdue} days late` : 'Due today'}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
                           <InvoiceActionMenu
@@ -855,6 +937,7 @@ export const InvoicesScreen: React.FC = () => {
                             onEdit={handleOpenEditModal}
                             onDelete={handleDeleteInvoice}
                             onStripePay={handleStripePay}
+                            onSyncStripe={handleSyncStripe}
                           />
                         </td>
                       </tr>
@@ -877,7 +960,7 @@ export const InvoicesScreen: React.FC = () => {
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '1rem' }}>👤 {inv.customerName}</div>
                         {inv.companyName && <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>🏢 {inv.companyName}</div>}
                       </div>
-                      {statusBadge(inv.status)}
+                      {statusBadge(inv)}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', margin: '0.25rem 0' }}>
                       <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
@@ -893,6 +976,7 @@ export const InvoicesScreen: React.FC = () => {
                         onEdit={handleOpenEditModal}
                         onDelete={handleDeleteInvoice}
                         onStripePay={handleStripePay}
+                        onSyncStripe={handleSyncStripe}
                       />
                     </div>
                   </div>
@@ -1066,7 +1150,12 @@ export const InvoicesScreen: React.FC = () => {
                 <Input
                   value={paymentNotes}
                   onChange={e => setPaymentNotes(e.target.value)}
-                  placeholder="e.g. Wire confirmation #129381"
+                  placeholder={
+                    paymentMethod === 'Cash' ? 'e.g. Cash Receipt #CR-1048 (Received by Rep)' :
+                    paymentMethod === 'Check' ? 'e.g. Bank of America Check #4092' :
+                    paymentMethod === 'Credit Card' ? 'e.g. Auth #839102 (Visa ending 4128)' :
+                    'e.g. Wire Reference #FED-982319024'
+                  }
                 />
               </div>
 
