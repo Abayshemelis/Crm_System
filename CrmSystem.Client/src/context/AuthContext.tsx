@@ -1,5 +1,17 @@
+// ==============================================================================
+// CRM SYSTEM AUTHENTICATION CONTEXT (AuthContext.tsx)
+// ==============================================================================
+// Provides central authentication state management across the entire React app:
+// 1. User Identity & JWT Token persistence (localStorage)
+// 2. Client-side JWT decoding (extracts user ID, name, email, and role claims)
+// 3. Proactive Token Expiration & Silent Refresh Token rotation
+// 4. Role-Based Access Control (RBAC) helpers (isAdmin, isManagerOrAbove)
+// 5. Multi-Role view switcher (allows admins to preview the CRM as a SalesRep)
+// ==============================================================================
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
+// ── 1. TYPES & INTERFACES ─────────────────────────────────────────────────────
 interface User {
   userId: number;
   name: string;
@@ -10,7 +22,6 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   token: string | null;
-  // accept either a raw token string or an object returned from the server
   login: (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => void;
   logout: () => void;
   isAdmin: boolean;
@@ -25,6 +36,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+// ── 2. LIGHTWEIGHT JWT PARSER ─────────────────────────────────────────────────
+// Decodes base64-encoded JWT payload without requiring heavy external libraries.
 function parseJwt(token: string): any {
   try {
     if (!token || typeof token !== 'string') return null;
@@ -40,30 +53,31 @@ function parseJwt(token: string): any {
   }
 }
 
+// ── 3. TOKEN EXPIRATION CHECKER ───────────────────────────────────────────────
+// Checks if the JWT access token is within 10 seconds of expiry so we can refresh silently.
 function isTokenExpired(token: string): boolean {
   try {
     const payload = parseJwt(token);
     if (!payload || !payload.exp) return true;
-    const exp = payload.exp * 1000; // Convert to milliseconds
-    // Refresh only when within 10 seconds of actual expiration
+    const exp = payload.exp * 1000; // Convert seconds to milliseconds
     return Date.now() >= (exp - 10000);
   } catch {
     return true;
   }
 }
 
+// ── 4. AUTH PROVIDER COMPONENT ────────────────────────────────────────────────
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
   const [selectedRole, setSelectedRole] = useState<'Admin' | 'Manager' | 'SalesRep'>('SalesRep');
 
+  // Extracts user profile and roles from decoded JWT payload or server response
   const hydrateUser = useCallback((t: string, explicitRoles?: string[]) => {
     const payload = parseJwt(t);
     if (!payload && !explicitRoles) return;
 
-    // prefer explicit roles from server response when provided
     const rolesFromServer = explicitRoles ?? [];
-
     const claimRoles = payload ? (payload['role'] || payload['roles'] || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']) : null;
     const roles: Array<'Admin' | 'Manager' | 'SalesRep'> = [];
 
@@ -92,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       roles: roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'],
     });
 
-    // Set initial selected role to highest available role
+    // Default the active working role to the highest available role
     const finalRoles = roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'];
     if (finalRoles.includes('Admin')) {
       setSelectedRole('Admin');
@@ -103,11 +117,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // On initial mount or token change, check expiration and hydrate user
   useEffect(() => {
     if (token) {
-      // Check if token is expired
       if (isTokenExpired(token)) {
-        // attempt to refresh using refresh token
         (async () => {
           const refreshed = await refresh();
           if (!refreshed) {
@@ -124,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token, hydrateUser]);
 
+  // ── 5. LOGIN ACTION ─────────────────────────────────────────────────────────
   const login = (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => {
     if (typeof tokenOrResponse === 'string') {
       const newToken = tokenOrResponse;
@@ -136,15 +150,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('token', newToken);
         setToken(newToken);
       }
-      // store refresh token when provided
       if (tokenOrResponse.refreshToken) {
         localStorage.setItem('refreshToken', tokenOrResponse.refreshToken);
       }
-      // hydrate using explicit roles when available; pass token if present
       hydrateUser(newToken ?? '', tokenOrResponse.roles ?? []);
     }
   };
 
+  // ── 6. SILENT REFRESH TOKEN ROTATION ────────────────────────────────────────
+  // Automatically exchanges stored refresh token for a fresh JWT access token
   const refresh = async (): Promise<boolean> => {
     const storedRefresh = localStorage.getItem('refreshToken');
     if (!storedRefresh) return false;
@@ -156,7 +170,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ refreshToken: storedRefresh }),
       });
       if (!res.ok) {
-        // clear tokens on failed refresh
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         setToken(null);
@@ -175,6 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ── 7. LOGOUT ACTION ────────────────────────────────────────────────────────
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
@@ -191,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? 'Manager'
       : 'SalesRep';
 
+  // Role simulation switcher (lets Admins test views as Sales Reps)
   const switchRole = (role: 'Admin' | 'Manager' | 'SalesRep') => {
     if (user?.roles.includes(role)) {
       setSelectedRole(role);

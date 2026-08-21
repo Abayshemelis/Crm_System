@@ -1,3 +1,13 @@
+// ==============================================================================
+// CRM SYSTEM CUSTOMERS CONTROLLER (CustomersController.cs)
+// ==============================================================================
+// Handles Customer relationship management:
+// 1. Master Customer Records: Contact info, assigned sales rep, company linking
+// 2. Soft-Deletion & Archival: Supports non-destructive deletion with query filters
+// 3. Tagging & Segmentation: VIP, Prospect, and custom tags
+// 4. Financial & Activity History: Merges deals, tasks, contracts, and interaction timelines
+// ==============================================================================
+
 using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
@@ -27,6 +37,7 @@ public class CustomersController : ControllerBase
         _emailTriggerService = emailTriggerService;
     }
 
+    // ── 1. GET CUSTOMERS (PAGINATED & FILTERED) ───────────────────────────────
     [HttpGet]
     public async Task<ActionResult<PagedResult<CustomerSummaryDto>>> GetCustomers([FromQuery] CustomerListQuery query)
     {

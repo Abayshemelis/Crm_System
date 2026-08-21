@@ -36,6 +36,8 @@ public class AuthController : ControllerBase
         _googleAuthService = googleAuthService;
     }
 
+    // ── 1. USER REGISTRATION ──────────────────────────────────────────────────
+    // Creates a new user account with hashed password and assigns default SalesRep role.
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
@@ -62,13 +64,16 @@ public class AuthController : ControllerBase
         _db.Identities.Add(identity);
         await _db.SaveChangesAsync();
 
-        // persist initial IdentityRole mapping
+        // Persist initial IdentityRole mapping
         _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
         await _db.SaveChangesAsync();
 
         return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, salesRepRole.Name, new[] { salesRepRole.Name }, null, null));
     }
 
+    // ── 2. EMAIL & PASSWORD LOGIN ─────────────────────────────────────────────
+    // Authenticates users with traditional email + password.
+    // Verifies BCrypt password hash, generates JWT Access Token + Refresh Token.
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
@@ -115,15 +120,33 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(refreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
+        var roles = identity.IdentityRoles
+            .Where(ir => ir.Role != null)
+            .Select(ir => ir.Role!.Name)
+            .Distinct()
+            .ToArray();
+
         if (roles.Length == 0 && identity.Role != null)
         {
             roles = new[] { identity.Role.Name };
         }
 
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, accessToken, rawRefreshToken));
+        return Ok(new AuthResponse(
+            identity.IdentityId,
+            identity.Name,
+            identity.Email,
+            roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty,
+            roles,
+            accessToken,
+            rawRefreshToken));
     }
 
+    // ── 3. GOOGLE OAUTH LOGIN & AUTO-REGISTRATION ─────────────────────────────
+    // When a user clicks "Sign In with Google", the frontend sends Google's JWT `idToken`.
+    // 1. We cryptographically verify Google's signature using Google's public certificates.
+    // 2. If the user does not exist in our DB, we auto-create an active account for them.
+    // 3. PasswordHash gets a random GUID hash because Google users authenticate via OAuth, not password.
+    // 4. We issue our CRM's JWT access token for API access.
     [HttpPost("google")]
     public async Task<ActionResult<AuthResponse>> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
@@ -134,12 +157,14 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Google ID token is required." });
             }
 
+            // Step A: Cryptographically validate the Google ID token with Google's public keys
             var googleUser = await _googleAuthService.ValidateIdTokenAsync(request.IdToken);
             if (googleUser is null || !googleUser.IsEmailVerified)
             {
                 return Unauthorized(new { message = "Invalid or unverified Google authentication token." });
             }
 
+            // Step B: Check if this Google user already exists in our database
             var identity = await _db.Identities
                 .Include(i => i.Role)
                 .Include(i => i.IdentityRoles)
@@ -148,7 +173,7 @@ public class AuthController : ControllerBase
 
             if (identity is null)
             {
-                // Auto-register first-time Google user
+                // Step C: Auto-register first-time Google user with default SalesRep role
                 var salesRepRole = await _db.Roles.SingleOrDefaultAsync(r => r.Name == "SalesRep");
                 if (salesRepRole is null)
                 {
@@ -159,6 +184,7 @@ public class AuthController : ControllerBase
                 {
                     Name = googleUser.Name,
                     Email = googleUser.Email,
+                    // Random password satisfying the NOT NULL constraint in SQL
                     PasswordHash = _passwordHasher.Hash(Guid.NewGuid().ToString("N")),
                     RoleId = salesRepRole.RoleId,
                     IsActive = true,
@@ -171,19 +197,19 @@ public class AuthController : ControllerBase
                 _db.IdentityRoles.Add(new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId });
                 await _db.SaveChangesAsync();
 
-                // await SeedSampleDataForUserAsync(identity); // Disabled by user request
-
                 identity.Role = salesRepRole;
                 identity.IdentityRoles = new List<IdentityRole> { new IdentityRole { IdentityId = identity.IdentityId, RoleId = salesRepRole.RoleId, Role = salesRepRole } };
             }
             else
             {
+                // Step D: If account exists, verify it is active
                 if (!identity.IsActive)
                 {
                     return Unauthorized(new { message = "Account is deactivated. Please contact an administrator." });
                 }
             }
 
+            // Step E: Generate JWT access token & refresh token
             var accessToken = _tokenService.GenerateAccessToken(identity);
             var rawRefreshToken = _tokenService.GenerateRefreshToken();
 
@@ -198,13 +224,25 @@ public class AuthController : ControllerBase
             _db.RefreshTokens.Add(refreshTokenEntity);
             await _db.SaveChangesAsync();
 
-            var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
+            var roles = identity.IdentityRoles
+                .Where(ir => ir.Role != null)
+                .Select(ir => ir.Role!.Name)
+                .Distinct()
+                .ToArray();
+
             if (roles.Length == 0 && identity.Role != null)
             {
                 roles = new[] { identity.Role.Name };
             }
 
-            return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, accessToken, rawRefreshToken));
+            return Ok(new AuthResponse(
+                identity.IdentityId,
+                identity.Name,
+                identity.Email,
+                roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty,
+                roles,
+                accessToken,
+                rawRefreshToken));
         }
         catch (Exception ex)
         {
@@ -212,6 +250,8 @@ public class AuthController : ControllerBase
         }
     }
 
+    // ── 4. TOKEN REFRESH ──────────────────────────────────────────────────────
+    // Exchanges an expiring access token + valid refresh token for a fresh access token pair.
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshRequest request)
     {
@@ -247,10 +287,29 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(newRefreshTokenEntity);
         await _db.SaveChangesAsync();
 
-        var roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).Distinct().ToArray();
-        return Ok(new AuthResponse(identity.IdentityId, identity.Name, identity.Email, roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty, roles, newAccessToken, newRawRefreshToken));
+        var roles = identity.IdentityRoles
+            .Where(ir => ir.Role != null)
+            .Select(ir => ir.Role!.Name)
+            .Distinct()
+            .ToArray();
+
+        if (roles.Length == 0 && identity.Role != null)
+        {
+            roles = new[] { identity.Role.Name };
+        }
+
+        return Ok(new AuthResponse(
+            identity.IdentityId,
+            identity.Name,
+            identity.Email,
+            roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty,
+            roles,
+            newAccessToken,
+            newRawRefreshToken));
     }
 
+    // ── 5. FORGOT PASSWORD ────────────────────────────────────────────────────
+    // Generates a cryptographically random password reset token and sends an email link.
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
@@ -299,6 +358,8 @@ public class AuthController : ControllerBase
         return Ok(new { message = "If that email exists, a reset link has been sent." });
     }
 
+    // ── 6. RESET PASSWORD ─────────────────────────────────────────────────────
+    // Verifies the reset token hash and updates the user's password.
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
@@ -338,6 +399,7 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Password reset successfully. You can now sign in with your new password." });
     }
 
+    // ── 7. CURRENT USER PROFILE (/me) ─────────────────────────────────────────
     [Authorize]
     [HttpGet("me")]
     public ActionResult Me()
@@ -350,6 +412,7 @@ public class AuthController : ControllerBase
         return Ok(new { userId, email, role, roles });
     }
 
+    // ── 8. ADMIN ROLE CHECK ───────────────────────────────────────────────────
     [Authorize(Policy = "AdminOnly")]
     [HttpGet("admin-check")]
     public ActionResult AdminCheck()

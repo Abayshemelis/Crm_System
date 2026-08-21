@@ -21,7 +21,9 @@ public class SourcesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetSources()
     {
-        var sources = await _db.Sources.OrderBy(s => s.Name)
+        var sources = await _db.Sources
+            .OrderBy(s => s.Name.ToLower() == "other" ? 1 : 0)
+            .ThenBy(s => s.Name)
             .Select(s => new { Id = s.SourceId, s.Name })
             .ToListAsync();
         return Ok(sources);

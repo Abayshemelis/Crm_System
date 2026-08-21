@@ -4,6 +4,8 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { validatePhoneNumber } from '../components/ui/countryData';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -63,12 +65,26 @@ export const CustomerFormScreen: React.FC = () => {
 
     useEffect(() => {
         api.get<{ Data: Company[] }>('/api/companies?page=1&pageSize=100')
-            .then(res => setCompanies(res.Data ?? []))
-            .catch(() => { /* non-critical, continue without company list */ });
+            .then(res => {
+                const raw = res.Data ?? [];
+                const nonOther = raw.filter(c => c.name.trim().toLowerCase() !== 'other');
+                const other = raw.find(c => c.name.trim().toLowerCase() === 'other') || { companyId: 999999, name: 'Other' };
+                setCompanies([...nonOther, other]);
+            })
+            .catch(() => {
+                setCompanies([{ companyId: 999999, name: 'Other' }]);
+            });
 
         api.get<Source[]>('/api/sources')
-            .then(data => setSources(data))
-            .catch(() => { });
+            .then(data => {
+                const raw = data ?? [];
+                const nonOther = raw.filter(s => s.name.trim().toLowerCase() !== 'other');
+                const other = raw.find(s => s.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+                setSources([...nonOther, other]);
+            })
+            .catch(() => {
+                setSources([{ id: 999999, name: 'Other' }]);
+            });
 
         if (isManagerOrAbove) {
             api.get<UserLookup[]>('/api/users')
@@ -133,6 +149,13 @@ export const CustomerFormScreen: React.FC = () => {
         // Only require assigned rep if user is manager AND there are reps available
         if (isManagerOrAbove && reps.length > 0 && !form.assignedRepId) {
             tempErrors.assignedRepId = 'Please select an assigned rep.';
+        }
+
+        if (form.phone && form.phone.trim()) {
+            const phoneErr = validatePhoneNumber(form.phone);
+            if (phoneErr) {
+                tempErrors.phone = phoneErr;
+            }
         }
 
         setErrors(tempErrors);
@@ -244,10 +267,10 @@ export const CustomerFormScreen: React.FC = () => {
                             onChange={e => handleChange('email', e.target.value)}
                             error={errors.email}
                         />
-                        <Input
+                        <PhoneInput
                             label="Phone"
                             value={form.phone}
-                            onChange={e => handleChange('phone', e.target.value)}
+                            onChange={val => handleChange('phone', val)}
                             error={errors.phone}
                         />
                         <Input

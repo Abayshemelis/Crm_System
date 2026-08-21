@@ -4,6 +4,10 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { IndustrySelect } from '../components/ui/IndustrySelect';
+import { CompanySizeSelect } from '../components/ui/CompanySizeSelect';
+import { validatePhoneNumber } from '../components/ui/countryData';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -58,8 +62,13 @@ export const CompanyFormScreen: React.FC = () => {
 
     useEffect(() => {
         api.get<Lookup[]>('/api/sources')
-            .then(setSources)
-            .catch(() => setSources([]));
+            .then(data => {
+                const raw = data ?? [];
+                const nonOther = raw.filter(s => s.name.trim().toLowerCase() !== 'other');
+                const other = raw.find(s => s.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+                setSources([...nonOther, other]);
+            })
+            .catch(() => setSources([{ id: 999999, name: 'Other' }]));
 
         api.get<CustomFieldDef[]>('/api/custom-field-definitions?entityType=Company')
             .then(setCustomFieldDefs)
@@ -106,6 +115,12 @@ export const CompanyFormScreen: React.FC = () => {
         if (!form.name.trim()) tempErrors.name = 'Company name is required';
         if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
             tempErrors.email = 'Email address is invalid';
+        }
+        if (form.phone && form.phone.trim()) {
+            const phoneErr = validatePhoneNumber(form.phone);
+            if (phoneErr) {
+                tempErrors.phone = phoneErr;
+            }
         }
 
         setErrors(tempErrors);
@@ -182,71 +197,73 @@ export const CompanyFormScreen: React.FC = () => {
                 </div>
             </div>
 
-            <Card className="glass-panel">
-                <Card.Content>
-                    {apiError && (
-                        <div className="form-error-banner animate-fade-in">
-                            {apiError}
-                        </div>
-                    )}
-                    <div className="form-grid">
-                        <Input label="Name" value={form.name} onChange={e => handleChange('name', e.target.value)} error={errors.name} />
-                        <Input label="Industry" value={form.industry} onChange={e => handleChange('industry', e.target.value)} error={errors.industry} />
-                        <Input label="Company Size" value={form.companySize} onChange={e => handleChange('companySize', e.target.value)} error={errors.companySize} />
-                        <div className="input-wrapper">
-                            <label className="input-label">Source</label>
-                            <select className="input-field" value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)}>
-                                <option value="">None</option>
-                                {sources.map(source => (
-                                    <option key={source.id} value={source.id}>{source.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <Input label="Website" value={form.website} onChange={e => handleChange('website', e.target.value)} error={errors.website} />
-                        <Input label="Address" value={form.address} onChange={e => handleChange('address', e.target.value)} error={errors.address} />
-                        <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />
-                        <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
-
-                        {customFieldDefs.length > 0 && (
-                            <div style={{ gridColumn: '1 / -1', marginTop: '1rem', marginBottom: '0.5rem' }}>
-                                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Additional Information</h3>
+            <div style={{ maxWidth: '880px', margin: '0 auto' }}>
+                <Card className="glass-panel" style={{ padding: '0.5rem' }}>
+                    <Card.Content>
+                        {apiError && (
+                            <div className="form-error-banner animate-fade-in" style={{ marginBottom: '1.25rem' }}>
+                                {apiError}
                             </div>
                         )}
-                        {customFieldDefs.map(def => {
-                            const val = customFields[def.fieldName] || '';
-                            const updateVal = (v: string) => setCustomFields(prev => ({ ...prev, [def.fieldName]: v }));
-                            if (def.fieldType === 'Boolean') {
-                                return (
-                                    <div key={def.customFieldDefinitionId} className="input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '100%' }}>
-                                        <input type="checkbox" checked={val === 'true'} onChange={e => updateVal(e.target.checked ? 'true' : 'false')} id={`cf-${def.customFieldDefinitionId}`} style={{ cursor: 'pointer', width: 16, height: 16 }} />
-                                        <label htmlFor={`cf-${def.customFieldDefinitionId}`} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>{def.fieldName}</label>
-                                    </div>
-                                );
-                            }
-                            if (def.fieldType === 'Select') {
-                                let options: string[] = [];
-                                try { options = JSON.parse(def.optionsJson || '[]'); } catch { }
-                                return (
-                                    <div key={def.customFieldDefinitionId} className="input-wrapper">
-                                        <label className="input-label">{def.fieldName}</label>
-                                        <select className="input-field" value={val} onChange={e => updateVal(e.target.value)}>
-                                            <option value="">Select...</option>
-                                            {options.map(o => <option key={o} value={o}>{o}</option>)}
-                                        </select>
-                                    </div>
-                                );
-                            }
-                            return (
-                                <Input key={def.customFieldDefinitionId} label={def.fieldName} type={def.fieldType === 'Number' ? 'number' : def.fieldType === 'Date' ? 'date' : 'text'} value={val} onChange={e => updateVal(e.target.value)} />
-                            );
-                        })}
+                        <div className="form-grid" style={{ gap: '1.25rem 1.5rem' }}>
+                            <Input label="Company Name" placeholder="e.g. Acme Corp" value={form.name} onChange={e => handleChange('name', e.target.value)} error={errors.name} />
+                            <IndustrySelect label="Industry" placeholder="Search or type industry..." value={form.industry} onChange={val => handleChange('industry', val)} error={errors.industry} />
+                            <CompanySizeSelect label="Company Size" placeholder="Select or type company size..." value={form.companySize} onChange={val => handleChange('companySize', val)} error={errors.companySize} />
+                            <div className="input-wrapper">
+                                <label className="input-label">Source</label>
+                                <select className="input-field" value={form.sourceId} onChange={e => handleChange('sourceId', e.target.value)}>
+                                    <option value="">None</option>
+                                    {sources.map(source => (
+                                        <option key={source.id} value={source.id}>{source.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <Input label="Website" placeholder="https://example.com" value={form.website} onChange={e => handleChange('website', e.target.value)} error={errors.website} />
+                            <Input label="Email" type="email" placeholder="contact@company.com" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
+                            <PhoneInput label="Phone" value={form.phone} onChange={val => handleChange('phone', val)} error={errors.phone} />
+                            <Input label="Address" placeholder="Street, City, State, ZIP" value={form.address} onChange={e => handleChange('address', e.target.value)} error={errors.address} />
 
-                    </div>
-                    <div style={{ marginTop: '1rem' }}>
-                        <Button onClick={handleSubmit}>{isEdit ? 'Save changes' : 'Create company'}</Button>
-                    </div>
-                </Card.Content>
-            </Card>
+                            {customFieldDefs.length > 0 && (
+                                <div style={{ gridColumn: '1 / -1', marginTop: '0.75rem', marginBottom: '0.25rem' }}>
+                                    <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>Additional Information</h3>
+                                </div>
+                            )}
+                            {customFieldDefs.map(def => {
+                                const val = customFields[def.fieldName] || '';
+                                const updateVal = (v: string) => setCustomFields(prev => ({ ...prev, [def.fieldName]: v }));
+                                if (def.fieldType === 'Boolean') {
+                                    return (
+                                        <div key={def.customFieldDefinitionId} className="input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '100%' }}>
+                                            <input type="checkbox" checked={val === 'true'} onChange={e => updateVal(e.target.checked ? 'true' : 'false')} id={`cf-${def.customFieldDefinitionId}`} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                                            <label htmlFor={`cf-${def.customFieldDefinitionId}`} style={{ fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>{def.fieldName}</label>
+                                        </div>
+                                    );
+                                }
+                                if (def.fieldType === 'Select') {
+                                    let options: string[] = [];
+                                    try { options = JSON.parse(def.optionsJson || '[]'); } catch { }
+                                    return (
+                                        <div key={def.customFieldDefinitionId} className="input-wrapper">
+                                            <label className="input-label">{def.fieldName}</label>
+                                            <select className="input-field" value={val} onChange={e => updateVal(e.target.value)}>
+                                                <option value="">Select...</option>
+                                                {options.map(o => <option key={o} value={o}>{o}</option>)}
+                                            </select>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <Input key={def.customFieldDefinitionId} label={def.fieldName} type={def.fieldType === 'Number' ? 'number' : def.fieldType === 'Date' ? 'date' : 'text'} value={val} onChange={e => updateVal(e.target.value)} />
+                                );
+                            })}
+                        </div>
+                        <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                            <Button onClick={handleSubmit}>{isEdit ? 'Save Changes' : 'Create Company'}</Button>
+                            <Button variant="ghost" onClick={() => navigate('/companies')}>Cancel</Button>
+                        </div>
+                    </Card.Content>
+                </Card>
+            </div>
         </Layout>
     );
 };

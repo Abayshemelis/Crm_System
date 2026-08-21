@@ -4,6 +4,7 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PhoneInput } from '../components/ui/PhoneInput';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
@@ -66,8 +67,15 @@ export const LeadFormScreen: React.FC = () => {
 
     useEffect(() => {
         api.get<{ id: number; name: string }[]>('/api/sources')
-            .then(data => setSources(data))
-            .catch(() => { });
+            .then(data => {
+                const raw = data ?? [];
+                const nonOther = raw.filter(s => s.name.trim().toLowerCase() !== 'other');
+                const other = raw.find(s => s.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+                setSources([...nonOther, other]);
+            })
+            .catch(() => {
+                setSources([{ id: 999999, name: 'Other' }]);
+            });
         api.get<{ id: number; name: string }[]>('/api/leadstatuses')
             .then(data => setStatuses(data))
             .catch(() => { });
@@ -215,7 +223,7 @@ export const LeadFormScreen: React.FC = () => {
                         <Input label="First Name *" value={form.firstName} onChange={e => handleChange('firstName', e.target.value)} error={errors.firstName} />
                         <Input label="Last Name *" value={form.lastName} onChange={e => handleChange('lastName', e.target.value)} error={errors.lastName} />
                         <Input label="Email" type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} error={errors.email} />
-                        <Input label="Phone" value={form.phone} onChange={e => handleChange('phone', e.target.value)} error={errors.phone} />
+                        <PhoneInput label="Phone" value={form.phone} onChange={val => handleChange('phone', val)} error={errors.phone} />
                         <Input label="Company" value={form.companyName} onChange={e => handleChange('companyName', e.target.value)} error={errors.companyName} />
                         <Input label="Job Title" value={form.jobTitle} onChange={e => handleChange('jobTitle', e.target.value)} error={errors.jobTitle} />
 

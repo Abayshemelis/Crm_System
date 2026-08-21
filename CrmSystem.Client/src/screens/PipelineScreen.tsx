@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { Plus, Filter, Search, X, Calendar } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { getExpectedCloseDateStatus } from '../lib/dateUtils';
 import './screens.css';
 
 interface Opportunity {
@@ -350,7 +351,35 @@ export const PipelineScreen: React.FC = () => {
                                                 </div>
                                                 <p>{opp.customerFirstName} {opp.customerLastName}</p>
                                                 <p className="opportunity-value">${opp.estimatedValue.toLocaleString()}</p>
-                                                <p className="opportunity-owner">{opp.ownerName}</p>
+                                                
+                                                {(() => {
+                                                    const closeStatus = getExpectedCloseDateStatus(opp.expectedCloseDate, stage.isWon, stage.isLost);
+                                                    return (
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)', fontSize: '0.75rem' }}>
+                                                            <span className="opportunity-owner" style={{ margin: 0 }}>{opp.ownerName}</span>
+                                                            {opp.expectedCloseDate && (
+                                                                <span
+                                                                    style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '3px',
+                                                                        padding: '0.15rem 0.4rem',
+                                                                        borderRadius: '4px',
+                                                                        fontSize: '0.7rem',
+                                                                        fontWeight: 600,
+                                                                        background: closeStatus.bg || 'rgba(255, 255, 255, 0.05)',
+                                                                        color: closeStatus.color,
+                                                                        border: closeStatus.status === 'overdue' ? '1px solid rgba(239, 68, 68, 0.3)' : closeStatus.status === 'soon' || closeStatus.status === 'today' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid transparent'
+                                                                    }}
+                                                                    title={closeStatus.label}
+                                                                >
+                                                                    <Calendar size={11} />
+                                                                    {closeStatus.badge || new Date(opp.expectedCloseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </Card.Content>
                                         </Card>
                                     </div>

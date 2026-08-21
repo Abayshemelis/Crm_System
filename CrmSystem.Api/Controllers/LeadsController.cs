@@ -1,3 +1,17 @@
+// ==============================================================================
+// CRM SYSTEM LEADS CONTROLLER (LeadsController.cs)
+// ==============================================================================
+// Manages the entire Lead management lifecycle:
+// 1. Ingestion: Direct creation, CSV imports, and website contact form capture
+// 2. Qualification: Dynamic AI/rule-based lead scoring (Hot >= 70, Warm 40-69, Cold < 40)
+// 3. Hierarchical Scoping:
+//    - Admins: Access all leads across the organization
+//    - Managers: Access their own leads plus leads owned by their reporting sales team
+//    - SalesReps: Access strictly leads assigned to their IdentityId
+// 4. Conversion: Seamlessly transitions qualified leads into Customers and Opportunities
+// 5. Follow-ups: Automated task creation, SLA monitoring, and overdue tracking
+// ==============================================================================
+
 using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
@@ -29,6 +43,8 @@ public class LeadsController : ControllerBase
         _emailTriggerService = emailTriggerService;
     }
 
+    // ── 1. GET LEADS (PAGINATED & FILTERED) ───────────────────────────────────
+    // Supports keyword search, status filtering, priority/rating tags, and rep scoping.
     [HttpGet]
     public async Task<ActionResult<PagedResult<LeadSummaryDto>>> GetLeads([FromQuery] LeadListQuery query)
     {

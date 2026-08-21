@@ -1,3 +1,13 @@
+// ==============================================================================
+// CRM SYSTEM OPPORTUNITIES CONTROLLER (OpportunitiesController.cs)
+// ==============================================================================
+// Manages the Visual Sales Pipeline and Deal Closing Workflow:
+// 1. Pipeline Stages: New -> Qualified -> Proposal -> Negotiation -> Closing -> Won / Lost
+// 2. Financial Forecasting: Estimated Value, Win Probability %, Expected Close Dates
+// 3. Stalled Deal Detection: Highlights deals with no updates in > 14 days
+// 4. Product Attachments: Links catalog line items, prices, and quantities to deals
+// ==============================================================================
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +37,7 @@ public class OpportunitiesController : ControllerBase
         _auditService = auditService;
     }
 
+    // ── 1. GET OPPORTUNITIES (PIPELINE & FILTERED LIST) ───────────────────────
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<OpportunityReadDto>>> GetAll(
         [FromQuery] int? customerId,

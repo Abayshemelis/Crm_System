@@ -1,3 +1,14 @@
+// ==============================================================================
+// CRM SYSTEM BACKEND ENTRYPOINT (Program.cs)
+// ==============================================================================
+// This file configures the entire ASP.NET Core web application, including:
+// 1. Dependency Injection (DI) Service Registration (Database, Services, APIs)
+// 2. Security Middleware (JWT Authentication, RBAC Authorization, CORS, Rate Limiting)
+// 3. Real-time Communication (SignalR Notification Hub)
+// 4. Static File Hosting (Document attachments, uploaded PDFs)
+// 5. Database Auto-Migration & Baseline Seed Data Initialization
+// ==============================================================================
+
 using System.Text;
 using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
@@ -14,6 +25,9 @@ using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── 1. CONTROLLERS & JSON SERIALIZATION ────────────────────────────────────────
+// Configures ASP.NET Core controllers with CamelCase JSON naming conventions
+// so C# PascalCase properties serialize to JavaScript standard camelCase.
 var mvcBuilder = builder.Services.AddControllers();
 mvcBuilder.AddJsonOptions(options =>
 {
@@ -26,10 +40,12 @@ if (builder.Environment.IsEnvironment("Test"))
     mvcBuilder.AddNewtonsoftJson();
 }
 
-// Note: keep System.Text.Json as the primary serializer.
 builder.Services.AddOpenApi();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(); // Registers SignalR for real-time WebSocket notifications
 
+// ── 2. CROSS-ORIGIN RESOURCE SHARING (CORS) ───────────────────────────────────
+// Allows our React frontend (running on Vite http://localhost:5173) to communicate
+// with this backend API securely, including credentials and headers.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -41,6 +57,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ── 3. DATABASE CONFIGURATION (EF CORE) ───────────────────────────────────────
+// Connects to Microsoft SQL Server, with automatic fallback to InMemory database
+// for local unit tests or lightweight development.
 var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -63,29 +82,32 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     }
 });
 
+// ── 4. DEPENDENCY INJECTION (SERVICE REGISTRATIONS) ───────────────────────────
+// Registers application services into the IoC (Inversion of Control) container.
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
-builder.Services.AddScoped<ITokenService, JwtTokenService>();
-builder.Services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
-builder.Services.AddHttpClient<IGeminiService, GeminiService>();
-builder.Services.AddScoped<IOpportunityService, OpportunityService>();
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
-builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();
-builder.Services.AddScoped<IEmailTriggerService, EmailTriggerService>();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IActivityService, ActivityService>();
-builder.Services.AddScoped<ITaskService, TaskService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<INotificationHubContext, NotificationHubContextAdapter>();
-builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();
-builder.Services.AddScoped<IImportService, ImportService>();
-builder.Services.AddScoped<IAiInsightService, AiInsightService>();
-builder.Services.AddScoped<IAiCopilotService, AiCopilotService>();
-builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
-builder.Services.AddHostedService<NotificationBackgroundService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();                 // Extracts current user ID & role from ClaimsPrincipal
+builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();                   // Secure BCrypt password hashing & verification
+builder.Services.AddScoped<ITokenService, JwtTokenService>();                           // JWT Access & Refresh token generation
+builder.Services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();               // Google OAuth token validation HTTP client
+builder.Services.AddHttpClient<IGeminiService, GeminiService>();                       // AI / LLM integration service
+builder.Services.AddScoped<IOpportunityService, OpportunityService>();                 // Sales pipeline & opportunity lifecycle
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();                           // Outbound SMTP email dispatch
+builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();             // Email templating & variable substitution
+builder.Services.AddScoped<IEmailTriggerService, EmailTriggerService>();               // Event-based email triggers
+builder.Services.AddScoped<IAuditService, AuditService>();                             // Audit trail logging
+builder.Services.AddScoped<IActivityService, ActivityService>();                       // Activity & timeline logging
+builder.Services.AddScoped<ITaskService, TaskService>();                               // Task management
+builder.Services.AddScoped<INotificationService, NotificationService>();               // Notification generation engine
+builder.Services.AddScoped<INotificationHubContext, NotificationHubContextAdapter>(); // Adapter bridging Infrastructure to SignalR Hub
+builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();                 // AI / Rule-based lead scoring
+builder.Services.AddScoped<IImportService, ImportService>();                           // CSV/Excel lead/customer import
+builder.Services.AddScoped<IAiInsightService, AiInsightService>();                     // AI sales insights
+builder.Services.AddScoped<IAiCopilotService, AiCopilotService>();                     // AI CRM copilot assistant
+builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();             // Stripe payment processing
+builder.Services.AddHostedService<NotificationBackgroundService>();                   // Periodic background timer generating overdue/due-today alerts
 builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(3));
 
+// Standardize Model Validation error responses to HTTP 422 Unprocessable Entity
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -99,6 +121,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     };
 });
 
+// ── 5. JWT AUTHENTICATION & WEBSOCKET HANDSHAKE ───────────────────────────────
 var jwtSigningKey = builder.Configuration["Jwt:SigningKey"] ?? "development-signing-key-1234567890";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CrmSystem.Api";
 
@@ -116,6 +139,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
         options.Events = new JwtBearerEvents
         {
+            // WebSockets do not support custom HTTP headers in browser JavaScript.
+            // When connecting to SignalR, the client passes the token as `?access_token=...` in the query string.
+            // We extract it here so SignalR can authenticate the connection.
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
@@ -129,6 +155,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// ── 6. ROLE-BASED ACCESS CONTROL (RBAC) POLICIES ──────────────────────────────
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RepOrAbove", policy =>
@@ -143,7 +170,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-// Apply pending migrations on startup
+// Apply any pending Entity Framework database migrations on startup
 if (!useInMemoryDatabase)
 {
     try
@@ -158,43 +185,38 @@ if (!useInMemoryDatabase)
     }
 }
 
-// Configure the HTTP request pipeline.
+// Configure HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
-// Ensure CORS middleware runs before static files so browser requests for
-// /uploads/* receive the CORS headers and can be fetched from the frontend dev server.
 app.UseCors("AllowFrontend");
 
-// Serve static files with custom response headers so uploaded PDFs can be
-// embedded in the frontend preview modal. Use OnPrepareResponse to adjust
-// headers for each static file response (precise and reliable).
+// ── 7. STATIC FILE SERVING WITH EMBED & CORS HEADERS ──────────────────────────
+// Enables serving contract PDFs, uploaded attachments, and user media.
 app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
         var headers = ctx.Context.Response.Headers;
 
-        // Remove X-Frame-Options to allow embedding in iframes/object tags.
+        // Remove X-Frame-Options to allow embedding in preview modals
         if (headers.ContainsKey("X-Frame-Options"))
             headers.Remove("X-Frame-Options");
 
-        // If the file is a PDF, prefer inline disposition so browsers render it.
+        // Set Content-Disposition inline for browser PDF rendering
         var contentType = ctx.Context.Response.ContentType ?? string.Empty;
         if (contentType.StartsWith("application/pdf", StringComparison.OrdinalIgnoreCase))
         {
             if (!headers.ContainsKey("Content-Disposition"))
             {
-                // Include a filename to help browsers; keep it simple and safe.
                 var fileName = System.IO.Path.GetFileName(ctx.File.PhysicalPath) ?? "file.pdf";
                 headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"";
             }
         }
 
-        // Expose the file to the frontend dev server origin (CORS for static files).
-        // Echo back the request origin so any allowed Vite port works.
+        // Echo origin for CORS static file fetching
         if (!headers.ContainsKey("Access-Control-Allow-Origin"))
         {
             var requestOrigin = ctx.Context.Request.Headers["Origin"].ToString();
@@ -209,14 +231,17 @@ app.UseMiddleware<IpRateLimitingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<NotificationHub>("/hubs/notifications"); // Map SignalR WebSocket route
 
+// ── 8. BASELINE DATABASE SEEDING ──────────────────────────────────────────────
+// Automatically seeds necessary lookup values (Roles, Lead Statuses, Pipeline Stages,
+// Activity Types, Products, and Default Administrator) if the database is fresh.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
 
-    // ── Roles ────────────────────────────────────────────────────────────
+    // ── Seed Roles ────────────────────────────────────────────────────────
     var roleSeeds = new[] {
         ("Admin", "System Administrator"),
         ("Manager", "Sales Team Manager"),
@@ -229,7 +254,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── Sources ──────────────────────────────────────────────────────────
+    // ── Seed Lead Sources ─────────────────────────────────────────────────
     var sourceSeeds = new[] { "Referral", "Website", "Cold Call", "Social Media", "Trade Show", "Advertisement", "Email Campaign", "Partner", "Other" };
     foreach (var s in sourceSeeds)
     {
@@ -238,7 +263,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── LeadStatuses ─────────────────────────────────────────────────────
+    // ── Seed Lead Statuses ────────────────────────────────────────────────
     var leadStatusSeeds = new (string Name, int Order, bool Terminal)[] {
         ("New", 1, false), ("Contacted", 2, false), ("Qualified", 3, false),
         ("Proposal Sent", 4, false), ("Negotiation", 5, false), ("Follow-up Scheduled", 6, false),
@@ -252,7 +277,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── OpportunityStages ─────────────────────────────────────────────────
+    // ── Seed Opportunity Stages ───────────────────────────────────────────
     var stageSeeds = new (string Name, int Order, bool IsWon, bool IsLost)[] {
         ("New", 1, false, false), ("Qualified", 2, false, false),
         ("Proposal", 3, false, false), ("Negotiation", 4, false, false),
@@ -265,7 +290,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── ActivityTypes ─────────────────────────────────────────────────────
+    // ── Seed Activity Types ───────────────────────────────────────────────
     var activityTypeSeeds = new[] { ("Call", "phone"), ("Email", "mail"), ("Meeting", "users"), ("Note", "file-text"), ("Demo", "monitor"), ("Follow-Up", "repeat") };
     foreach (var (name, icon) in activityTypeSeeds)
     {
@@ -274,7 +299,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── CrmTaskStatuses ───────────────────────────────────────────────────
+    // ── Seed CRM Task Statuses ────────────────────────────────────────────
     var taskStatusSeeds = new (string Name, bool Terminal)[] {
         ("Pending", false), ("In Progress", false), ("Completed", true), ("Cancelled", true)
     };
@@ -285,7 +310,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── NotificationTypes ─────────────────────────────────────────────────
+    // ── Seed Notification Types ───────────────────────────────────────────
     var notifTypeSeeds = new[] { ("TaskDue", "InApp"), ("TaskOverdue", "InApp"), ("TaskAssigned", "InApp"), ("OpportunityWon", "InApp"), ("OpportunityLost", "InApp"), ("OpportunityStalled", "InApp"), ("LeadAssigned", "InApp"), ("MentionedInNote", "InApp"), ("FollowUpOverdue", "InApp"), ("SystemAlert", "InApp") };
     foreach (var (name, channel) in notifTypeSeeds)
     {
@@ -294,7 +319,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── ProductCategories ─────────────────────────────────────────────────
+    // ── Seed Product Catalog ──────────────────────────────────────────────
     var prodCatSeeds = new[] { "Software", "Hardware", "Services", "Consulting", "Subscription", "Support", "Other" };
     foreach (var s in prodCatSeeds)
     {
@@ -303,7 +328,6 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── ProductStatuses ───────────────────────────────────────────────────
     var prodStatusSeeds = new (string Name, bool Selectable)[] {
         ("Active", true), ("Inactive", false), ("Discontinued", false)
     };
@@ -314,7 +338,6 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── Products ───────────────────────────────────────────────────────
     var activeStatus = await db.ProductStatuses.SingleAsync(x => x.Name == "Active");
     var softwareCategory = await db.ProductCategories.SingleAsync(x => x.Name == "Software");
     var hardwareCategory = await db.ProductCategories.SingleAsync(x => x.Name == "Hardware");
@@ -334,7 +357,7 @@ using (var scope = app.Services.CreateScope())
         await db.SaveChangesAsync();
     }
 
-    // ── EntityTypes ───────────────────────────────────────────────────────
+    // ── Seed Entity Types for Audit & Polymorphic Relations ───────────────
     var entityTypeSeeds = new[] { ("Customer", "Customers"), ("Company", "Companies"), ("Lead", "Leads"), ("Opportunity", "Opportunities"), ("Product", "Products"), ("Activity", "Activities"), ("CrmTask", "CrmTasks") };
     foreach (var (name, table) in entityTypeSeeds)
     {
@@ -343,7 +366,7 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── AuditActionTypes ──────────────────────────────────────────────────
+    // ── Seed Audit Action Types ───────────────────────────────────────────
     var auditActionSeeds = new[] { "Create", "Update", "Delete", "StatusChange", "StageChange", "Assign", "Convert" };
     foreach (var s in auditActionSeeds)
     {
@@ -352,12 +375,11 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── Default Admin Identity ────────────────────────────────────────────
+    // ── Seed Default Administrator Account ────────────────────────────────
     var adminRole = await db.Roles.SingleAsync(r => r.Name == "Admin");
     var adminEmail = "abayshemelisshiferaw@gmail.com";
     var adminPassword = "admin123";
 
-    // Remove stale admin accounts that no longer match the target email
     var staleAdmins = await db.Identities
         .Where(i => i.RoleId == adminRole.RoleId && i.Email != adminEmail)
         .ToListAsync();
@@ -381,7 +403,6 @@ using (var scope = app.Services.CreateScope())
 
     var adminUser = await db.Identities.SingleAsync(i => i.Email == adminEmail);
 
-    // Ensure admin has IdentityRole mapping (multi-role support)
     var adminIdentityRoleExists = await db.IdentityRoles.AnyAsync(ir => ir.IdentityId == adminUser.IdentityId && ir.RoleId == adminRole.RoleId);
     if (!adminIdentityRoleExists)
     {
@@ -398,7 +419,6 @@ using (var scope = app.Services.CreateScope())
         );
         await db.SaveChangesAsync();
     }
-
-
 }
+
 app.Run();

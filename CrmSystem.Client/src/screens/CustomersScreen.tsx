@@ -114,8 +114,14 @@ export const CustomersScreen: React.FC = () => {
         isDeleted: customer.isDeleted,
         tags: (customer.tags ?? []).map(tag => ({ tagId: tag.tagId, name: tag.name })),
       })));
-      setCompanies((companyData.data ?? []).map(c => ({ id: c.companyId, name: c.name })));
-      setSources(sourceData ?? []);
+      const rawCompanies = (companyData.data ?? []).map(c => ({ id: c.companyId, name: c.name }));
+      const nonOtherCompanies = rawCompanies.filter(c => c.name.trim().toLowerCase() !== 'other');
+      const otherCompany = rawCompanies.find(c => c.name.trim().toLowerCase() === 'other');
+      setCompanies(otherCompany ? [...nonOtherCompanies, otherCompany] : [...nonOtherCompanies, { id: 999999, name: 'Other' }]);
+      const rawSources = sourceData ?? [];
+      const nonOtherSources = rawSources.filter(s => s.name.trim().toLowerCase() !== 'other');
+      const otherSource = rawSources.find(s => s.name.trim().toLowerCase() === 'other');
+      setSources(otherSource ? [...nonOtherSources, otherSource] : nonOtherSources);
       setTags(tagData ?? []);
       setReps((userData ?? []).map(u => ({ id: u.id, name: u.name, role: u.role })));
     } catch {

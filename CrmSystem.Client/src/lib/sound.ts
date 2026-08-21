@@ -1,6 +1,11 @@
-// Synthesized audio alerts using Web Audio API (zero network lag, offline-ready, crystal clear)
+// ── WEB AUDIO SYNTHESIZED NOTIFICATION SOUNDS ──────────────────────────────────
+// Instead of downloading slow MP3/WAV audio files over the network, we use the 
+// browser's built-in Web Audio API to synthesize smooth melodic chimes mathematically.
+// Benefits: Instant playback (0ms delay), works offline, zero network assets.
+
 let audioCtx: AudioContext | null = null;
 
+// Helper to initialize or resume the shared AudioContext instance
 function getAudioContext(): AudioContext | null {
   try {
     if (!audioCtx) {
@@ -9,6 +14,7 @@ function getAudioContext(): AudioContext | null {
         audioCtx = new AudioCtxClass();
       }
     }
+    // Modern browsers suspend AudioContext until the user interacts with the page
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
@@ -18,6 +24,7 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
+// ── USER MUTE PREFERENCES (PERSISTED IN LOCALSTORAGE) ─────────────────────────
 export const isSoundEnabled = (): boolean => {
   return localStorage.getItem('crm_notification_sound') !== 'false';
 };
@@ -26,6 +33,11 @@ export const setSoundEnabled = (enabled: boolean): void => {
   localStorage.setItem('crm_notification_sound', enabled ? 'true' : 'false');
 };
 
+// ── PLAY SYNTHESIZED SOUND CHIMES ─────────────────────────────────────────────
+// Supports 3 distinct synthesized audio alerts:
+// 1. 'default': Soft pleasant bell chord (C5 -> E5 -> G5) for standard notifications
+// 2. 'success': Triumphant ascending chime (E5 -> G#5 -> B5) for won deals / signed contracts
+// 3. 'alert': 2-tone warning chime (F5 -> A5) for overdue tasks / urgent alerts
 export const playNotificationSound = (type: 'default' | 'success' | 'alert' = 'default') => {
   try {
     if (!isSoundEnabled()) return;
@@ -36,7 +48,7 @@ export const playNotificationSound = (type: 'default' | 'success' | 'alert' = 'd
     const now = ctx.currentTime;
 
     if (type === 'alert') {
-      // 2-tone attention chime (F5 -> A5)
+      // 2-tone attention chime (F5 698Hz -> A5 880Hz)
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
@@ -45,6 +57,7 @@ export const playNotificationSound = (type: 'default' | 'success' | 'alert' = 'd
       osc.frequency.setValueAtTime(880.0, now + 0.12); // A5
 
       gain.gain.setValueAtTime(0.2, now);
+      // Exponential decay gives a natural acoustic fade-out
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
 
       osc.connect(gain);
@@ -53,7 +66,7 @@ export const playNotificationSound = (type: 'default' | 'success' | 'alert' = 'd
       osc.start(now);
       osc.stop(now + 0.4);
     } else if (type === 'success') {
-      // Ascending triumphant chime (E5 -> G#5 -> B5)
+      // Ascending triumphant major triad (E5 -> G#5 -> B5)
       const freqs = [659.25, 830.61, 987.77];
       freqs.forEach((freq, i) => {
         const osc = ctx.createOscillator();

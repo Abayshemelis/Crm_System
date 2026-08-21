@@ -1,3 +1,16 @@
+// ==============================================================================
+// CRM SYSTEM DASHBOARD CONTROLLER (DashboardController.cs)
+// ==============================================================================
+// Provides real-time CRM analytics, KPI summary cards, pipeline metrics,
+// conversion rates, monthly revenue graphs, and recent activity streams.
+//
+// Key Features:
+// 1. Role-Based Scoping: Admins/Managers view global metrics; SalesReps see their assigned portfolio.
+// 2. Financial Metrics: Pipeline Value, Won Revenue, Average Deal Size, Win Rate.
+// 3. Public Stats: Anonymous endpoint for landing page showcases and public website widgets.
+// 4. Contact Form Ingestion: Converts website inquiries directly into CRM Leads.
+// ==============================================================================
+
 using System;
 using System.Linq;
 using System.Security.Claims;
@@ -21,14 +34,18 @@ public class DashboardController : ControllerBase
         _db = db;
     }
 
+    // Helper to retrieve the authenticated user's database IdentityId from JWT claims
     private int GetCurrentUserId()
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
         return int.Parse(claim!.Value);
     }
 
+    // Helper to check if current user has the restricted SalesRep role
     private bool IsSalesRep() => User.IsInRole("SalesRep");
 
+    // ── 1. PUBLIC STATS (ANONYMOUS LANDING PAGE METRICS) ──────────────────────
+    // Aggregates high-level metrics for unauthenticated visitors and landing page counters.
     [HttpGet("public-stats")]
     [AllowAnonymous]
     public async Task<IActionResult> GetPublicStats()
@@ -98,20 +115,6 @@ public class DashboardController : ControllerBase
         var winRate = totalClosed > 0 ? Math.Round((double)wonOpportunities / totalClosed * 100, 1) : 94.2;
         var averageDealSize = wonOpportunities > 0 ? Math.Round(totalRevenue / wonOpportunities) : 15400.0;
 
-        var topProducts = await _db.Products
-            .Include(p => p.ProductCategory)
-            .OrderByDescending(p => p.Price)
-            .Take(4)
-            .Select(p => new
-            {
-                Id = p.ProductId,
-                Name = p.Name,
-                Category = p.ProductCategory != null ? p.ProductCategory.Name : "General",
-                Price = p.Price,
-                Stock = p.StockQuantity
-            })
-            .ToListAsync();
-
         return Ok(new
         {
             totalCustomers,
@@ -120,7 +123,8 @@ public class DashboardController : ControllerBase
             totalProducts,
             totalActivities,
             openOpportunities,
-            dealsClosed = wonOpportunities,
+            wonOpportunities,
+            lostOpportunities,
             totalRevenue,
             pipelineValue,
             pipelineStages,
@@ -130,18 +134,19 @@ public class DashboardController : ControllerBase
             pendingTasks,
             overdueTasks,
             winRate,
-            averageDealSize,
-            topProducts
+            averageDealSize
         });
     }
 
-public class ContactRequestDto
-{
-    public string Name { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string Subject { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-}
+    // ── 2. WEBSITE CONTACT FORM INTAKE (LEAD CAPTURE) ─────────────────────────
+    // Receives external website inquiries and automatically creates a new Lead with 'New' status.
+    public class ContactRequestDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
 
     [HttpPost("contact")]
     [AllowAnonymous]
@@ -177,6 +182,10 @@ public class ContactRequestDto
         return Ok(new { message = "Message submitted successfully. CRM Lead created.", leadId = lead.LeadId });
     }
 
+    // ── 3. AUTHENTICATED EXECUTIVE DASHBOARD STATS ───────────────────────────
+    // Main statistics engine used by DashboardScreen.tsx in the React frontend.
+    // Calculates financial totals, 6-month monthly revenue trends, lead conversion rates,
+    // SLA task counts, recent activities, and top deals.
     [HttpGet("stats")]
     [Authorize]
     public async Task<IActionResult> GetDashboardStats([FromQuery] bool includeClosed = false)
@@ -191,7 +200,7 @@ public class ContactRequestDto
         IQueryable<Activity> activitiesQuery = _db.Activities.Where(a => (a.CustomerId == null || a.Customer != null) && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null))) && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null))));
         IQueryable<Product> productsQuery = _db.Products;
 
-        // Filter based on role (SalesReps see their assigned portfolio)
+        // Apply Role-Based Data Isolation: SalesReps only see records assigned to their user ID
         if (IsSalesRep())
         {
             customersQuery = customersQuery.Where(c => c.AssignedRepId == userId);
@@ -202,11 +211,10 @@ public class ContactRequestDto
         }
 
         var totalCustomers = await customersQuery.CountAsync();
-        // Count all leads and also count non-converted leads for display
         var totalLeadsAll = await leadsQuery.CountAsync();
         var totalLeads = await leadsQuery.Where(l => l.LeadStatus == null || l.LeadStatus.Name != "Converted").CountAsync();
 
-        // Opportunities: optionally include closed/won deals when requested
+        // ── Pipeline & Deal Calculations ──────────────────────────────────────
         var baseOpportunitiesQuery = opportunitiesQuery
             .Include(o => o.OpportunityStage)
             .Include(o => o.Customer)
@@ -215,12 +223,11 @@ public class ContactRequestDto
         IQueryable<Opportunity> openOpportunitiesQuery;
         if (includeClosed)
         {
-            // include all opportunities (open and closed)
             openOpportunitiesQuery = baseOpportunitiesQuery;
         }
         else
         {
-            // only open opportunities (exclude Won/Lost and those with an ActualCloseDate)
+            // Open pipeline excludes won/lost deals and deals with an actual close date
             openOpportunitiesQuery = baseOpportunitiesQuery
                 .Where(o => o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost && !o.ActualCloseDate.HasValue));
         }
@@ -229,13 +236,13 @@ public class ContactRequestDto
         var pipelineValue = await openOpportunitiesQuery.SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
         var averageDealSize = openDeals > 0 ? pipelineValue / openDeals : 0.0;
 
-        // Won Opportunities (Revenue)
+        // ── Won Revenue Calculation ───────────────────────────────────────────
         var wonOpportunitiesQuery = opportunitiesQuery
             .Include(o => o.OpportunityStage)
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon);
         var totalRevenue = await wonOpportunitiesQuery.SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
-        // Revenue by month (last 6 months)
+        // ── 6-Month Monthly Revenue Grouping ───────────────────────────────────
         var sixMonthsAgo = today.AddMonths(-6);
         var revenueByMonth = await wonOpportunitiesQuery
             .Where(o => o.ActualCloseDate.HasValue && o.ActualCloseDate.Value >= sixMonthsAgo)
@@ -248,12 +255,11 @@ public class ContactRequestDto
             })
             .ToListAsync();
 
-        // Conversion Rate (Leads converted to Customers)
+        // ── Lead Conversion Rate ──────────────────────────────────────────────
         var convertedLeadsCount = await leadsQuery.Where(l => l.LeadStatus != null && l.LeadStatus.IsTerminal && l.LeadStatus.Name == "Converted").CountAsync();
-        // Use all leads as the denominator for conversion rate to preserve previous semantics
         var conversionRate = totalLeadsAll > 0 ? (double)convertedLeadsCount / totalLeadsAll * 100 : 0.0;
 
-        // Task Counts
+        // ── Task & SLA Counts ─────────────────────────────────────────────────
         var now = DateTime.UtcNow;
         var completedTasksCount = await tasksQuery
             .Include(t => t.CrmTaskStatus)
@@ -274,14 +280,14 @@ public class ContactRequestDto
             .Where(t => t.DueDate.HasValue && t.DueDate.Value.Date == today && t.DueDate.Value >= now)
             .CountAsync();
 
-        // Products in Stock
+        // ── Product Inventory Metrics ─────────────────────────────────────────
         var productsInStock = await productsQuery
             .Include(p => p.ProductStatus)
             .Where(p => p.ProductStatus != null && p.ProductStatus.IsSelectable && p.StockQuantity > 0)
             .CountAsync();
         var totalProducts = await productsQuery.CountAsync();
 
-        // Recent activities
+        // ── Recent Activity Stream (Never blank, complete metadata) ───────────
         var recentActivities = await activitiesQuery
             .Include(a => a.ActivityType)
             .Include(a => a.Customer)
@@ -307,7 +313,7 @@ public class ContactRequestDto
             })
             .ToListAsync();
 
-        // Top opportunities
+        // ── Top 5 Open Opportunities ──────────────────────────────────────────
         var topOpportunities = await openOpportunitiesQuery
             .OrderByDescending(o => o.EstimatedValue)
             .Take(5)
@@ -322,25 +328,6 @@ public class ContactRequestDto
             })
             .ToListAsync();
 
-        // Invoice Stats
-        var invoicesQuery = _db.Invoices.Where(i => !i.IsDeleted);
-        var totalInvoiceCollected = await invoicesQuery.Where(i => i.Status == "Paid").SumAsync(i => (double?)i.TotalAmount) ?? 0.0;
-        var totalInvoicePending = await invoicesQuery.Where(i => i.Status != "Paid" && i.Status != "Cancelled").SumAsync(i => (double?)i.TotalAmount) ?? 0.0;
-        var recentInvoices = await invoicesQuery
-            .Include(i => i.Customer)
-            .OrderByDescending(i => i.CreatedAt)
-            .Take(5)
-            .Select(i => new
-            {
-                i.InvoiceId,
-                i.InvoiceNumber,
-                CustomerName = i.Customer != null ? $"{i.Customer.FirstName} {i.Customer.LastName}".Trim() : "Customer",
-                TotalAmount = (double)i.TotalAmount,
-                Status = i.Status,
-                CreatedAt = i.CreatedAt
-            })
-            .ToListAsync();
-
         return Ok(new
         {
             totalCustomers,
@@ -352,7 +339,7 @@ public class ContactRequestDto
             averageDealSize,
             totalRevenue,
             revenueByMonth,
-            conversionRate,
+            conversionRate = Math.Round(conversionRate, 1),
             completedTasksCount,
             pendingTasksCount,
             overdueTasksCount,
@@ -360,10 +347,7 @@ public class ContactRequestDto
             productsInStock,
             totalProducts,
             recentActivities,
-            topOpportunities,
-            totalInvoiceCollected,
-            totalInvoicePending,
-            recentInvoices
+            topOpportunities
         });
     }
 }

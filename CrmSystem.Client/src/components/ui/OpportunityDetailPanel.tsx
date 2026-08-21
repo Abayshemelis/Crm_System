@@ -7,6 +7,7 @@ import { SelectDown } from './SelectDown';
 import { api } from '../../lib/api';
 import { X, Plus, Trash2, Check, XCircle, History } from 'lucide-react';
 import { AuditHistoryTable } from '../audit/AuditHistoryTable';
+import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../../lib/dateUtils';
 import '../../screens/screens.css';
 
 interface Opportunity {
@@ -407,6 +408,40 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                                 value={editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0] || ''}
                                                 onChange={e => handleFieldChange('expectedCloseDate', e)}
                                             />
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                                                {getStandardCloseDatePresets().map(preset => (
+                                                    <button
+                                                        key={preset.label}
+                                                        type="button"
+                                                        onClick={() => handleFieldChange('expectedCloseDate', preset.value)}
+                                                        style={{
+                                                            padding: '0.15rem 0.4rem',
+                                                            fontSize: '0.7rem',
+                                                            borderRadius: '4px',
+                                                            border: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                                                            background: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                                                            color: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.15s ease'
+                                                        }}
+                                                    >
+                                                        {preset.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {(editedOpportunity.expectedCloseDate || opportunity.expectedCloseDate) && (() => {
+                                                const currentDate = editedOpportunity.expectedCloseDate || opportunity.expectedCloseDate;
+                                                const currentStage = stages.find(s => s.opportunityStageId === (editedOpportunity?.opportunityStageId || opportunity.opportunityStageId));
+                                                const status = getExpectedCloseDateStatus(currentDate, currentStage?.isWon, currentStage?.isLost);
+                                                if (status.status === 'overdue') {
+                                                    return (
+                                                        <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                                                            ⚠️ Overdue by {Math.abs(status.diffDays || 0)} days
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                         <div className="card-form-field-full">
                                             <label className="card-form-label">Description</label>

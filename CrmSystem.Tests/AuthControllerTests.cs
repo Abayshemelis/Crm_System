@@ -1,3 +1,13 @@
+// ==============================================================================
+// CRM SYSTEM AUTOMATED UNIT TESTS: AUTH CONTROLLER (AuthControllerTests.cs)
+// ==============================================================================
+// Tests critical security and authentication workflows in isolated in-memory environments:
+// 1. Password Hashing & Standard Login validation
+// 2. Google OAuth validation, auto-registration, and token generation
+// 3. Refresh Token rotation and revocation
+// 4. Password reset token generation and verification
+// ==============================================================================
+
 using CrmSystem.Api.Controllers;
 using CrmSystem.Api.Dtos;
 using CrmSystem.Api.Services;
@@ -11,6 +21,7 @@ using Xunit;
 
 namespace CrmSystem.Tests;
 
+// Test Double Mock: Simulates SMTP email delivery without sending real emails
 public class MockEmailSender : IEmailSender
 {
     public Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken cancellationToken = default)
@@ -24,6 +35,7 @@ public class MockEmailSender : IEmailSender
     }
 }
 
+// Test Double Mock: Simulates Google OAuth server responses
 public class MockGoogleAuthService : IGoogleAuthService
 {
     public GoogleUserInfo? UserToReturn { get; set; }

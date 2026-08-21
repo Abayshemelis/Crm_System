@@ -36,6 +36,7 @@ public class CompaniesController : ControllerBase
         var companies = _db.Companies
             .AsNoTracking()
             .Include(c => c.AssignedRep)
+            .Include(c => c.Source)
             .AsQueryable();
 
         if (query.IncludeDeleted)
@@ -482,7 +483,13 @@ public class CompaniesController : ControllerBase
             company.CompanyId,
             company.Name,
             company.Industry,
+            company.CompanySize,
             company.Website,
+            company.Address,
+            company.Phone,
+            company.Email,
+            company.SourceId,
+            company.Source?.Name,
             company.AssignedRepId,
             company.AssignedRep?.Name,
             contactCount,

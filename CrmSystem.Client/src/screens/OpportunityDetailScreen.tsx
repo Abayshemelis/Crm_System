@@ -19,6 +19,7 @@ import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircl
 import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
 import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
+import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../lib/dateUtils';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -375,6 +376,10 @@ export const OpportunityDetailScreen: React.FC = () => {
     );
   }
 
+  const currentStage = stages.find(s => s.opportunityStageId === (editedOpportunity?.opportunityStageId || opportunity.opportunityStageId));
+  const isWonStage = currentStage?.isWon ?? false;
+  const isLostStage = currentStage?.isLost ?? false;
+
   return (
     <Layout>
       <div className="detail-header animate-fade-in">
@@ -423,9 +428,33 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Building2 size={15} />
                 <span>Value: <strong>${opportunity.estimatedValue.toLocaleString()}</strong></span>
               </div>
-              <div className="detail-row">
-                <Calendar size={15} />
-                <span>Expected Close: <strong>{opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString() : '—'}</strong></span>
+              <div className="detail-row" style={{ alignItems: 'flex-start' }}>
+                <Calendar size={15} style={{ marginTop: '3px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span>Expected Close: <strong>{opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</strong></span>
+                  {opportunity.expectedCloseDate && (() => {
+                    const status = getExpectedCloseDateStatus(opportunity.expectedCloseDate, isWonStage, isLostStage);
+                    return (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          color: status.color,
+                          background: status.bg || 'transparent',
+                          padding: '0.1rem 0.35rem',
+                          borderRadius: '4px',
+                          width: 'fit-content',
+                          marginTop: '2px'
+                        }}
+                      >
+                        {status.label}
+                      </span>
+                    );
+                  })()}
+                </div>
               </div>
               <div className="detail-row">
                 <User size={15} />
@@ -507,6 +536,39 @@ export const OpportunityDetailScreen: React.FC = () => {
                       value={editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0] || ''}
                       onChange={e => handleFieldChange('expectedCloseDate', e)}
                     />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                      {getStandardCloseDatePresets().map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => handleFieldChange('expectedCloseDate', preset.value)}
+                          style={{
+                            padding: '0.15rem 0.4rem',
+                            fontSize: '0.7rem',
+                            borderRadius: '4px',
+                            border: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                            background: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                            color: (editedOpportunity.expectedCloseDate?.split('T')[0] || opportunity.expectedCloseDate?.split('T')[0]) === preset.value ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    {(editedOpportunity.expectedCloseDate || opportunity.expectedCloseDate) && (() => {
+                      const currentDate = editedOpportunity.expectedCloseDate || opportunity.expectedCloseDate;
+                      const status = getExpectedCloseDateStatus(currentDate, isWonStage, isLostStage);
+                      if (status.status === 'overdue') {
+                        return (
+                          <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                            ⚠️ Deal is overdue by {Math.abs(status.diffDays || 0)} days. Consider pushing date.
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   <div className="profile-field" style={{ gridColumn: '1 / -1' }}>

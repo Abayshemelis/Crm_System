@@ -103,7 +103,7 @@ export const CompaniesScreen: React.FC = () => {
         companyId: c.companyId ?? c.CompanyId ?? 0,
         name: c.name ?? c.Name ?? 'Unnamed Company',
         industry: c.industry ?? c.Industry,
-        companySize: c.companySize ?? c.CompanySize,
+        companySize: c.companySize ?? c.CompanySize ?? (c as any).company_size ?? (c as any).size,
         website: c.website ?? c.Website,
         address: c.address ?? c.Address,
         phone: c.phone ?? c.Phone,
@@ -391,7 +391,7 @@ export const CompaniesScreen: React.FC = () => {
                   )}
                   <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.35rem 0' }}>
                     <Building size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <span>{c.companySize ? `${c.companySize} employees` : 'Size not specified'}</span>
+                    <span>{c.companySize ? (c.companySize.toLowerCase().includes('employee') ? c.companySize : `${c.companySize} employees`) : 'Size not specified'}</span>
                   </p>
                 </div>
 

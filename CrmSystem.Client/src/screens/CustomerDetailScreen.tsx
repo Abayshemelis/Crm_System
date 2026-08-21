@@ -4,6 +4,8 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { validatePhoneNumber } from '../components/ui/countryData';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
@@ -106,11 +108,25 @@ export const CustomerDetailScreen: React.FC = () => {
 
   useEffect(() => {
     api.get<Lookup[]>('/api/sources')
-      .then(setSources)
-      .catch(() => { });
+      .then(data => {
+        const raw = data ?? [];
+        const nonOther = raw.filter(s => s.name.trim().toLowerCase() !== 'other');
+        const other = raw.find(s => s.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+        setSources([...nonOther, other]);
+      })
+      .catch(() => {
+        setSources([{ id: 999999, name: 'Other' }]);
+      });
     api.get<{ data: { companyId: number; name: string }[] }>('/api/companies?page=1&pageSize=100')
-      .then(res => setCompanies((res.data ?? []).map(c => ({ id: c.companyId, name: c.name }))))
-      .catch(() => { });
+      .then(res => {
+        const raw = (res.data ?? []).map(c => ({ id: c.companyId, name: c.name }));
+        const nonOther = raw.filter(c => c.name.trim().toLowerCase() !== 'other');
+        const other = raw.find(c => c.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+        setCompanies([...nonOther, other]);
+      })
+      .catch(() => {
+        setCompanies([{ id: 999999, name: 'Other' }]);
+      });
 
     // Phase 4 lookups
     api.get<any[]>('/api/activitytypes').then(res => setActivityTypes(res.map(x => ({ id: x.id ?? x.Id, name: x.name ?? x.Name, icon: x.icon ?? x.Icon })))).catch(() => { });
@@ -196,6 +212,14 @@ export const CustomerDetailScreen: React.FC = () => {
     if (!editForm.lastName.trim()) nextErrors.lastName = 'Last name is required.';
     if (!editForm.email.trim()) nextErrors.email = 'Email is required.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) nextErrors.email = 'Email is invalid.';
+
+    if (editForm.phone && editForm.phone.trim()) {
+      const phoneErr = validatePhoneNumber(editForm.phone);
+      if (phoneErr) {
+        nextErrors.phone = phoneErr;
+      }
+    }
+
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -377,7 +401,7 @@ export const CustomerDetailScreen: React.FC = () => {
                 <Input label="First Name" value={editForm.firstName} onChange={e => handleEditChange('firstName', e.target.value)} error={formErrors.firstName} />
                 <Input label="Last Name" value={editForm.lastName} onChange={e => handleEditChange('lastName', e.target.value)} error={formErrors.lastName} />
                 <Input label="Email" type="email" value={editForm.email} onChange={e => handleEditChange('email', e.target.value)} error={formErrors.email} />
-                <Input label="Phone" value={editForm.phone} onChange={e => handleEditChange('phone', e.target.value)} error={formErrors.phone} />
+                <PhoneInput label="Phone" value={editForm.phone} onChange={val => handleEditChange('phone', val)} error={formErrors.phone} />
                 <Input label="Job Title" value={editForm.jobTitle} onChange={e => handleEditChange('jobTitle', e.target.value)} error={formErrors.jobTitle} />
                 <div className="input-wrapper">
                   <label className="input-label">Source</label>

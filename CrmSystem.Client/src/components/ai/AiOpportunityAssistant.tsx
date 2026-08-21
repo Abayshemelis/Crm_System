@@ -14,6 +14,7 @@ interface OpportunityAiPrediction {
     strengths: string[];
     warningFlags: string[];
     suggestedStrategy: string;
+    isGeminiPowered?: boolean;
 }
 
 interface AiOpportunityAssistantProps {
@@ -90,6 +91,21 @@ export const AiOpportunityAssistant: React.FC<AiOpportunityAssistantProps> = ({ 
                     </div>
                 ) : (
                     <div className="animate-fade-in">
+                        {/* Executive Summary Banner */}
+                        {prediction.analysisSummary && (
+                            <div style={{ padding: '0.85rem 1rem', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '0.65rem', borderLeft: '4px solid #10b981', marginBottom: '1rem', fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981' }}>Executive Deal Synthesis</span>
+                                    {prediction.isGeminiPowered && (
+                                        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                                            ✨ Gemini Enhanced
+                                        </span>
+                                    )}
+                                </div>
+                                {prediction.analysisSummary}
+                            </div>
+                        )}
+
                         {/* Prediction Metrics Box */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '0.75rem', marginBottom: '1.25rem' }}>
                             <div>

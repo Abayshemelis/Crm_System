@@ -5,7 +5,8 @@ import { DatePicker } from './DatePicker';
 import { CustomerSearchSelect } from './CustomerSearchSelect';
 import { SearchableSelect } from './SearchableSelect';
 import { api } from '../../lib/api';
-import { X } from 'lucide-react';
+import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../../lib/dateUtils';
 import '../../screens/screens.css';
 
 interface OpportunityStage {
@@ -57,7 +58,9 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
       setDescription('');
       setStageId('');
       setEstimatedValue('');
-      setExpectedCloseDate('');
+      // Default to standard CRM convention: +30 days from today
+      const defaultPresets = getStandardCloseDatePresets();
+      setExpectedCloseDate(defaultPresets[1]?.value || '');
       setOwnerId('');
       setError(null);
       setErrors({});
@@ -223,12 +226,45 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
               />
             </div>
 
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               <DatePicker
                 label="Expected Close Date"
                 value={expectedCloseDate}
                 onChange={e => setExpectedCloseDate(e)}
               />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.15rem' }}>
+                {getStandardCloseDatePresets().map(preset => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setExpectedCloseDate(preset.value)}
+                    style={{
+                      padding: '0.2rem 0.45rem',
+                      fontSize: '0.72rem',
+                      borderRadius: '4px',
+                      border: expectedCloseDate === preset.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: expectedCloseDate === preset.value ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                      color: expectedCloseDate === preset.value ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              {expectedCloseDate && (() => {
+                const status = getExpectedCloseDateStatus(expectedCloseDate);
+                if (status.status === 'overdue') {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', color: '#ef4444', marginTop: '0.2rem' }}>
+                      <AlertCircle size={13} />
+                      <span>Historical close date (in the past)</span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <div>

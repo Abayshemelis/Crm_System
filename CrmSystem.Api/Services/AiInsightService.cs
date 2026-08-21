@@ -164,7 +164,11 @@ public class AiInsightService : IAiInsightService
         var opp = await _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Include(o => o.Customer)
+                .ThenInclude(c => c.Company)
+            .Include(o => o.Customer)
+                .ThenInclude(c => c.Source)
             .Include(o => o.LineItems)
+                .ThenInclude(li => li.Product)
             .FirstOrDefaultAsync(o => o.OpportunityId == opportunityId);
 
         if (opp == null)
@@ -172,74 +176,304 @@ public class AiInsightService : IAiInsightService
             throw new KeyNotFoundException($"Opportunity #{opportunityId} not found.");
         }
 
-        int winProb = 40;
+        // 1. Fetch all pipeline stages for dynamic progression calculation
+        var allStages = await _db.OpportunityStages
+            .OrderBy(s => s.SortOrder)
+            .ToListAsync();
+
+        // 2. Fetch logged communications and activities
+        var activities = await _db.Activities
+            .Include(a => a.ActivityType)
+            .Where(a => a.OpportunityId == opportunityId || (opp.CustomerId > 0 && a.CustomerId == opp.CustomerId))
+            .OrderByDescending(a => a.ActivityDate)
+            .ToListAsync();
+
+        // 3. Fetch linked tasks
+        var tasks = await _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Where(t => t.OpportunityId == opportunityId || (opp.CustomerId > 0 && t.CustomerId == opp.CustomerId))
+            .ToListAsync();
+
         var strengths = new List<string>();
         var warnings = new List<string>();
 
+        // ── Stage Baseline & Progression ──────────────────────────────────────────
+        int baseProb = 40;
+        bool isTerminalStage = false;
+
         if (opp.OpportunityStage != null)
         {
-            winProb = opp.OpportunityStage.Name.ToLower() switch
+            if (opp.OpportunityStage.IsWon)
             {
-                "new" => 10,
-                "qualified" => 20,
-                "proposal" => 50,
-                "negotiation" => 80,
-                "won" => 100,
-                "lost" => 0,
-                _ => 40
-            };
-            strengths.Add($"Pipeline stage: '{opp.OpportunityStage.Name}' ({winProb}% baseline)");
+                baseProb = 100;
+                isTerminalStage = true;
+                strengths.Add($"Deal successfully finalized as Won ({opp.OpportunityStage.Name})");
+            }
+            else if (opp.OpportunityStage.IsLost)
+            {
+                baseProb = 0;
+                isTerminalStage = true;
+                warnings.Add($"Deal marked as Lost ({opp.OpportunityStage.Name})");
+            }
+            else
+            {
+                var openStages = allStages.Where(s => !s.IsWon && !s.IsLost).ToList();
+                int stageIdx = openStages.FindIndex(s => s.OpportunityStageId == opp.OpportunityStageId);
+                if (stageIdx >= 0 && openStages.Count > 0)
+                {
+                    double progressRatio = (stageIdx + 1.0) / openStages.Count;
+                    baseProb = (int)Math.Round(20.0 + (progressRatio * 65.0));
+                    strengths.Add($"Pipeline stage: '{opp.OpportunityStage.Name}' (Stage {stageIdx + 1} of {openStages.Count}, {baseProb}% baseline)");
+                }
+                else
+                {
+                    baseProb = 40;
+                    strengths.Add($"Pipeline stage: '{opp.OpportunityStage.Name}' ({baseProb}% baseline)");
+                }
+            }
         }
 
-        if (opp.LineItems != null && opp.LineItems.Count > 0)
+        int score = baseProb;
+
+        if (!isTerminalStage)
         {
-            winProb += 15;
-            strengths.Add($"Detailed line item proposal attached ({opp.LineItems.Count} items)");
-        }
-        else
-        {
-            winProb -= 10;
-            warnings.Add("No line items or formal product quotes created");
+            // ── Line Items & Quoted Scope ─────────────────────────────────────────
+            int lineItemCount = opp.LineItems?.Count ?? 0;
+            decimal quotedSum = opp.LineItems?.Sum(li => li.TotalPrice) ?? 0m;
+
+            if (lineItemCount > 0)
+            {
+                if (opp.EstimatedValue > 0 && Math.Abs(quotedSum - opp.EstimatedValue) <= (opp.EstimatedValue * 0.15m))
+                {
+                    score += 12;
+                    strengths.Add($"Itemized quote with {lineItemCount} product(s) ({quotedSum:C0}) closely aligns with estimated value");
+                }
+                else
+                {
+                    score += 8;
+                    strengths.Add($"Formal product quote attached ({lineItemCount} line item{(lineItemCount > 1 ? "s" : "")}, {quotedSum:C0})");
+                }
+            }
+            else
+            {
+                score -= 8;
+                warnings.Add("No formal product line items or itemized quote attached yet");
+            }
+
+            // ── Customer Touchpoints & Communications (Activities) ────────────────
+            int totalActs = activities.Count;
+            int calls = activities.Count(a => a.ActivityType != null && a.ActivityType.Name.Contains("Call", StringComparison.OrdinalIgnoreCase));
+            int meetings = activities.Count(a => a.ActivityType != null && a.ActivityType.Name.Contains("Meeting", StringComparison.OrdinalIgnoreCase));
+            int emails = activities.Count(a => a.ActivityType != null && a.ActivityType.Name.Contains("Email", StringComparison.OrdinalIgnoreCase));
+
+            if (totalActs >= 5)
+            {
+                score += 15;
+                strengths.Add($"High touchpoint velocity: {totalActs} logged interaction(s) ({meetings} meeting(s), {calls} call(s), {emails} email(s))");
+            }
+            else if (totalActs >= 2)
+            {
+                score += 8;
+                strengths.Add($"Active client engagement: {totalActs} recorded interaction(s)");
+            }
+            else if (totalActs == 1)
+            {
+                score += 3;
+                strengths.Add($"Initial touchpoint recorded ({activities[0].ActivityType?.Name ?? "Activity"})");
+            }
+            else
+            {
+                score -= 14;
+                warnings.Add("Zero logged customer communications (calls, meetings, or emails)");
+            }
+
+            // ── Recency & Momentum ────────────────────────────────────────────────
+            DateTime lastTouchpoint = activities.Count > 0
+                ? activities.Max(a => a.ActivityDate)
+                : (opp.UpdatedAt ?? opp.CreatedAt);
+
+            double idleDays = Math.Max(0, (DateTime.UtcNow - lastTouchpoint).TotalDays);
+            if (idleDays <= 3)
+            {
+                score += 8;
+                strengths.Add($"High recency: Last interaction was {Math.Max(1, Math.Round(idleDays))} day(s) ago");
+            }
+            else if (idleDays <= 7)
+            {
+                score += 4;
+                strengths.Add("Recent communication logged within the past week");
+            }
+            else if (idleDays > 30)
+            {
+                score -= 20;
+                warnings.Add($"Stalled deal alert: {Math.Round(idleDays)} days since last customer touchpoint");
+            }
+            else if (idleDays > 14)
+            {
+                score -= 10;
+                warnings.Add($"Cooling momentum: No interactions in the last {Math.Round(idleDays)} days");
+            }
+
+            // ── Expected Close Date Health ────────────────────────────────────────
+            if (opp.ExpectedCloseDate.HasValue)
+            {
+                double daysUntilClose = (opp.ExpectedCloseDate.Value.Date - DateTime.UtcNow.Date).TotalDays;
+                if (daysUntilClose < -14)
+                {
+                    score -= 16;
+                    warnings.Add($"Target close date ({opp.ExpectedCloseDate.Value:MMM dd, yyyy}) is {Math.Abs(Math.Round(daysUntilClose))} days overdue");
+                }
+                else if (daysUntilClose < 0)
+                {
+                    score -= 8;
+                    warnings.Add($"Expected close date passed {Math.Abs(Math.Round(daysUntilClose))} day(s) ago");
+                }
+                else if (daysUntilClose >= 0 && daysUntilClose <= 30)
+                {
+                    score += 6;
+                    strengths.Add($"Target closing window is active ({opp.ExpectedCloseDate.Value:MMM dd, yyyy})");
+                }
+                else if (daysUntilClose > 120)
+                {
+                    score -= 4;
+                    warnings.Add($"Long sales cycle: Expected close date is {Math.Round(daysUntilClose)} days out");
+                }
+            }
+            else
+            {
+                score -= 4;
+                warnings.Add("Target expected close date has not been set");
+            }
+
+            // ── Account & Decision-Maker Authority ────────────────────────────────
+            var cust = opp.Customer;
+            if (cust != null)
+            {
+                var title = cust.JobTitle?.Trim() ?? string.Empty;
+                var executiveKeywords = new[] { "ceo", "cto", "cfo", "director", "vp", "president", "founder", "head", "manager", "partner", "owner", "chief" };
+                bool isExec = executiveKeywords.Any(k => title.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+                if (isExec)
+                {
+                    score += 6;
+                    strengths.Add($"Direct engagement with key decision-maker role: {title}");
+                }
+                else if (string.IsNullOrWhiteSpace(title))
+                {
+                    score -= 3;
+                    warnings.Add("Primary contact job title / buying authority is unassigned");
+                }
+
+                if (cust.Company != null)
+                {
+                    score += 5;
+                    var companyInfo = cust.Company.Name;
+                    if (!string.IsNullOrWhiteSpace(cust.Company.Industry)) companyInfo += $" ({cust.Company.Industry})";
+                    strengths.Add($"Verified company account: {companyInfo}");
+                }
+            }
+
+            // ── Action Items & Tasks ──────────────────────────────────────────────
+            if (tasks.Count > 0)
+            {
+                int overdueTasks = tasks.Count(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate.HasValue && t.DueDate.Value < DateTime.UtcNow);
+                int openTasks = tasks.Count(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal);
+
+                if (overdueTasks > 0)
+                {
+                    score -= 6;
+                    warnings.Add($"{overdueTasks} overdue follow-up task(s) require action");
+                }
+                else if (openTasks > 0)
+                {
+                    score += 3;
+                    strengths.Add($"{openTasks} scheduled follow-up task(s) in progress");
+                }
+            }
+
+            // Clamp win probability
+            score = Math.Clamp(score, 5, 98);
         }
 
-        var lastUpdate = opp.UpdatedAt ?? opp.CreatedAt;
-        var daysSinceUpdate = (DateTime.UtcNow - lastUpdate).TotalDays;
-        if (daysSinceUpdate > 10)
+        string riskLevel = score >= 70 ? "Low" : score >= 45 ? "Medium" : "High";
+
+        // Dynamic strategy generation
+        string strategy = score >= 70
+            ? "Finalize decision-maker sign-off, prepare contract/invoice, and schedule final onboarding date."
+            : score >= 45
+            ? "Schedule a dedicated stakeholder review to address warning flags and lock in pricing."
+            : "Re-engage executive sponsor with a revised value proposal or push target close date to rebuild pipeline velocity.";
+
+        if (warnings.Any(w => w.Contains("overdue", StringComparison.OrdinalIgnoreCase)))
         {
-            winProb -= 20;
-            warnings.Add($"Deal has been inactive for {Math.Round(daysSinceUpdate)} days without stage progress");
+            strategy = "Update overdue target close date and immediately re-engage customer with a fresh proposal checkpoint.";
         }
-        else
+        else if (warnings.Any(w => w.Contains("Zero logged", StringComparison.OrdinalIgnoreCase)))
         {
-            winProb += 5;
-            strengths.Add("Recent activity and active deal momentum");
+            strategy = "Schedule an initial discovery demo or phone call to establish engagement and qualify requirements.";
         }
 
-        if (opp.EstimatedValue > 50000m)
+        string analysisSummary = $"Dynamic AI Predictive Revenue Engine evaluated '{opp.Title}' with a calculated win probability of {score}%.";
+
+        bool isGeminiPowered = false;
+
+        // ── Google Gemini LLM Integration (When API Key is Configured) ─────────────
+        if (_geminiService.IsConfigured && !isTerminalStage)
         {
-            strengths.Add($"High-value opportunity size ({opp.EstimatedValue:C})");
+            try
+            {
+                var promptBuilder = new System.Text.StringBuilder();
+                promptBuilder.AppendLine("You are a CRM Revenue Intelligence AI. Analyze this active sales opportunity and provide a 2-sentence executive summary and 1 prioritized tactical closing strategy for the sales rep.");
+                promptBuilder.AppendLine($"- Deal Title: {opp.Title}");
+                promptBuilder.AppendLine($"- Current Stage: {opp.OpportunityStage?.Name ?? "Open"}");
+                promptBuilder.AppendLine($"- Estimated Value: {opp.EstimatedValue:C0}");
+                promptBuilder.AppendLine($"- Expected Close Date: {(opp.ExpectedCloseDate.HasValue ? opp.ExpectedCloseDate.Value.ToString("yyyy-MM-dd") : "Not set")}");
+                promptBuilder.AppendLine($"- Primary Contact: {opp.Customer?.FirstName} {opp.Customer?.LastName} ({opp.Customer?.JobTitle ?? "Role not set"})");
+                promptBuilder.AppendLine($"- Company: {opp.Customer?.Company?.Name ?? "Individual"} (Industry: {opp.Customer?.Company?.Industry ?? "General"}, Size: {opp.Customer?.Company?.CompanySize ?? "N/A"})");
+                promptBuilder.AppendLine($"- Logged Touchpoints: {activities.Count} total ({activities.Count(a => a.ActivityType?.Name.Contains("Meeting") == true)} meetings, {activities.Count(a => a.ActivityType?.Name.Contains("Call") == true)} calls, {activities.Count(a => a.ActivityType?.Name.Contains("Email") == true)} emails)");
+                promptBuilder.AppendLine($"- Quoted Line Items: {opp.LineItems.Count} item(s) total ({opp.LineItems.Sum(li => li.TotalPrice):C0})");
+                promptBuilder.AppendLine($"- Algorithmic Win Probability: {score}% ({riskLevel} Risk)");
+                promptBuilder.AppendLine();
+                promptBuilder.AppendLine("Format your output exactly as:");
+                promptBuilder.AppendLine("Summary: [2-sentence concise summary]");
+                promptBuilder.AppendLine("Strategy: [1 actionable closing tactic]");
+
+                var geminiResponse = await _geminiService.GenerateTextAsync(promptBuilder.ToString());
+                if (!string.IsNullOrWhiteSpace(geminiResponse))
+                {
+                    var lines = geminiResponse.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            analysisSummary = line.Substring("Summary:".Length).Trim();
+                            isGeminiPowered = true;
+                        }
+                        else if (line.StartsWith("Strategy:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            strategy = line.Substring("Strategy:".Length).Trim();
+                            isGeminiPowered = true;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback seamlessly to dynamic algorithmic analysis
+            }
         }
-
-        winProb = Math.Clamp(winProb, 5, 95);
-        string riskLevel = winProb >= 70 ? "Low" : winProb >= 45 ? "Medium" : "High";
-
-        string strategy = winProb >= 70
-            ? "Send contract for signature and lock in closing timeline."
-            : winProb >= 45
-            ? "Schedule stakeholder alignment meeting to resolve lingering objections."
-            : "Conduct risk review and offer incentives or adjusted pricing model.";
 
         return new OpportunityAiPredictionDto
         {
             OpportunityId = opp.OpportunityId,
-            WinProbability = winProb,
+            WinProbability = score,
             RiskLevel = riskLevel,
-            ProjectedValue = opp.EstimatedValue * (winProb / 100m),
-            AnalysisSummary = $"AI Predictive Analytics model estimates a {winProb}% win probability for '{opp.Title}'.",
+            ProjectedValue = opp.EstimatedValue * (score / 100m),
+            AnalysisSummary = analysisSummary,
             Strengths = strengths.ToArray(),
             WarningFlags = warnings.ToArray(),
             SuggestedStrategy = strategy,
-            IsGeminiPowered = _geminiService.IsConfigured
+            IsGeminiPowered = isGeminiPowered || _geminiService.IsConfigured
         };
     }
 

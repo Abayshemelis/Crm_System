@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CrmSystem.Infrastructure.Services;
 
-/// <summary>Marker interface so Infrastructure can reference the hub without a circular project dependency.</summary>
+// ── ARCHITECTURAL ADAPTER INTERFACE ───────────────────────────────────────────
+// Problem: NotificationService lives in CrmSystem.Infrastructure, but SignalR NotificationHub
+// lives in CrmSystem.Api. A direct reference from Infrastructure to Api causes a Circular Dependency.
+// Solution: We declare this INotificationHubContext interface in Infrastructure, and implement it
+// with an Adapter in CrmSystem.Api (Dependency Inversion Principle).
 public interface INotificationHubContext
 {
     Task PushToUserGroupAsync(string groupName, string message, string type);
@@ -21,6 +25,8 @@ public class NotificationService : INotificationService
         _hub = hub;
     }
 
+    // ── 1. GET USER NOTIFICATIONS ─────────────────────────────────────────────
+    // Fetches the most recent 30 notifications for a specific user with related task/opportunity details.
     public async Task<IReadOnlyList<NotificationReadDto>> GetForUserAsync(int identityId)
     {
         var list = await _db.Notifications
@@ -35,12 +41,15 @@ public class NotificationService : INotificationService
         return list.Select(MapToDto).ToList();
     }
 
+    // ── 2. GET UNREAD COUNT ───────────────────────────────────────────────────
+    // Fast count query for the notification bell badge counter in the top navigation bar.
     public async Task<int> GetUnreadCountAsync(int identityId)
     {
         return await _db.Notifications
             .CountAsync(n => n.IdentityId == identityId && !n.IsRead);
     }
 
+    // ── 3. MARK SINGLE NOTIFICATION READ ──────────────────────────────────────
     public async Task MarkReadAsync(int notificationId, int identityId)
     {
         var n = await _db.Notifications
@@ -50,6 +59,7 @@ public class NotificationService : INotificationService
         await _db.SaveChangesAsync();
     }
 
+    // ── 4. MARK ALL NOTIFICATIONS READ ────────────────────────────────────────
     public async Task MarkAllReadAsync(int identityId)
     {
         var unread = await _db.Notifications
@@ -63,10 +73,12 @@ public class NotificationService : INotificationService
             await _db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Idempotent — safe to call on every background tick and on-demand.
-    /// Generates Due Today, Overdue, and Stalled notifications.
-    /// </summary>
+    // ── 5. CORE NOTIFICATION GENERATOR (IDEMPOTENT ENGINE) ────────────────────
+    // Evaluates database records to detect:
+    // - Tasks Due Today: DueDate is within today's UTC calendar day
+    // - Overdue Tasks: DueDate is in the past and task is not completed
+    // - Stalled Opportunities: Open deals with no updates for over 14 days
+    // Safe to run repeatedly because it checks for duplicates within the current day.
     public async Task GenerateAsync()
     {
         var now = DateTime.UtcNow;
@@ -103,6 +115,7 @@ public class NotificationService : INotificationService
             await _db.SaveChangesAsync();
         }
 
+        // Fetch all active Admins and Managers so notifications are always visible to supervisory staff
         var adminAndManagerIds = await _db.Identities
             .Include(i => i.Role)
             .Include(i => i.IdentityRoles).ThenInclude(ir => ir.Role)
@@ -114,7 +127,7 @@ public class NotificationService : INotificationService
 
         var newNotificationsList = new List<(int IdentityId, string Message)>();
 
-        // ── 1. Tasks Due Today (both regular tasks and follow-up tasks) ───────
+        // ── 5A. Tasks & Follow-ups Due Today (today <= DueDate < tomorrow) ────
         var dueTodayTasks = await _db.CrmTasks
             .Include(t => t.CrmTaskStatus)
             .Include(t => t.Lead)
@@ -148,6 +161,7 @@ public class NotificationService : INotificationService
 
             foreach (var userId in recipientIds)
             {
+                // De-duplication check: avoid sending multiple due today alerts on the same calendar day
                 var alreadyExists = await _db.Notifications.AnyAsync(n =>
                     n.IdentityId == userId
                     && n.RelatedTaskId == task.CrmTaskId
@@ -171,7 +185,7 @@ public class NotificationService : INotificationService
             }
         }
 
-        // ── 2. Overdue Tasks (both regular tasks and follow-up tasks) ─────────
+        // ── 5B. Overdue Tasks & Follow-ups (DueDate < today) ──────────────────
         var overdueTasks = await _db.CrmTasks
             .Include(t => t.CrmTaskStatus)
             .Include(t => t.Lead)
@@ -199,8 +213,8 @@ public class NotificationService : INotificationService
             int notifTypeId = isFollowUp ? followUpOverdueTypeId : taskOverdueTypeId;
 
             string msg = isFollowUp && task.Lead != null
-                ? $"Overdue follow-up for {task.Lead.FirstName} {task.Lead.LastName} (was due {task.DueDate!.Value:MMM d, yyyy})"
-                : $"Overdue task: {task.Title} (was due {task.DueDate!.Value:MMM d, yyyy})";
+                ? $"⚠️ Follow-up overdue: {task.Lead.FirstName} {task.Lead.LastName} ({task.Title}) was due on {task.DueDate:MMM d}"
+                : $"⚠️ Task overdue: {task.Title} was due on {task.DueDate:MMM d}";
 
             foreach (var userId in recipientIds)
             {
@@ -227,7 +241,7 @@ public class NotificationService : INotificationService
             }
         }
 
-        // ── 3. Opportunity Stalled ───────────────────────────────────────────
+        // ── 5C. Stalled Opportunities (No updates in > 14 days) ───────────────
         var stalledOpps = await _db.Opportunities
             .Include(o => o.OpportunityStage)
             .Where(o => o.UpdatedAt < stalledThreshold
@@ -267,11 +281,11 @@ public class NotificationService : INotificationService
             }
         }
 
+        // Step 5D: Save new notifications to DB and push real-time SignalR notifications
         if (newNotificationsList.Count > 0)
         {
             await _db.SaveChangesAsync();
 
-            // Push real-time SignalR alerts to users who received notifications
             foreach (var (identityId, message) in newNotificationsList)
             {
                 await _hub.PushToUserGroupAsync($"user_{identityId}", message, "warning");
@@ -279,6 +293,7 @@ public class NotificationService : INotificationService
         }
     }
 
+    // ── 6. CREATE CUSTOM NOTIFICATION ─────────────────────────────────────────
     public async Task CreateNotificationAsync(int identityId, string typeName, string message, int? taskId = null, int? opportunityId = null)
     {
         var type = await _db.NotificationTypes.FirstOrDefaultAsync(t => t.Name == typeName);
@@ -306,11 +321,13 @@ public class NotificationService : INotificationService
         await PushToUserAsync(identityId, message);
     }
 
+    // ── 7. PUSH NOTIFICATION VIA SIGNALR ──────────────────────────────────────
     public async Task PushToUserAsync(int identityId, string message, string type = "info")
     {
         await _hub.PushToUserGroupAsync($"user_{identityId}", message, type);
     }
 
+    // ── 8. DTO MAPPER HELPER ──────────────────────────────────────────────────
     private static NotificationReadDto MapToDto(Notification n) => new()
     {
         NotificationId = n.NotificationId,

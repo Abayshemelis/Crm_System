@@ -1,3 +1,12 @@
+// ==============================================================================
+// CRM SYSTEM AUTOMATED UNIT TESTS: AUDIT SERVICE (AuditServiceTests.cs)
+// ==============================================================================
+// Validates audit trail logging across all core CRM entities:
+// 1. Entity Change Tracking: Verifies Old Value vs New Value delta capture
+// 2. Action Types: Create, Update, Delete, Assign, StatusChange, StageChange
+// 3. User Attribution: Ensures audit logs accurately capture the acting IdentityId
+// ==============================================================================
+
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
 using CrmSystem.Infrastructure.Services;

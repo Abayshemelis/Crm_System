@@ -4,6 +4,10 @@ import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { IndustrySelect } from '../components/ui/IndustrySelect';
+import { CompanySizeSelect } from '../components/ui/CompanySizeSelect';
+import { validatePhoneNumber } from '../components/ui/countryData';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AuditHistoryTable } from '../components/audit/AuditHistoryTable';
 import { api } from '../lib/api';
@@ -100,8 +104,13 @@ export const CompanyDetailScreen: React.FC = () => {
 
   const fetchSources = useCallback(() => {
     api.get<Lookup[]>('/api/sources')
-      .then(setSources)
-      .catch(() => setSources([]));
+      .then(data => {
+        const raw = data ?? [];
+        const nonOther = raw.filter(s => s.name.trim().toLowerCase() !== 'other');
+        const other = raw.find(s => s.name.trim().toLowerCase() === 'other') || { id: 999999, name: 'Other' };
+        setSources([...nonOther, other]);
+      })
+      .catch(() => setSources([{ id: 999999, name: 'Other' }]));
   }, []);
 
   const fetchCompany = useCallback(async () => {
@@ -176,6 +185,12 @@ export const CompanyDetailScreen: React.FC = () => {
     if (!editForm.name.trim()) errors.name = 'Company name is required.';
     if (editForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)) {
       errors.email = 'Email address is invalid.';
+    }
+    if (editForm.phone && editForm.phone.trim()) {
+      const phoneErr = validatePhoneNumber(editForm.phone);
+      if (phoneErr) {
+        errors.phone = phoneErr;
+      }
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -285,30 +300,7 @@ export const CompanyDetailScreen: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          {!isEditing ? (
-            <Button onClick={() => { setIsEditing(true); setSuccessMessage(null); setSaveError(null); }}>Edit</Button>
-          ) : (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button size="sm" disabled={saving} onClick={saveCompany}>Save</Button>
-              <Button variant="ghost" size="sm" disabled={saving} onClick={() => {
-                setIsEditing(false);
-                setFormErrors({});
-                setSaveError(null);
-                setEditForm({
-                  name: company.name,
-                  industry: company.industry ?? '',
-                  companySize: company.companySize ?? '',
-                  website: company.website ?? '',
-                  address: company.address ?? '',
-                  phone: company.phone ?? '',
-                  email: company.email ?? '',
-                  sourceId: company.sourceId ? String(company.sourceId) : ''
-                });
-              }}>
-                Cancel
-              </Button>
-            </div>
-          )}
+          <Button onClick={() => navigate(`/companies/${company.companyId}/edit`)} size="sm">Edit</Button>
           <Button variant="danger" size="sm" onClick={deleteCompany}>Delete</Button>
         </div>
       </div>
@@ -318,16 +310,42 @@ export const CompanyDetailScreen: React.FC = () => {
           <Card.Content>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>Company details</h3>
+              {!isEditing ? (
+                <Button variant="secondary" size="sm" onClick={() => { setIsEditing(true); setSuccessMessage(null); setSaveError(null); }}>
+                  Edit
+                </Button>
+              ) : (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <Button size="sm" disabled={saving} onClick={saveCompany}>Save</Button>
+                  <Button variant="ghost" size="sm" disabled={saving} onClick={() => {
+                    setIsEditing(false);
+                    setFormErrors({});
+                    setSaveError(null);
+                    setEditForm({
+                      name: company.name,
+                      industry: company.industry ?? '',
+                      companySize: company.companySize ?? '',
+                      website: company.website ?? '',
+                      address: company.address ?? '',
+                      phone: company.phone ?? '',
+                      email: company.email ?? '',
+                      sourceId: company.sourceId ? String(company.sourceId) : ''
+                    });
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </div>
 
-            {saveError && <div className="form-error-banner" style={{ marginBottom: '1rem' }}>{saveError}</div>}
-            {successMessage && <div className="form-success-banner" style={{ marginBottom: '1rem' }}>{successMessage}</div>}
+            {saveError && <div className="error-banner" style={{ marginBottom: '1rem' }}>{saveError}</div>}
+            {successMessage && <div className="success-banner" style={{ marginBottom: '1rem' }}>{successMessage}</div>}
 
             {isEditing ? (
-              <div className="form-grid">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <Input label="Name" value={editForm.name} onChange={e => handleEditChange('name', e.target.value)} error={formErrors.name} />
-                <Input label="Industry" value={editForm.industry} onChange={e => handleEditChange('industry', e.target.value)} error={formErrors.industry} />
-                <Input label="Company Size" value={editForm.companySize} onChange={e => handleEditChange('companySize', e.target.value)} error={formErrors.companySize} />
+                <IndustrySelect label="Industry" placeholder="Search or type industry..." value={editForm.industry} onChange={val => handleEditChange('industry', val)} error={formErrors.industry} />
+                <CompanySizeSelect label="Company Size" placeholder="Select or type company size..." value={editForm.companySize} onChange={val => handleEditChange('companySize', val)} error={formErrors.companySize} />
                 <div className="input-wrapper">
                   <label className="input-label">Source</label>
                   <select className="input-field" value={editForm.sourceId} onChange={e => handleEditChange('sourceId', e.target.value)}>
@@ -339,8 +357,28 @@ export const CompanyDetailScreen: React.FC = () => {
                 </div>
                 <Input label="Website" value={editForm.website} onChange={e => handleEditChange('website', e.target.value)} error={formErrors.website} />
                 <Input label="Address" value={editForm.address} onChange={e => handleEditChange('address', e.target.value)} error={formErrors.address} />
-                <Input label="Phone" value={editForm.phone} onChange={e => handleEditChange('phone', e.target.value)} error={formErrors.phone} />
+                <PhoneInput label="Phone" value={editForm.phone} onChange={val => handleEditChange('phone', val)} error={formErrors.phone} />
                 <Input label="Email" type="email" value={editForm.email} onChange={e => handleEditChange('email', e.target.value)} error={formErrors.email} />
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                  <Button size="sm" disabled={saving} onClick={saveCompany} style={{ flex: 1 }}>Save Changes</Button>
+                  <Button variant="ghost" size="sm" disabled={saving} onClick={() => {
+                    setIsEditing(false);
+                    setFormErrors({});
+                    setSaveError(null);
+                    setEditForm({
+                      name: company.name,
+                      industry: company.industry ?? '',
+                      companySize: company.companySize ?? '',
+                      website: company.website ?? '',
+                      address: company.address ?? '',
+                      phone: company.phone ?? '',
+                      email: company.email ?? '',
+                      sourceId: company.sourceId ? String(company.sourceId) : ''
+                    });
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
             ) : (
               <>

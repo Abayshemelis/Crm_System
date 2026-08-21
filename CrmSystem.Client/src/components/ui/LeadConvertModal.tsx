@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
+import { PhoneInput } from './PhoneInput';
 import { DatePicker } from './DatePicker';
 import { ConfirmDialog } from './ConfirmDialog';
 import { api } from '../../lib/api';
+import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../../lib/dateUtils';
 import './ui.css';
 
 interface Company {
@@ -67,7 +69,10 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
       // Load companies and auto-match existing company
       api.get<{ data: Company[] }>('/api/companies?page=1&pageSize=100')
         .then(res => {
-          const list = res.data ?? [];
+          const raw = res.data ?? [];
+          const nonOther = raw.filter(c => c.name.trim().toLowerCase() !== 'other');
+          const other = raw.find(c => c.name.trim().toLowerCase() === 'other') || { companyId: 999999, name: 'Other' };
+          const list = [...nonOther, other];
           setCompanies(list);
           if (leadData.companyName) {
             const match = list.find(c => c.name.trim().toLowerCase() === leadData.companyName?.trim().toLowerCase());
@@ -79,7 +84,7 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
             }
           }
         })
-        .catch(() => setCompanies([]));
+        .catch(() => setCompanies([{ companyId: 999999, name: 'Other' }]));
     }
   }, [isOpen, leadData.firstName, leadData.lastName, leadData.email, leadData.phone, leadData.companyName]);
 
@@ -181,10 +186,10 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
               onChange={e => setEmail(e.target.value)}
               error={errors.email}
             />
-            <Input
+            <PhoneInput
               label="Phone"
               value={phone}
-              onChange={e => setPhone(e.target.value)}
+              onChange={val => setPhone(val)}
               error={errors.phone}
             />
           </div>
@@ -241,7 +246,12 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
               <input
                 type="checkbox"
                 checked={createInitialOpportunity}
-                onChange={e => setCreateInitialOpportunity(e.target.checked)}
+                onChange={e => {
+                  setCreateInitialOpportunity(e.target.checked);
+                  if (e.target.checked && !opportunityExpectedCloseDate) {
+                    setOpportunityExpectedCloseDate(getStandardCloseDatePresets()[1]?.value || '');
+                  }
+                }}
               />
               <span style={{ fontSize: '0.875rem' }}>
                 Create an initial opportunity
@@ -268,12 +278,46 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({
                 placeholder="15000"
                 style={{ marginTop: '0.75rem' }}
               />
-              <DatePicker
-                label="Expected Close Date"
-                value={opportunityExpectedCloseDate}
-                onChange={e => setOpportunityExpectedCloseDate(e)}
-                error={errors.opportunityExpectedCloseDate}
-              />
+              <div style={{ marginTop: '0.75rem' }}>
+                <DatePicker
+                  label="Expected Close Date"
+                  value={opportunityExpectedCloseDate}
+                  onChange={e => setOpportunityExpectedCloseDate(e)}
+                  error={errors.opportunityExpectedCloseDate}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                  {getStandardCloseDatePresets().map(preset => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setOpportunityExpectedCloseDate(preset.value)}
+                      style={{
+                        padding: '0.15rem 0.4rem',
+                        fontSize: '0.7rem',
+                        borderRadius: '4px',
+                        border: opportunityExpectedCloseDate === preset.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                        background: opportunityExpectedCloseDate === preset.value ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                        color: opportunityExpectedCloseDate === preset.value ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                {opportunityExpectedCloseDate && (() => {
+                  const status = getExpectedCloseDateStatus(opportunityExpectedCloseDate);
+                  if (status.status === 'overdue') {
+                    return (
+                      <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                        ⚠️ Historical close date (in the past)
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
             </div>
           )}
         </div>
