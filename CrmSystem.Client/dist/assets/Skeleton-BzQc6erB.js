@@ -1,1 +1,0 @@
-import{j as l}from"./index-tGhFFj1M.js";const m=({variant:t="text",width:e,height:s,className:o="",style:i})=>{const n={width:e??void 0,height:s??void 0,...i};return l.jsx("div",{className:`skeleton skeleton-${t} ${o}`,style:n})};export{m as S};

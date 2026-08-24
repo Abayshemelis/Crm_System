@@ -2861,6 +2861,177 @@ html[data-theme="dark"] .landing-contact-section .social-btn:hover {
   cursor: pointer;
 }
 
+/* ── Landing Page PhoneInput & SelectDown Custom Styling ── */
+.contact-phone-input {
+  width: 100%;
+}
+
+.contact-phone-input .phone-input-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 0.35rem;
+}
+
+.contact-phone-input .phone-input-group {
+  border: 1px solid var(--card-border);
+  background: var(--bg-alt);
+  border-radius: 9px;
+  min-height: 42px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.contact-phone-input .phone-input-group.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.contact-phone-input .phone-country-btn {
+  background: var(--bg);
+  border-right: 1px solid var(--card-border);
+  color: var(--fg);
+  padding: 0.5rem 0.75rem;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  gap: 0.45rem;
+}
+
+.contact-phone-input .phone-country-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.contact-phone-input .phone-number-input {
+  background: transparent;
+  color: var(--fg);
+  font-size: 0.92rem;
+  padding: 0.65rem 0.85rem;
+  font-family: inherit;
+}
+
+.contact-phone-input .phone-number-input::placeholder {
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.contact-phone-input .phone-country-dropdown {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  z-index: 1300;
+}
+
+.contact-phone-input .phone-search-input {
+  background: var(--bg-alt);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+
+.contact-phone-input .phone-country-option {
+  color: var(--fg);
+  padding: 0.6rem 0.85rem;
+  transition: background 0.15s ease;
+}
+
+.contact-phone-input .phone-country-option:hover,
+.contact-phone-input .phone-country-option.highlighted {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+}
+
+.contact-phone-input .phone-validation-hint {
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+  color: var(--fg-muted);
+}
+
+.contact-phone-input .phone-error-message {
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 500;
+}
+
+/* SelectDown Component integration */
+.contact-selectdown {
+  width: 100%;
+}
+
+.contact-selectdown .sd-trigger {
+  width: 100%;
+  border: 1px solid var(--card-border);
+  background: var(--bg-alt);
+  border-radius: 9px;
+  min-height: 42px;
+  height: auto;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.92rem;
+  font-family: inherit;
+  color: var(--fg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.contact-selectdown .sd-trigger:hover {
+  border-color: var(--accent);
+}
+
+.contact-selectdown .sd-trigger--open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.contact-selectdown .sd-list {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  z-index: 1300;
+  max-height: 240px;
+  padding: 0.4rem 0;
+}
+
+.contact-selectdown .sd-option {
+  color: var(--fg);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.contact-selectdown .sd-option:hover {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+}
+
+.contact-selectdown .sd-option--selected {
+  background: rgba(99, 102, 241, 0.16);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Dark Theme Overrides for Dropdowns */
+html[data-theme="dark"] .contact-phone-input .phone-country-dropdown,
+html[data-theme="dark"] .contact-selectdown .sd-list {
+  background: #0f172a;
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme="dark"] .contact-phone-input .phone-country-option,
+html[data-theme="dark"] .contact-selectdown .sd-option {
+  color: #f1f5f9;
+}
+
+html[data-theme="dark"] .contact-phone-input .phone-country-option:hover,
+html[data-theme="dark"] .contact-phone-input .phone-country-option.highlighted,
+html[data-theme="dark"] .contact-selectdown .sd-option:hover {
+  background: rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+}
+
 .contact-submit-btn {
   display: inline-flex;
   align-items: center;

@@ -14,7 +14,20 @@ import {
 } from 'lucide-react';
 import { AuthLoginForm } from '../components/auth/AuthLoginForm';
 import { PublicAiAssistant } from '../components/ai/PublicAiAssistant';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { SelectDown, SelectOption } from '../components/ui/SelectDown';
+import { parsePhoneNumber, validatePhoneNumber } from '../components/ui/countryData';
 import './LandingPage.css';
+
+const LEAD_SOURCE_OPTIONS: SelectOption[] = [
+  { value: 'Google Search', label: 'Google Search' },
+  { value: 'LinkedIn', label: 'LinkedIn' },
+  { value: 'Telegram / Social Media', label: 'Telegram / Social Media' },
+  { value: 'Colleague / Referral', label: 'Colleague / Referral' },
+  { value: 'Direct Website', label: 'Direct Website' },
+  { value: 'Event / Webinar', label: 'Event / Webinar' },
+  { value: 'Other', label: 'Other' },
+];
 
 export const LandingPage: React.FC = () => {
   const { user } = useAuth();
@@ -24,6 +37,7 @@ export const LandingPage: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [isCursorActive, setIsCursorActive] = useState(false);
@@ -169,9 +183,20 @@ export const LandingPage: React.FC = () => {
 
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPhoneError(null);
     if (!contactForm.name || !contactForm.email || !contactForm.subject || !contactForm.message) {
       return;
     }
+
+    if (contactForm.phone && contactForm.phone.trim()) {
+      const parsed = parsePhoneNumber(contactForm.phone);
+      const validationError = validatePhoneNumber(parsed.nationalNumber, parsed.country);
+      if (validationError) {
+        setPhoneError(validationError);
+        return;
+      }
+    }
+
     try {
       await api.post('/api/dashboard/contact', contactForm);
       setFormSubmitted(true);
@@ -1032,31 +1057,29 @@ export const LandingPage: React.FC = () => {
                   {/* Row 2: Phone & Source */}
                   <div className="contact-form-row">
                     <div className="contact-form-field">
-                      <label className="contact-field-label">Phone Number</label>
-                      <input
-                        type="tel"
-                        placeholder="+251 900 000 000"
-                        className="input-field contact-input"
+                      <PhoneInput
+                        label="Phone Number"
                         value={contactForm.phone}
-                        onChange={e => setContactForm({ ...contactForm, phone: e.target.value })}
+                        onChange={(val) => {
+                          setContactForm({ ...contactForm, phone: val });
+                          if (phoneError) setPhoneError(null);
+                        }}
+                        defaultCountryCode="ET"
+                        showInlineValidation={true}
+                        error={phoneError || undefined}
+                        placeholder="91 123 4567"
+                        className="contact-phone-input"
                       />
                     </div>
                     <div className="contact-form-field">
                       <label className="contact-field-label">Lead Source *</label>
-                      <select
-                        className="input-field contact-select"
+                      <SelectDown
                         value={contactForm.source}
-                        onChange={e => setContactForm({ ...contactForm, source: e.target.value })}
-                        required
-                      >
-                        <option value="Google Search">Google Search</option>
-                        <option value="LinkedIn">LinkedIn</option>
-                        <option value="Telegram">Telegram / Social Media</option>
-                        <option value="Referral">Colleague / Referral</option>
-                        <option value="Direct Website">Direct Website</option>
-                        <option value="Event / Webinar">Event / Webinar</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        options={LEAD_SOURCE_OPTIONS}
+                        onChange={(val) => setContactForm({ ...contactForm, source: String(val) })}
+                        placeholder="Select Lead Source"
+                        className="contact-selectdown"
+                      />
                     </div>
                   </div>
 
