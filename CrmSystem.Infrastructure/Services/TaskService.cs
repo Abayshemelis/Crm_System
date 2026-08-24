@@ -15,23 +15,55 @@ public class TaskService : ITaskService
     }
 
     public async Task<TaskGroupedDto> GetMyTasksAsync(int identityId)
-        => await GetByAssigneeAsync(identityId);
-
-    public async Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId)
     {
         var now = DateTime.UtcNow;
         var tasks = await GetAllTasksQuery()
-            .Where(t => t.AssignedToId == assigneeId && (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .Where(t => (t.AssignedToId == identityId || t.CreatedById == identityId) &&
+                        (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
             .OrderBy(t => t.DueDate)
             .ToListAsync();
 
         return GroupTasks(tasks, now);
     }
 
-    public async Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int identityId, int take = 50)
+    public async Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId)
     {
+        var now = DateTime.UtcNow;
         var tasks = await GetAllTasksQuery()
-            .Where(t => t.AssignedToId == identityId && t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal)
+            .Where(t => (t.AssignedToId == assigneeId || t.CreatedById == assigneeId) &&
+                        (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal))
+            .OrderBy(t => t.DueDate)
+            .ToListAsync();
+
+        return GroupTasks(tasks, now);
+    }
+
+    public async Task<TaskGroupedDto> GetAllTasksGroupedAsync(int? assigneeId = null)
+    {
+        var now = DateTime.UtcNow;
+        var query = GetAllTasksQuery()
+            .Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal);
+
+        if (assigneeId.HasValue && assigneeId.Value > 0)
+        {
+            query = query.Where(t => t.AssignedToId == assigneeId.Value || t.CreatedById == assigneeId.Value);
+        }
+
+        var tasks = await query.OrderBy(t => t.DueDate).ToListAsync();
+        return GroupTasks(tasks, now);
+    }
+
+    public async Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int? identityId = null, int take = 50)
+    {
+        var query = GetAllTasksQuery()
+            .Where(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal);
+
+        if (identityId.HasValue && identityId.Value > 0)
+        {
+            query = query.Where(t => t.AssignedToId == identityId.Value || t.CreatedById == identityId.Value);
+        }
+
+        var tasks = await query
             .OrderByDescending(t => t.CreatedAt)
             .Take(take)
             .ToListAsync();
@@ -88,8 +120,8 @@ public class TaskService : ITaskService
         var query = GetActiveTasksQuery()
             .Where(t => t.DueDate.HasValue && t.DueDate.Value >= start && t.DueDate.Value < end);
 
-        if (assignedToId.HasValue)
-            query = query.Where(t => t.AssignedToId == assignedToId.Value);
+        if (assignedToId.HasValue && assignedToId.Value > 0)
+            query = query.Where(t => t.AssignedToId == assignedToId.Value || t.CreatedById == assignedToId.Value);
 
         var tasks = await query.OrderBy(t => t.DueDate).ToListAsync();
 
@@ -314,8 +346,7 @@ public class TaskService : ITaskService
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
             .Include(t => t.CreatedBy)
-            .Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal)
-            .Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null));
+            .Where(t => t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal);
 
     private IQueryable<CrmTask> GetAllTasksQuery()
         => _db.CrmTasks
@@ -326,8 +357,7 @@ public class TaskService : ITaskService
             .Include(t => t.Activity)
             .ThenInclude(a => a.ActivityType)
             .Include(t => t.AssignedTo)
-            .Include(t => t.CreatedBy)
-            .Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null));
+            .Include(t => t.CreatedBy);
 
     private static TaskGroupedDto GroupTasks(IEnumerable<CrmTask> tasks, DateTime now)
     {

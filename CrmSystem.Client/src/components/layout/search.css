@@ -268,7 +268,7 @@
 @media (max-width: 768px) {
   .gs-root {
     width: 100%;
-    max-width: 220px;
+    /* No max-width — let navbar-left control the available space */
   }
 
   .gs-kbd {

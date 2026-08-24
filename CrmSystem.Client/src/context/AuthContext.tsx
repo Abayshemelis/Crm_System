@@ -125,14 +125,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profileImage: cachedAvatar || null,
     });
 
-    // Default the active working role to the highest available role
+    // Default the active working role from localStorage or highest available role
+    const savedRole = localStorage.getItem('selectedRole') as 'Admin' | 'Manager' | 'SalesRep' | null;
     const finalRoles = roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'];
-    if (finalRoles.includes('Admin')) {
+    if (savedRole && finalRoles.includes(savedRole)) {
+      setSelectedRole(savedRole);
+    } else if (finalRoles.includes('Admin')) {
       setSelectedRole('Admin');
+      localStorage.setItem('selectedRole', 'Admin');
     } else if (finalRoles.includes('Manager')) {
       setSelectedRole('Manager');
+      localStorage.setItem('selectedRole', 'Manager');
     } else {
       setSelectedRole('SalesRep');
+      localStorage.setItem('selectedRole', 'SalesRep');
     }
   }, []);
 
@@ -295,6 +301,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchRole = (role: 'Admin' | 'Manager' | 'SalesRep') => {
     if (user?.roles.includes(role)) {
       setSelectedRole(role);
+      localStorage.setItem('selectedRole', role);
+      // Dispatch custom event to notify all components to refetch with new role
+      window.dispatchEvent(new CustomEvent('app:role-switched', { detail: { role } }));
     }
   };
 

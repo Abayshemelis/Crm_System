@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
   Kanban, CheckSquare, BarChart2, X, Receipt,
-  LayoutDashboard, Target, FileText, UploadCloud, History,
+  LayoutDashboard, Target, FileText, History,
   LogOut, Camera
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -126,17 +126,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/tasks/reports', label: 'Task Reports', isReport: true }
     ]
   },
-  {
-    key: 'import',
-    label: 'Data Import',
-    icon: UploadCloud,
-    to: '/import',
-    authRequired: true,
-    managerOnly: false,
-    subItems: [
-      { to: '/import/reports', label: 'Import Reports', isReport: true }
-    ]
-  },
+
   {
     key: 'audit-logs',
     label: 'System History',

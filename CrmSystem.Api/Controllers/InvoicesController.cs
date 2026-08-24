@@ -55,6 +55,8 @@ public class InvoicesController : ControllerBase
             .Where(i => !i.IsDeleted)
             .Include(i => i.Customer)
                 .ThenInclude(cust => cust.Company)
+            .Include(i => i.Customer)
+                .ThenInclude(cust => cust.AssignedRep)
             .Include(i => i.Contract)
             .Include(i => i.Opportunity)
             .Include(i => i.CreatedBy)

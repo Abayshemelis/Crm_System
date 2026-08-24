@@ -17,7 +17,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.9" />
     <PackageReference Include="Stripe.net" Version="52.2.0" />
-    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+
       <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     </ItemGroup>
 

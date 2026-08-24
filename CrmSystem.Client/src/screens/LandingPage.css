@@ -750,29 +750,36 @@ html[data-theme="dark"] .mobile-sidebar-drawer {
 
 .preview-kpi-card {
   background: var(--bg-alt);
-  padding: 0.75rem;
+  padding: 0.4rem 0.65rem;
   border-radius: 8px;
   text-align: center;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  max-height: 50px;
+  box-sizing: border-box;
 }
 
 .kpi-icon {
   color: var(--accent);
+  flex-shrink: 0;
 }
 
 .kpi-value {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--fg);
+  line-height: 1.1;
 }
 
 .kpi-label {
   font-size: 0.65rem;
   color: var(--fg-muted);
   font-weight: 500;
+  line-height: 1.1;
 }
 
 /* Middle Section */

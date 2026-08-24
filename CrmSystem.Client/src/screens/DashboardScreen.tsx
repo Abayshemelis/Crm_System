@@ -458,83 +458,41 @@ export const DashboardScreen: React.FC = () => {
                 </div>
             </div>
 
-            {/* KPI Metric Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+            {/* KPI Metric Cards Grid - Wide, Compact & Balanced */}
+            <div className="dashboard-kpi-grid">
                 {statCards.map((card, i) => (
                     <div
                         key={card.title}
-                        className="glass-panel animate-fade-in"
+                        className="dashboard-kpi-card glass-panel animate-fade-in"
                         style={{ 
-                            animationDelay: `${i * 0.05}s`,
-                            padding: '1.35rem 1.5rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            borderRadius: '16px',
-                            cursor: 'pointer',
-                            background: 'var(--bg-card)',
-                            border: '1px solid var(--border-color)',
-                            borderTop: `3px solid ${card.color}`,
-                            transition: 'all 0.2s ease-in-out',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)'
+                            animationDelay: `${i * 0.03}s`,
+                            borderLeft: `4px solid ${card.color}`
                         }}
                         onClick={() => handleStatCardAction(card)}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-3px)';
-                            e.currentTarget.style.boxShadow = '0 12px 24px -4px rgba(0, 0, 0, 0.08)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.03)';
-                        }}
+                        title={`Click to view ${card.title} details`}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-                            <div style={{ 
-                                background: `color-mix(in srgb, ${card.color} 14%, transparent)`,
-                                color: card.color,
-                                width: '42px',
-                                height: '42px',
-                                borderRadius: '10px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                border: `1px solid color-mix(in srgb, ${card.color} 30%, transparent)`
-                            }}>
-                                {React.createElement(card.icon, { size: 22 })}
-                            </div>
-                            <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                color: 'var(--text-muted)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                background: 'var(--bg-secondary)',
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: '12px',
-                                border: '1px solid var(--border-color)'
-                            }}>
-                                View <ChevronRight size={13} />
-                            </span>
-                        </div>
-
-                        <div>
-                            <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
-                                {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
-                            </div>
-                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
+                        <div className="dashboard-kpi-content">
+                            <div className="dashboard-kpi-title">
                                 {card.title}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontWeight: 500 }}>
-                                {card.description}
+                            <div className="dashboard-kpi-value">
+                                {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
+                            </div>
+                            <div className="dashboard-kpi-sub">
+                                {card.footer || card.description}
                             </div>
                         </div>
 
-                        {card.footer && (
-                            <div style={{ marginTop: '0.75rem', paddingTop: '0.6rem', borderTop: '1px dashed var(--border-color)' }}>
-                                {card.footer}
-                            </div>
-                        )}
+                        <div 
+                            className="dashboard-kpi-icon-wrap"
+                            style={{ 
+                                background: `color-mix(in srgb, ${card.color} 14%, transparent)`,
+                                color: card.color,
+                                border: `1px solid color-mix(in srgb, ${card.color} 26%, transparent)`
+                            }}
+                        >
+                            {React.createElement(card.icon, { size: 19 })}
+                        </div>
                     </div>
                 ))}
             </div>

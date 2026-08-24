@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
@@ -6,13 +6,13 @@ import { CalendarGrid } from '../components/tasks/CalendarGrid';
 import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { List, Calendar, Plus, User } from 'lucide-react';
+import { List, Calendar, Plus, CheckSquare, Users } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { showToast } from '../lib/toast';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import './screens.css';
 
-interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; }
+interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; completed?: TaskReadDto[]; }
 interface CalendarDay { day: number; taskCount: number; tasks: TaskReadDto[]; }
 interface Lookup { id: number; name: string; }
 interface TaskStatus extends Lookup { isTerminal: boolean; }
@@ -41,30 +41,60 @@ export const TasksScreen: React.FC = () => {
 
   const myId = user?.userId;
 
+  // Ensure current user is always included in the users list
+  const effectiveUsers = useMemo(() => {
+    const list = [...users];
+    if (myId && !list.some(u => Number(u.id) === Number(myId))) {
+      list.unshift({ id: myId, name: `${user?.name || 'Me'} (Me)` });
+    }
+    return list;
+  }, [users, myId, user?.name]);
+
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const repId = (isManager && selectedRep !== 'me') ? selectedRep : 'me';
-      const [active, completed] = await Promise.all([
-        repId === 'me'
-          ? api.get<TaskGrouped>('/api/tasks/my')
-          : api.get<TaskGrouped>(`/api/tasks/assignee/${repId}`),
-        repId === 'me'
-          ? api.get<TaskReadDto[]>('/api/tasks/my/completed').catch(() => [] as TaskReadDto[])
-          : Promise.resolve([] as TaskReadDto[]),
-      ]);
-      setGrouped(active);
-      setCompletedTasks(completed);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, [selectedRep, isManager]);
+      let activePromise: Promise<TaskGrouped>;
+      let completedPromise: Promise<TaskReadDto[]>;
+
+      if (selectedRep === 'all') {
+        activePromise = api.get<TaskGrouped>('/api/tasks/all');
+        completedPromise = api.get<TaskReadDto[]>('/api/tasks/all/completed').catch(() => []);
+      } else if (selectedRep !== 'me') {
+        activePromise = api.get<TaskGrouped>(`/api/tasks/assignee/${selectedRep}`);
+        completedPromise = Promise.resolve([] as TaskReadDto[]);
+      } else {
+        activePromise = api.get<TaskGrouped>('/api/tasks/my');
+        completedPromise = api.get<TaskReadDto[]>('/api/tasks/my/completed').catch(() => []);
+      }
+
+      const [active, completed] = await Promise.all([activePromise, completedPromise]);
+      setGrouped({
+        overdue: active?.overdue ?? [],
+        dueToday: active?.dueToday ?? [],
+        upcoming: active?.upcoming ?? [],
+      });
+      setCompletedTasks(completed && completed.length > 0 ? completed : (active?.completed ?? []));
+    } catch (err) {
+      console.error('Failed to fetch tasks', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedRep]);
 
   const fetchCalendar = useCallback(async () => {
     try {
-      const repId = (isManager && selectedRep !== 'me') ? `&assignedToId=${selectedRep}` : '';
-      const res = await api.get<CalendarDay[]>(`/api/tasks/calendar?year=${calDate.year}&month=${calDate.month}${repId}`);
-      setCalDays(res);
+      let repParam = '';
+      if (selectedRep === 'all') {
+        repParam = ''; // fetch all team members on calendar
+      } else if (selectedRep !== 'me') {
+        repParam = `&assignedToId=${selectedRep}`;
+      } else if (myId) {
+        repParam = `&assignedToId=${myId}`;
+      }
+      const res = await api.get<CalendarDay[]>(`/api/tasks/calendar?year=${calDate.year}&month=${calDate.month}${repParam}`);
+      setCalDays(res || []);
     } catch { /* ignore */ }
-  }, [calDate, selectedRep, isManager]);
+  }, [calDate, selectedRep, myId]);
 
   useEffect(() => {
     api.get<{ id: number; name: string; isTerminal: boolean }[]>('/api/taskstatuses').then(res =>
@@ -73,7 +103,13 @@ export const TasksScreen: React.FC = () => {
 
     api.get<any[]>('/api/users').then(res => {
       const usersData = res ?? [];
-      setUsers(usersData.map(u => ({ id: u.Id || u.identityId || u.id, name: u.name })));
+      const mapped = usersData
+        .map(u => ({
+          id: u.userId ?? u.UserId ?? u.Id ?? u.identityId ?? u.id,
+          name: u.name ?? u.Name ?? `User ${u.userId ?? u.id ?? '?'}`
+        }))
+        .filter(u => u.id != null && u.id !== 0);
+      setUsers(mapped);
     }).catch(() => {});
 
     api.get<{ data: Array<{ customerId: number; firstName: string; lastName: string }> }>('/api/customers?page=1&pageSize=100')
@@ -90,9 +126,7 @@ export const TasksScreen: React.FC = () => {
 
     api.get<any[]>('/api/activitytypes')
       .then(res => {
-        console.log('Activity types API response:', res);
         const mapped = (res ?? []).map(at => ({ id: at.id ?? at.Id, name: at.name ?? at.Name }));
-        console.log('Activity types mapped:', mapped);
         setActivityTypes(mapped);
       })
       .catch(() => {});
@@ -155,15 +189,20 @@ export const TasksScreen: React.FC = () => {
     <Layout>
       <div className="tasks-screen">
         <div className="tasks-header">
-          <h1 className="tasks-header-title">My Tasks</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h1 className="tasks-header-title">
+              {isManager && selectedRep === 'all' ? 'Team Tasks' : isManager && selectedRep !== 'me' ? 'Representative Tasks' : 'My Tasks'}
+            </h1>
+          </div>
 
-          {isManager && users.length > 0 && (
-            <div className="rep-selector" style={{ width: '200px' }}>
+          {isManager && (
+            <div className="rep-selector" style={{ minWidth: '220px' }}>
               <SearchableSelect
                 value={selectedRep}
                 options={[
-                  { value: 'me', label: 'My Tasks' },
-                  ...users.map(u => ({ value: String(u.id), label: u.name }))
+                  { value: 'me', label: 'My Tasks (Assigned to Me)' },
+                  { value: 'all', label: 'All Tasks (Entire Team)' },
+                  ...users.map(u => ({ value: String(u.id), label: `${u.name}'s Tasks` }))
                 ]}
                 onChange={val => setSelectedRep(String(val))}
               />
@@ -187,8 +226,12 @@ export const TasksScreen: React.FC = () => {
             </button>
           </div>
 
-          <button type="button" className="btn-primary" onClick={() => { setEditTask(null); setPrefillDate(undefined); setShowModal(true); }}>
-            <Plus size={14} /> New Task
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => { setEditTask(null); setPrefillDate(undefined); setShowModal(true); }}
+          >
+            <Plus size={15} /> New Task
           </button>
         </div>
 
@@ -228,7 +271,7 @@ export const TasksScreen: React.FC = () => {
           task={editTask}
           prefillDueDate={prefillDate}
           currentUserId={myId ?? 0}
-          users={users.length > 0 ? users : (myId ? [{ id: myId, name: user?.name ?? 'Me' }] : [])}
+          users={effectiveUsers}
           customers={customers}
           opportunities={opportunities}
           activities={activities}

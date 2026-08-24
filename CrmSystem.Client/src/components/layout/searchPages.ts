@@ -92,14 +92,7 @@ export const SIDEBAR_PAGES: SearchPageItem[] = [
     route: '/reports',
     keywords: ['reports', 'analytics', 'charts', 'forecast', 'sla', 'performance', 'statistics']
   },
-  {
-    id: 11,
-    type: 'page',
-    title: 'Import Data Wizard',
-    subtitle: 'CSV import tool for leads and customers',
-    route: '/import',
-    keywords: ['import', 'csv', 'upload', 'data wizard', 'excel', 'migrate']
-  },
+
   {
     id: 12,
     type: 'page',

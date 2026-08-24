@@ -12,14 +12,23 @@ import {
   DollarSign, Clock, ShieldCheck, AlertCircle,
   FileSpreadsheet, RefreshCw, Search, Sparkles,
   BarChart3, PieChart as PieIcon, Table as TableIcon,
-  ExternalLink, ArrowUpRight
+  ExternalLink, ArrowUpRight, Check, User, Users
 } from 'lucide-react';
 import './cleanReports.css';
 
 const PALETTE = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#06b6d4'];
 
+const STATUS_COLOR_MAP: Record<string, { bg: string; color: string }> = {
+  Signed: { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981' },
+  PartiallySigned: { bg: 'rgba(99, 102, 241, 0.12)', color: '#818cf8' },
+  PendingSignature: { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b' },
+  Draft: { bg: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8' },
+  Expired: { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' },
+  Cancelled: { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' }
+};
+
 // ─── PDF Generator for Contracts ──────────────────────────────────────────────
-function exportContractPDF(contracts: any[], stats: any, dateRange: string, scope: string) {
+function exportContractPDF(contracts: any[], stats: any, dateRange: string, scopeLabel: string) {
   const dateStr = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -119,137 +128,95 @@ function exportContractPDF(contracts: any[], stats: any, dateRange: string, scop
             border-radius: 6px;
             padding: 10px;
           }
-          .pdf-stat-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
-          .pdf-stat-value { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
-          .pdf-stat-sub { font-size: 9.5px; color: #94a3b8; }
-          .pdf-insights-box {
-            background: #ecfdf5;
-            border-left: 4px solid #10b981;
-            padding: 10px 14px;
-            border-radius: 0 6px 6px 0;
-            margin-bottom: 18px;
-          }
-          .pdf-section-title {
-            font-size: 13px;
-            font-weight: 800;
-            color: #1e293b;
-            margin: 16px 0 8px 0;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #cbd5e1;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-          }
-          .pdf-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 8px; }
-          .pdf-table th {
-            background: #f1f5f9;
-            color: #334155;
-            text-align: left;
-            padding: 7px 10px;
-            font-weight: 700;
-            border-bottom: 1px solid #cbd5e1;
-            text-transform: uppercase;
-            font-size: 9px;
-          }
-          .pdf-table td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; }
-          .pdf-table tr:nth-child(even) td { background: #fafafa; }
-          .pdf-footer {
-            margin-top: 24px;
-            padding-top: 10px;
-            border-top: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            font-size: 9px;
-            color: #94a3b8;
-          }
+          .pdf-stat-lbl { font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b; }
+          .pdf-stat-val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 3px; }
+          .pdf-stat-val.green { color: #10b981; }
+          .pdf-stat-val.blue { color: #3b82f6; }
+          .pdf-stat-val.purple { color: #818cf8; }
+          .pdf-stat-val.amber { color: #f59e0b; }
+          .pdf-section { font-size: 13px; font-weight: 700; color: #0f172a; margin: 18px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+          th { background: #f1f5f9; padding: 6px 8px; text-align: left; font-weight: 700; color: #475569; border-bottom: 1px solid #cbd5e1; }
+          td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+          .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 8.5px; font-weight: 700; }
+          .badge-signed { background: #dcfce7; color: #15803d; }
+          .badge-partial { background: #e0e7ff; color: #4338ca; }
+          .badge-pending { background: #fef3c7; color: #b45309; }
+          .badge-draft { background: #f1f5f9; color: #475569; }
+          .pdf-footer { margin-top: 25px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 9px; color: #94a3b8; display: flex; justify-content: space-between; }
         </style>
       </head>
       <body>
         <div class="pdf-action-bar">
-          <button class="pdf-btn-primary" id="download-btn">📥 Download PDF</button>
-          <button class="pdf-btn-secondary" onclick="window.print()">🖨️ Print</button>
-          <button class="pdf-btn-secondary" onclick="window.close()">✕ Close</button>
+          <button id="download-btn" class="pdf-btn-primary">Download PDF</button>
+          <button onclick="window.print()" class="pdf-btn-secondary">Print</button>
         </div>
 
-        <div class="pdf-container" id="pdf-content">
+        <div id="pdf-content" class="pdf-container">
           <div class="pdf-header">
             <div>
-              <h1 class="pdf-brand">CRM ENTERPRISE &bull; CONTRACT REPORT</h1>
-              <p class="pdf-sub">Portfolio Value, Legal E-Signatures & Execution Compliance</p>
+              <h1 class="pdf-brand">Contracts &amp; E-Signature Portfolio Report</h1>
+              <p class="pdf-sub">Active Agreements Valuation &amp; Complete Digital Signature Audit</p>
             </div>
             <div class="pdf-meta">
-              <div><strong>Generated:</strong> ${dateStr}</div>
+              <div><strong>Scope:</strong> ${scopeLabel}</div>
               <div><strong>Period:</strong> ${dateRange}</div>
-              <div><strong>Scope:</strong> ${scope.toUpperCase()}</div>
+              <div><strong>Generated:</strong> ${dateStr}</div>
             </div>
           </div>
 
           <div class="pdf-stat-grid">
             <div class="pdf-stat-box">
-              <div class="pdf-stat-label">Total Contract Value</div>
-              <div class="pdf-stat-value">${formattedVal}</div>
-              <div class="pdf-stat-sub">Executed portfolio volume</div>
+              <div class="pdf-stat-lbl">Total Valuation</div>
+              <div class="pdf-stat-val green">${formattedVal}</div>
             </div>
             <div class="pdf-stat-box">
-              <div class="pdf-stat-label">Signed & Active</div>
-              <div class="pdf-stat-value">${stats?.signedContracts ?? 0}</div>
-              <div class="pdf-stat-sub">Legally binding agreements</div>
+              <div class="pdf-stat-lbl">Signed &amp; Active</div>
+              <div class="pdf-stat-val blue">${stats?.signedContracts ?? 0} ($${Number(stats?.activeValue ?? 0).toLocaleString()})</div>
             </div>
             <div class="pdf-stat-box">
-              <div class="pdf-stat-label">Pending Signatures</div>
-              <div class="pdf-stat-value">${stats?.pendingContracts ?? 0}</div>
-              <div class="pdf-stat-sub">Out for client execution</div>
+              <div class="pdf-stat-lbl">Partially Signed (1/2)</div>
+              <div class="pdf-stat-val purple">${stats?.partiallySignedCount ?? 0} ($${Number(stats?.partiallySignedValue ?? 0).toLocaleString()})</div>
             </div>
             <div class="pdf-stat-box">
-              <div class="pdf-stat-label">Signing Completion Rate</div>
-              <div class="pdf-stat-value">${stats?.signingRate ? `${stats.signingRate.toFixed(1)}%` : '—'}</div>
-              <div class="pdf-stat-sub">Proposal-to-execution ratio</div>
+              <div class="pdf-stat-lbl">Pending Signature (0/2)</div>
+              <div class="pdf-stat-val amber">${stats?.pendingSignatureCount ?? 0}</div>
             </div>
           </div>
 
-          <div class="pdf-insights-box">
-            <div style="font-size: 10px; font-weight: 700; color: #064e3b; margin-bottom: 4px; text-transform: uppercase;">
-              Executive Legal & Contract Governance:
-            </div>
-            <ul style="margin: 0; padding-left: 16px; font-size: 10.5px; color: #064e3b; line-height: 1.4;">
-              <li><strong>Portfolio Execution:</strong> <strong>${formattedVal}</strong> committed revenue across active contracts.</li>
-              <li><strong>Pending Closure:</strong> <strong>${stats?.pendingContracts ?? 0}</strong> contracts awaiting e-signature. Issue automated reminder notifications after 48h of dispatch.</li>
-              <li><strong>Billing Invoicing:</strong> Transition signed contracts directly into milestone invoices to minimize collection cycles.</li>
-            </ul>
-          </div>
-
-          ${contracts.length > 0 ? `
-            <div class="pdf-section-title">Contract Records Ledger (${contracts.length} Total Records)</div>
-            <table class="pdf-table">
-              <thead>
+          <div class="pdf-section">Contract Records (${contracts.length} Total)</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Contract Title</th>
+                <th>Contract #</th>
+                <th>Owner / Rep</th>
+                <th>Customer Name</th>
+                <th>Value</th>
+                <th>Signature Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${contracts.slice(0, 45).map(c => `
                 <tr>
-                  <th>#</th>
-                  <th>Contract Title</th>
-                  <th>Contract #</th>
-                  <th>Customer</th>
-                  <th>Value ($)</th>
-                  <th>Status</th>
-                  <th>Created</th>
+                  <td><strong>${c.title || 'Untitled Agreement'}</strong></td>
+                  <td>${c.contractNumber || '—'}</td>
+                  <td>${c.ownerName || '—'}</td>
+                  <td>${c.customerName || '—'}</td>
+                  <td>$${Number(c.contractValue || 0).toLocaleString()}</td>
+                  <td>
+                    <span class="badge ${c.category === 'Signed' ? 'badge-signed' : c.category === 'PartiallySigned' ? 'badge-partial' : c.category === 'PendingSignature' ? 'badge-pending' : 'badge-draft'}">
+                      ${c.status || 'Draft'}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                ${contracts.slice(0, 50).map((c, i) => `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td><strong>${c.title}</strong></td>
-                    <td>${c.contractNumber || '—'}</td>
-                    <td>${c.customerName || '—'}</td>
-                    <td><strong>$${(c.contractValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
-                    <td>${c.status || 'Draft'}</td>
-                    <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          ` : ''}
+              `).join('')}
+            </tbody>
+          </table>
 
           <div class="pdf-footer">
-            <span>CRM Enterprise System &bull; Confidential Executive Report</span>
-            <span>System Generated &bull; Page 1</span>
+            <span>CRM Enterprise Legal Governance Engine</span>
+            <span>Page 1 of 1</span>
           </div>
         </div>
 
@@ -285,7 +252,7 @@ function exportContractPDF(contracts: any[], stats: any, dateRange: string, scop
 
 export const ContractReportsScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { isManagerOrAbove } = useAuth();
+  const { isManagerOrAboveSelected, selectedRole } = useAuth();
 
   const today = new Date().toISOString().split('T')[0];
   const m30   = new Date(Date.now() - 30 * 86400_000).toISOString().split('T')[0];
@@ -302,8 +269,18 @@ export const ContractReportsScreen: React.FC = () => {
   const [startDate, setStartDate] = useState(m30);
   const [endDate, setEndDate] = useState(today);
   const [activePreset, setActivePreset] = useState('30 Days');
-  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAbove ? 'team' : 'personal');
+  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAboveSelected ? 'team' : 'personal');
+  const [selectedRepId, setSelectedRepId] = useState<string>('all');
+  const [usersList, setUsersList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Auto-sync scope when role switches
+  useEffect(() => {
+    if (!isManagerOrAboveSelected) {
+      setDataScope('personal');
+      setSelectedRepId('all');
+    }
+  }, [isManagerOrAboveSelected, selectedRole]);
 
   // Tabs & Filters
   const [activeTab, setActiveTab] = useState<'overview' | 'directory'>('overview');
@@ -313,24 +290,34 @@ export const ContractReportsScreen: React.FC = () => {
   const [contractReport, setContractReport] = useState<any>(null);
   const [contracts, setContracts] = useState<any[]>([]);
 
+  // Load team users for optional rep filtering
+  useEffect(() => {
+    if (isManagerOrAboveSelected) {
+      api.get<any[]>('/api/users')
+        .then(res => setUsersList(Array.isArray(res) ? res : []))
+        .catch(err => console.error('Failed to load users list', err));
+    }
+  }, [isManagerOrAboveSelected]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const q = new URLSearchParams();
       if (startDate) q.append('startDate', startDate);
       if (endDate)   q.append('endDate', endDate);
-      q.append('scope', dataScope);
+      
+      if (!isManagerOrAboveSelected || dataScope === 'personal') {
+        q.append('scope', 'personal');
+      } else {
+        q.append('scope', 'company');
+        if (selectedRepId && selectedRepId !== 'all') {
+          q.append('repId', selectedRepId);
+        }
+      }
 
-      const [reportData, contractsData] = await Promise.all([
-        api.get<any>(`/api/reports/contracts?${q.toString()}`),
-        api.get<any>('/api/contracts')
-      ]);
-
-      setContractReport(reportData);
-      const list = Array.isArray(contractsData)
-        ? contractsData
-        : (Array.isArray(contractsData?.data) ? contractsData.data : (Array.isArray(contractsData?.items) ? contractsData.items : []));
-      setContracts(list);
+      const data = await api.get<any>(`/api/reports/contracts?${q.toString()}`);
+      setContractReport(data);
+      setContracts(data?.items ?? []);
     } catch (err) {
       console.error('Failed to load contract reports', err);
     } finally {
@@ -340,7 +327,7 @@ export const ContractReportsScreen: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, dataScope]);
+  }, [startDate, endDate, dataScope, selectedRepId, isManagerOrAboveSelected, selectedRole]);
 
   const statusDistribution = useMemo(() => {
     if (!contractReport?.byStatus) return [];
@@ -352,16 +339,29 @@ export const ContractReportsScreen: React.FC = () => {
     }));
   }, [contractReport]);
 
+  const repBreakdown = useMemo(() => {
+    if (!contractReport?.byRep) return [];
+    return contractReport.byRep;
+  }, [contractReport]);
+
   const filteredContracts = useMemo(() => {
     if (!Array.isArray(contracts)) return [];
     return contracts.filter(c => {
       const matchesSearch =
         !searchTerm ||
-        (c.title && c.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.contractNumber && c.contractNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.customerName && c.customerName.toLowerCase().includes(searchTerm.toLowerCase()));
+        (c.title && c.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.customerName && c.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.ownerName && c.ownerName.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      const matchesStatus = statusFilter === 'all' || (c.status || '').toLowerCase() === statusFilter.toLowerCase();
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'signed' && c.category === 'Signed') ||
+        (statusFilter === 'partially_signed' && c.category === 'PartiallySigned') ||
+        (statusFilter === 'pending_signature' && c.category === 'PendingSignature') ||
+        (statusFilter === 'pending' && (c.category === 'PartiallySigned' || c.category === 'PendingSignature')) ||
+        (statusFilter === 'draft' && c.category === 'Draft') ||
+        (statusFilter === 'expired' && c.category === 'Expired');
 
       return matchesSearch && matchesStatus;
     });
@@ -372,18 +372,20 @@ export const ContractReportsScreen: React.FC = () => {
       alert('No contract records available to export.');
       return;
     }
-    const headers = ['ContractId', 'Title', 'ContractNumber', 'Customer', 'ContractValue', 'Status', 'CreatedAt'];
+    const headers = ['Contract Number', 'Title', 'Customer', 'Owner/Rep', 'Value ($)', 'Status', 'Signature Progress', 'Start Date', 'End Date'];
     const rows = contracts.map(c => [
-      c.contractId,
-      `"${(c.title || '').replace(/"/g, '""')}"`,
       `"${c.contractNumber || ''}"`,
+      `"${(c.title || '').replace(/"/g, '""')}"`,
       `"${(c.customerName || '').replace(/"/g, '""')}"`,
+      `"${(c.ownerName || 'Unassigned').replace(/"/g, '""')}"`,
       c.contractValue || 0,
       `"${c.status || 'Draft'}"`,
-      `"${c.createdAt || ''}"`
+      `"${c.signatureProgress || '0/2 Awaiting Signatures'}"`,
+      `"${c.startDate ? new Date(c.startDate).toLocaleDateString() : ''}"`,
+      `"${c.endDate ? new Date(c.endDate).toLocaleDateString() : ''}"`,
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -396,7 +398,12 @@ export const ContractReportsScreen: React.FC = () => {
   };
 
   const handleExportPDF = () => {
-    exportContractPDF(contracts, contractReport, activePreset, dataScope);
+    const scopeLabel = dataScope === 'personal'
+      ? 'My Contracts (Personal)'
+      : selectedRepId !== 'all'
+        ? `Representative: ${usersList.find(u => String(u.identityId || u.userId) === selectedRepId)?.name || 'Selected Rep'}`
+        : 'All Company Contracts';
+    exportContractPDF(contracts, contractReport, activePreset, scopeLabel);
   };
 
   return (
@@ -406,7 +413,7 @@ export const ContractReportsScreen: React.FC = () => {
         <div className="clean-report-header">
           <div className="clean-header-top">
             <div className="clean-breadcrumb-group">
-              <button onClick={() => navigate('/contracts')} className="clean-back-btn">
+              <button onClick={() => navigate('/contracts')} className="clean-back-btn" type="button">
                 <ArrowLeft size={15} /> All Contracts
               </button>
               <span className="clean-badge clean-badge-primary">
@@ -415,13 +422,13 @@ export const ContractReportsScreen: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button onClick={handleExportPDF} className="clean-btn-primary" title="Export PDF Executive Report">
+              <button onClick={handleExportPDF} className="clean-btn-primary" title="Export PDF Executive Report" type="button">
                 <FileText size={15} /> Export PDF
               </button>
-              <button onClick={handleExportCSV} className="clean-btn-secondary" title="Download CSV Dataset">
+              <button onClick={handleExportCSV} className="clean-btn-secondary" title="Download CSV Dataset" type="button">
                 <FileSpreadsheet size={15} /> Export CSV
               </button>
-              <button onClick={fetchData} className="clean-btn-secondary" style={{ padding: '6px 10px' }} title="Refresh Report Data">
+              <button onClick={fetchData} className="clean-btn-secondary" style={{ padding: '6px 10px' }} title="Refresh Report Data" type="button">
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
             </div>
@@ -429,34 +436,63 @@ export const ContractReportsScreen: React.FC = () => {
 
           <div className="clean-title-group">
             <h1 className="clean-report-title">
-              Contracts & E-Signatures Portfolio Report
+              Contracts &amp; E-Signatures Portfolio Report
             </h1>
             <p className="clean-report-desc">
-              Legal agreements portfolio valuation, digital signature execution progress, and contract lifecycle status.
+              Legal agreements portfolio valuation, digital signature execution progress (including Partially Signed &amp; Pending Signature), and contract lifecycle status.
             </p>
           </div>
 
           {/* Controls toolbar */}
           <div className="clean-toolbar">
-            <div className="clean-toolbar-group">
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Scope:</span>
-              {isManagerOrAbove && (
+            {isManagerOrAboveSelected && (
+              <div className="clean-toolbar-group">
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Scope:</span>
                 <div className="clean-segmented">
                   <button
+                    type="button"
                     className={`clean-segmented-btn ${dataScope === 'personal' ? 'active' : ''}`}
-                    onClick={() => setDataScope('personal')}
+                    onClick={() => {
+                      setDataScope('personal');
+                      setSelectedRepId('all');
+                    }}
                   >
-                    My Contracts
+                    <User size={13} style={{ marginRight: 4 }} /> My Contracts
                   </button>
                   <button
+                    type="button"
                     className={`clean-segmented-btn ${dataScope === 'team' ? 'active' : ''}`}
                     onClick={() => setDataScope('team')}
                   >
-                    All Company
+                    <Users size={13} style={{ marginRight: 4 }} /> All Company
                   </button>
                 </div>
-              )}
-            </div>
+
+                {/* Individual Representative Dropdown when in All Company view */}
+                {dataScope === 'team' && usersList.length > 0 && (
+                  <select
+                    value={selectedRepId}
+                    onChange={e => setSelectedRepId(e.target.value)}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'var(--bg-tertiary, rgba(0,0,0,0.15))',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.8rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="all">Entire Organization</option>
+                    {usersList.map(u => (
+                      <option key={u.identityId || u.userId} value={String(u.identityId || u.userId)}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
 
             <div className="clean-toolbar-group">
               <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Period:</span>
@@ -464,6 +500,7 @@ export const ContractReportsScreen: React.FC = () => {
                 {PRESETS.map(p => (
                   <button
                     key={p.label}
+                    type="button"
                     className={`clean-preset-btn ${activePreset === p.label ? 'active' : ''}`}
                     onClick={() => {
                       setActivePreset(p.label);
@@ -494,37 +531,45 @@ export const ContractReportsScreen: React.FC = () => {
             </div>
             <div className="clean-stat-footer">
               <span className="clean-pill-delta clean-pill-green">Portfolio</span>
-              <span>Executed volume</span>
+              <span>{contractReport?.totalCount ?? contracts.length} total agreements</span>
             </div>
           </div>
 
           {/* Signed & Active */}
           <div className="clean-stat-card">
             <div className="clean-stat-top">
-              <span className="clean-stat-label">Signed & Active</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+              <span className="clean-stat-label">Signed &amp; Active</span>
+              <div className="clean-stat-icon" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
                 <CheckCircle2 size={17} />
               </div>
             </div>
-            <div className="clean-stat-value">{contractReport?.signedContracts ?? 0}</div>
+            <div className="clean-stat-value" style={{ color: '#10b981' }}>
+              {contractReport?.signedContracts ?? 0}
+            </div>
             <div className="clean-stat-footer">
-              <span className="clean-pill-delta clean-pill-blue">Active</span>
-              <span>Legally binding contracts</span>
+              <span className="clean-pill-delta clean-pill-green">
+                <ArrowUpRight size={11} /> ${Number(contractReport?.activeValue ?? 0).toLocaleString()}
+              </span>
+              <span>Legally binding</span>
             </div>
           </div>
 
-          {/* Pending Signatures */}
+          {/* In Signature Pipeline */}
           <div className="clean-stat-card">
             <div className="clean-stat-top">
-              <span className="clean-stat-label">Pending Execution</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
+              <span className="clean-stat-label">In Signature Pipeline</span>
+              <div className="clean-stat-icon" style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>
                 <Clock size={17} />
               </div>
             </div>
-            <div className="clean-stat-value">{contractReport?.pendingContracts ?? 0}</div>
+            <div className="clean-stat-value" style={{ color: '#818cf8' }}>
+              {contractReport?.pendingContracts ?? 0}
+            </div>
             <div className="clean-stat-footer">
-              <span className="clean-pill-delta" style={{ background: 'rgba(245,158,11,0.14)', color: '#f59e0b' }}>Out for Sign</span>
-              <span>Awaiting client signature</span>
+              <span className="clean-pill-delta" style={{ background: 'rgba(99,102,241,0.14)', color: '#818cf8' }}>
+                {contractReport?.partiallySignedCount ?? 0} Partial &bull; {contractReport?.pendingSignatureCount ?? 0} Pending
+              </span>
+              <span>${Number(contractReport?.pendingValue ?? 0).toLocaleString()} volume</span>
             </div>
           </div>
 
@@ -532,16 +577,16 @@ export const ContractReportsScreen: React.FC = () => {
           <div className="clean-stat-card">
             <div className="clean-stat-top">
               <span className="clean-stat-label">Signing Completion Rate</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
+              <div className="clean-stat-icon" style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
                 <ShieldCheck size={17} />
               </div>
             </div>
-            <div className="clean-stat-value">
-              {contractReport?.signingRate ? `${contractReport.signingRate.toFixed(1)}%` : '—'}
+            <div className="clean-stat-value" style={{ color: '#3b82f6' }}>
+              {contractReport?.signingRate !== undefined ? `${contractReport.signingRate.toFixed(1)}%` : '0%'}
             </div>
             <div className="clean-stat-footer">
               <span className="clean-pill-delta clean-pill-blue">Efficiency</span>
-              <span>Contract close velocity</span>
+              <span>Execution velocity</span>
             </div>
           </div>
         </div>
@@ -549,12 +594,14 @@ export const ContractReportsScreen: React.FC = () => {
         {/* Tab Navigation */}
         <div className="clean-tab-nav">
           <button
+            type="button"
             onClick={() => setActiveTab('overview')}
             className={`clean-tab-item ${activeTab === 'overview' ? 'active' : ''}`}
           >
-            <BarChart3 size={15} /> Contract Status Distribution & Analytics
+            <BarChart3 size={15} /> Contract Status Distribution &amp; Analytics
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('directory')}
             className={`clean-tab-item ${activeTab === 'directory' ? 'active' : ''}`}
           >
@@ -591,13 +638,13 @@ export const ContractReportsScreen: React.FC = () => {
                           innerRadius={55}
                           outerRadius={85}
                           paddingAngle={4}
-                          label={(entry: any) => `${entry.name || ''}: ${entry.value ?? entry.count ?? 0}`}
+                          label={(entry: any) => `${entry.name || ''}: ${entry.count ?? 0}`}
                         >
                           {statusDistribution.map((entry: any, idx: number) => (
                             <Cell key={`cell-${idx}`} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip formatter={(val: any) => [`${val} Contracts`, 'Count']} />
                         <Legend />
                       </PieChart>
                     </ResponsiveContainer>
@@ -622,8 +669,8 @@ export const ContractReportsScreen: React.FC = () => {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={statusDistribution} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.08} />
-                        <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} />
-                        <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={v => `$${v / 1000}k`} />
+                        <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={10} />
+                        <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={v => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
                         <Tooltip formatter={(val: any) => [`$${Number(val).toLocaleString()}`, 'Value']} />
                         <Bar dataKey="value" radius={[5, 5, 0, 0]}>
                           {statusDistribution.map((entry: any, idx: number) => (
@@ -637,6 +684,59 @@ export const ContractReportsScreen: React.FC = () => {
               </div>
             </div>
 
+            {/* Team Valuation Table */}
+            {repBreakdown.length > 0 && (
+              <div className="clean-card">
+                <div className="clean-card-header">
+                  <div>
+                    <h3 className="clean-card-title">Contract Portfolio by Sales Representative</h3>
+                    <p className="clean-card-sub">Agreement volume, executed revenue, and signing pipeline per team member</p>
+                  </div>
+                </div>
+                <div className="clean-table-container">
+                  <table className="clean-table">
+                    <thead>
+                      <tr>
+                        <th>Sales Rep / Owner</th>
+                        <th>Total Agreements</th>
+                        <th>Total Portfolio Value</th>
+                        <th>Signed &amp; Active Value</th>
+                        <th>In Pipeline Value</th>
+                        <th>Signed Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {repBreakdown.map((r: any, idx: number) => (
+                        <tr key={`rep-${idx}`}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <User size={14} style={{ color: 'var(--accent-primary)' }} />
+                              <strong>{r.repName}</strong>
+                            </div>
+                          </td>
+                          <td><strong>{r.totalContracts}</strong></td>
+                          <td style={{ color: '#10b981', fontWeight: 700 }}>
+                            ${Number(r.totalValue || 0).toLocaleString()}
+                          </td>
+                          <td style={{ color: '#10b981', fontWeight: 600 }}>
+                            ${Number(r.activeValue || 0).toLocaleString()}
+                          </td>
+                          <td style={{ color: '#818cf8', fontWeight: 600 }}>
+                            ${Number(r.pendingValue || 0).toLocaleString()} ({r.pendingContracts})
+                          </td>
+                          <td>
+                            <span className="clean-badge clean-badge-primary">
+                              {r.signedContracts} Signed
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Strategic Insights */}
             <div className="clean-card">
               <div className="clean-card-header">
@@ -645,28 +745,28 @@ export const ContractReportsScreen: React.FC = () => {
               <div className="clean-guidance-grid">
                 <div style={{ background: 'var(--bg-tertiary, rgba(0,0,0,0.15))', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <strong style={{ display: 'block', color: '#10b981', marginBottom: 4, fontSize: '0.82rem' }}>
-                    📑 Portfolio Health
+                    📑 Executed &amp; Binding
                   </strong>
                   <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    You have <strong>{contractReport?.signedContracts ?? 0}</strong> active contracts totaling <strong>${(contractReport?.totalContractValue ?? 0).toLocaleString()}</strong>.
+                    You have <strong>{contractReport?.signedContracts ?? 0}</strong> fully executed agreements representing <strong>${(contractReport?.activeValue ?? 0).toLocaleString()}</strong>.
                   </p>
                 </div>
 
                 <div style={{ background: 'var(--bg-tertiary, rgba(0,0,0,0.15))', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <strong style={{ display: 'block', color: '#f59e0b', marginBottom: 4, fontSize: '0.82rem' }}>
-                    ✍️ Signature Follow-ups
+                  <strong style={{ display: 'block', color: '#818cf8', marginBottom: 4, fontSize: '0.82rem' }}>
+                    ✍️ Signature Pipeline Triage
                   </strong>
                   <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    <strong>{contractReport?.pendingContracts ?? 0}</strong> contracts are currently pending signature. Automate signing link delivery via email to accelerate closure.
+                    <strong>{contractReport?.partiallySignedCount ?? 0}</strong> agreements are partially signed (1/2) and <strong>{contractReport?.pendingSignatureCount ?? 0}</strong> are awaiting first signatures.
                   </p>
                 </div>
 
                 <div style={{ background: 'var(--bg-tertiary, rgba(0,0,0,0.15))', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <strong style={{ display: 'block', color: '#6366f1', marginBottom: 4, fontSize: '0.82rem' }}>
+                  <strong style={{ display: 'block', color: '#3b82f6', marginBottom: 4, fontSize: '0.82rem' }}>
                     🧾 Billing Alignment
                   </strong>
                   <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    Immediately generate milestone billing invoices once agreements are legally signed to prevent delayed accounts receivable.
+                    Generate milestone billing invoices directly upon dual execution to expedite cash collection.
                   </p>
                 </div>
               </div>
@@ -712,9 +812,11 @@ export const ContractReportsScreen: React.FC = () => {
                   }}
                 >
                   <option value="all">All Statuses</option>
-                  <option value="signed">Signed / Active</option>
-                  <option value="sent">Sent / Pending</option>
+                  <option value="signed">Signed &amp; Executed / Active</option>
+                  <option value="partially">Partially Signed (1/2)</option>
+                  <option value="pending">Pending Signature (0/2)</option>
                   <option value="draft">Draft</option>
+                  <option value="expired">Expired</option>
                 </select>
               </div>
 
@@ -723,6 +825,7 @@ export const ContractReportsScreen: React.FC = () => {
                   Showing <strong>{filteredContracts.length}</strong> of {contracts.length} records
                 </span>
                 <button
+                  type="button"
                   onClick={handleExportCSV}
                   className="clean-btn-secondary"
                   style={{ fontSize: '0.75rem', padding: '4px 10px' }}
@@ -738,9 +841,10 @@ export const ContractReportsScreen: React.FC = () => {
                   <tr>
                     <th>Contract Title</th>
                     <th>Contract #</th>
+                    <th>Owner / Rep</th>
                     <th>Customer Name</th>
                     <th>Contract Value ($)</th>
-                    <th>Status</th>
+                    <th>Signature Status</th>
                     <th>Created Date</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -748,55 +852,82 @@ export const ContractReportsScreen: React.FC = () => {
                 <tbody>
                   {filteredContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                        No contract records match your query
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                        No contract records match your filter criteria.
                       </td>
                     </tr>
                   ) : (
-                    filteredContracts.map(c => (
-                      <tr key={c.contractId}>
-                        <td>
-                          <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
-                            {c.title}
-                          </strong>
-                        </td>
-                        <td>
-                          <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            {c.contractNumber || '—'}
-                          </span>
-                        </td>
-                        <td>{c.customerName || '—'}</td>
-                        <td>
-                          <strong style={{ color: '#10b981', fontSize: '0.85rem' }}>
-                            ${Number(c.contractValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </strong>
-                        </td>
-                        <td>
-                          <span
-                            className="clean-badge"
-                            style={{
-                              background: c.status === 'Signed' || c.status === 'Active' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
-                              color: c.status === 'Signed' || c.status === 'Active' ? '#10b981' : '#f59e0b',
-                              fontSize: '0.72rem'
-                            }}
-                          >
-                            {c.status || 'Draft'}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            onClick={() => navigate('/contracts')}
-                            className="clean-back-btn"
-                            style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                          >
-                            View <ExternalLink size={11} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredContracts.map(c => {
+                      const style = STATUS_COLOR_MAP[c.category] || STATUS_COLOR_MAP.Draft;
+                      return (
+                        <tr key={c.contractId}>
+                          <td>
+                            <strong style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                              {c.title}
+                            </strong>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              {c.contractNumber || '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              <User size={12} style={{ color: 'var(--accent-primary)' }} />
+                              {c.ownerName || c.createdByName || 'Admin'}
+                            </div>
+                          </td>
+                          <td>
+                            {c.customerId ? (
+                              <span
+                                onClick={() => navigate(`/customers/${c.customerId}`)}
+                                style={{ color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.82rem' }}
+                              >
+                                {c.customerName || 'Customer'}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                {c.customerName || '—'}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <strong style={{ color: '#10b981', fontSize: '0.85rem' }}>
+                              ${Number(c.contractValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </strong>
+                          </td>
+                          <td>
+                            <span
+                              className="clean-badge"
+                              style={{
+                                background: style.bg,
+                                color: style.color,
+                                fontSize: '0.72rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <span style={{ width: 5, height: 5, borderRadius: '50%', background: style.color }} />
+                              {c.status || 'Draft'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => navigate('/contracts')}
+                              className="clean-back-btn"
+                              style={{ padding: '3px 8px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                            >
+                              View <ExternalLink size={11} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/layout/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
+import { showToast } from '../../lib/toast';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, Legend
@@ -287,7 +288,6 @@ function exportInvoicePDF(invoices: any[], stats: any, dateRange: string, scope:
 
 export const InvoiceReportsScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { isManagerOrAbove } = useAuth();
 
   const today = new Date().toISOString().split('T')[0];
   const m30   = new Date(Date.now() - 30 * 86400_000).toISOString().split('T')[0];
@@ -304,7 +304,6 @@ export const InvoiceReportsScreen: React.FC = () => {
   const [startDate, setStartDate] = useState(m30);
   const [endDate, setEndDate] = useState(today);
   const [activePreset, setActivePreset] = useState('30 Days');
-  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAbove ? 'team' : 'personal');
   const [loading, setLoading] = useState(true);
 
   // Tabs & Filters
@@ -321,18 +320,11 @@ export const InvoiceReportsScreen: React.FC = () => {
       const q = new URLSearchParams();
       if (startDate) q.append('startDate', startDate);
       if (endDate)   q.append('endDate', endDate);
-      q.append('scope', dataScope);
+      q.append('scope', 'company');
 
-      const [reportData, invoicesData] = await Promise.all([
-        api.get<any>(`/api/reports/invoices?${q.toString()}`),
-        api.get<any>('/api/invoices')
-      ]);
-
-      setInvoiceReport(reportData);
-      const list = Array.isArray(invoicesData)
-        ? invoicesData
-        : (Array.isArray(invoicesData?.data) ? invoicesData.data : (Array.isArray(invoicesData?.items) ? invoicesData.items : []));
-      setInvoices(list);
+      const data = await api.get<any>(`/api/reports/invoices?${q.toString()}`);
+      setInvoiceReport(data);
+      setInvoices(data?.items ?? []);
     } catch (err) {
       console.error('Failed to load invoice reports', err);
     } finally {
@@ -342,7 +334,7 @@ export const InvoiceReportsScreen: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate, dataScope]);
+  }, [startDate, endDate]);
 
   const monthlyInflow = useMemo(() => invoiceReport?.monthlyInflow ?? [], [invoiceReport]);
 
@@ -362,26 +354,25 @@ export const InvoiceReportsScreen: React.FC = () => {
 
   const handleExportCSV = () => {
     if (!invoices || !invoices.length) {
-      alert('No invoice records available to export.');
+      showToast('No invoices to export', 'error');
       return;
     }
-    const headers = ['InvoiceId', 'InvoiceNumber', 'Customer', 'TotalAmount', 'Status', 'DueDate', 'CreatedAt'];
+    const headers = ['Invoice Number', 'Customer', 'Amount', 'Status', 'Due Date', 'Created Date'];
     const rows = invoices.map(i => [
-      i.invoiceId,
-      `"${i.invoiceNumber || `INV-${i.invoiceId}`}"`,
-      `"${(i.customerName || '').replace(/"/g, '""')}"`,
+      `"${i.invoiceNumber || ''}"`,
+      `"${i.customerName || ''}"`,
       i.totalAmount || 0,
-      `"${i.status || 'Draft'}"`,
-      `"${i.dueDate ? i.dueDate.slice(0, 10) : ''}"`,
-      `"${i.createdAt ? i.createdAt.slice(0, 10) : ''}"`
+      `"${i.status || ''}"`,
+      `"${i.dueDate ? new Date(i.dueDate).toLocaleDateString() : ''}"`,
+      `"${i.createdAt ? new Date(i.createdAt).toLocaleDateString() : ''}"`,
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `invoices_report_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `invoices_revenue_report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -389,7 +380,8 @@ export const InvoiceReportsScreen: React.FC = () => {
   };
 
   const handleExportPDF = () => {
-    exportInvoicePDF(invoices, invoiceReport, activePreset, dataScope);
+    const scopeLabel = 'All Company Invoices';
+    exportInvoicePDF(invoices, invoiceReport, activePreset, scopeLabel);
   };
 
   return (
@@ -399,22 +391,22 @@ export const InvoiceReportsScreen: React.FC = () => {
         <div className="clean-report-header">
           <div className="clean-header-top">
             <div className="clean-breadcrumb-group">
-              <button onClick={() => navigate('/invoices')} className="clean-back-btn">
+              <button onClick={() => navigate('/invoices')} className="clean-back-btn" type="button">
                 <ArrowLeft size={15} /> All Invoices
               </button>
-              <span className="clean-badge clean-badge-primary">
-                Revenue Intelligence
+              <span className="clean-badge clean-badge-success">
+                Revenue & Receivables
               </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button onClick={handleExportPDF} className="clean-btn-primary" title="Export PDF Executive Summary">
+              <button onClick={handleExportPDF} className="clean-btn-primary" title="Export PDF Executive Report" type="button">
                 <FileText size={15} /> Export PDF
               </button>
-              <button onClick={handleExportCSV} className="clean-btn-secondary" title="Download CSV Dataset">
+              <button onClick={handleExportCSV} className="clean-btn-secondary" title="Download CSV Dataset" type="button">
                 <FileSpreadsheet size={15} /> Export CSV
               </button>
-              <button onClick={fetchData} className="clean-btn-secondary" style={{ padding: '6px 10px' }} title="Refresh Report Data">
+              <button onClick={fetchData} className="clean-btn-secondary" style={{ padding: '6px 10px' }} title="Refresh Report Data" type="button">
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
             </div>
@@ -431,26 +423,6 @@ export const InvoiceReportsScreen: React.FC = () => {
 
           {/* Controls toolbar */}
           <div className="clean-toolbar">
-            <div className="clean-toolbar-group">
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Scope:</span>
-              {isManagerOrAbove && (
-                <div className="clean-segmented">
-                  <button
-                    className={`clean-segmented-btn ${dataScope === 'personal' ? 'active' : ''}`}
-                    onClick={() => setDataScope('personal')}
-                  >
-                    My Invoices
-                  </button>
-                  <button
-                    className={`clean-segmented-btn ${dataScope === 'team' ? 'active' : ''}`}
-                    onClick={() => setDataScope('team')}
-                  >
-                    All Company
-                  </button>
-                </div>
-              )}
-            </div>
-
             <div className="clean-toolbar-group">
               <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Period:</span>
               <div className="clean-preset-group">

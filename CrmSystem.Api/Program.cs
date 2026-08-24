@@ -122,7 +122,7 @@ builder.Services.AddScoped<ITaskService, TaskService>();                        
 builder.Services.AddScoped<INotificationService, NotificationService>();               // Notification generation engine
 builder.Services.AddScoped<INotificationHubContext, NotificationHubContextAdapter>(); // Adapter bridging Infrastructure to SignalR Hub
 builder.Services.AddScoped<ILeadScoringService, LeadScoringService>();                 // AI / Rule-based lead scoring
-builder.Services.AddScoped<IImportService, ImportService>();                           // CSV/Excel lead/customer import
+
 builder.Services.AddScoped<IAiInsightService, AiInsightService>();                     // AI sales insights
 builder.Services.AddScoped<IAiCopilotService, AiCopilotService>();                     // AI CRM copilot assistant
 builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();             // Stripe payment processing

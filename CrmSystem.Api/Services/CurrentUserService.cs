@@ -33,12 +33,26 @@ public class CurrentUserService : ICurrentUserService
     {
         get
         {
+            var headerRole = _httpContextAccessor.HttpContext?.Request.Headers["X-Selected-Role"].FirstOrDefault()
+                ?? _httpContextAccessor.HttpContext?.Request.Headers["X-Role-Override"].FirstOrDefault();
+
             var values = User?.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
-            return values
+            var parsedRoles = values
                 .Select(v => Enum.TryParse<UserRole>(v, out var role) ? role : (UserRole?)null)
                 .Where(r => r.HasValue)
                 .Select(r => r!.Value)
                 .ToList();
+
+            if (!string.IsNullOrWhiteSpace(headerRole) && Enum.TryParse<UserRole>(headerRole, true, out var selectedRole))
+            {
+                // If user is Admin or has that role, allow role simulation/selection
+                if (parsedRoles.Contains(UserRole.Admin) || parsedRoles.Contains(selectedRole))
+                {
+                    return new List<UserRole> { selectedRole };
+                }
+            }
+
+            return parsedRoles;
         }
     }
 

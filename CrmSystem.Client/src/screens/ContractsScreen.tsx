@@ -7,10 +7,11 @@ import { Input } from '../components/ui/Input';
 import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2 } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2, Users, UserCheck } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { useAuth } from '../context/AuthContext';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -34,61 +35,37 @@ const ContractActionMenu: React.FC<{
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (open) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [open]);
 
   return (
-    <div ref={menuRef} className="crm-action-menu-wrap">
-      {/* Primary Action Button */}
-      {isSigned ? (
-        <button
-          type="button"
-          onClick={() => onInvoice(contract)}
-          title="Generate billing invoice from signed contract"
-          style={{
-            padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)',
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
-          }}
-        >
-          <Receipt size={14} /> 🧾 Invoice
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onView(contract)}
-          title="View contract details"
-          style={{
-            padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.35)',
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
-          }}
-        >
-          <Eye size={14} /> 👁️ View
-        </button>
-      )}
-
-      {/* Action Dropdown Trigger Button */}
+    <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         type="button"
         className="crm-action-menu-trigger"
-        onClick={() => setOpen(!open)}
-        title="More actions"
-        aria-label="More actions"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title="Contract Options"
       >
         <MoreVertical size={16} />
       </button>
 
-      {/* Floating Action Menu Dropdown */}
       {open && (
-        <div className="crm-action-menu-dropdown">
+        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px' }}>
           <button
             type="button"
             className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onView(contract); setOpen(false); }}
           >
-            <Eye size={14} style={{ color: '#6366f1' }} /> View Document
+            <Eye size={14} /> View Contract
+          </button>
+
+          <button
+            type="button"
+            className="crm-action-menu-item"
+            onClick={(e) => { e.stopPropagation(); onEdit(contract); setOpen(false); }}
+          >
+            <Edit3 size={14} /> Edit Details
           </button>
 
           <button
@@ -96,25 +73,15 @@ const ContractActionMenu: React.FC<{
             className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onCopyLink(contract); setOpen(false); }}
           >
-            <LinkIcon size={14} style={{ color: '#818cf8' }} /> Copy Signing Link
+            <LinkIcon size={14} style={{ color: '#6366f1' }} /> Copy Signing Link
           </button>
-
-          {!isSigned && (
-            <button
-              type="button"
-              className="crm-action-menu-item"
-              onClick={(e) => { e.stopPropagation(); onSendEmail(contract); setOpen(false); }}
-            >
-              <Mail size={14} style={{ color: '#0284c7' }} /> Email Signing Link
-            </button>
-          )}
 
           <button
             type="button"
             className="crm-action-menu-item"
-            onClick={(e) => { e.stopPropagation(); onEdit(contract); setOpen(false); }}
+            onClick={(e) => { e.stopPropagation(); onSendEmail(contract); setOpen(false); }}
           >
-            <Edit3 size={14} style={{ color: '#d97706' }} /> Edit Contract
+            <Mail size={14} style={{ color: '#3b82f6' }} /> Email Invitation
           </button>
 
           {isSigned && (
@@ -145,10 +112,21 @@ const ContractActionMenu: React.FC<{
 
 export const ContractsScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { isManagerOrAboveSelected, selectedRole } = useAuth();
+
   const [contracts, setContracts] = useState<ContractItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAboveSelected ? 'team' : 'personal');
+
+  // Auto-sync scope when role switches
+  useEffect(() => {
+    if (!isManagerOrAboveSelected) {
+      setDataScope('personal');
+    }
+  }, [isManagerOrAboveSelected, selectedRole]);
+
   const [selectedContract, setSelectedContract] = useState<ContractItem | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -178,14 +156,20 @@ export const ContractsScreen: React.FC = () => {
   const fetchContracts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await api.get<ContractItem[]>('/api/contracts');
+      const q = new URLSearchParams();
+      if (!isManagerOrAboveSelected || dataScope === 'personal') {
+        q.append('scope', 'personal');
+      } else {
+        q.append('scope', 'company');
+      }
+      const data = await api.get<ContractItem[]>(`/api/contracts?${q.toString()}`);
       setContracts(data);
     } catch {
       showToast('Failed to load contracts', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dataScope, isManagerOrAboveSelected, selectedRole]);
 
   useEffect(() => {
     fetchContracts();
@@ -193,12 +177,14 @@ export const ContractsScreen: React.FC = () => {
     // Auto-refresh contracts whenever staff switches back to the CRM tab
     const handleFocus = () => fetchContracts();
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('app:role-switched', handleFocus);
 
     // Live-polling every 8 seconds to auto-detect client e-signatures in real-time
     const interval = setInterval(fetchContracts, 8000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('app:role-switched', handleFocus);
       clearInterval(interval);
     };
   }, [fetchContracts]);
@@ -578,31 +564,77 @@ export const ContractsScreen: React.FC = () => {
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="crm-filter-toolbar-wrap animate-fade-in">
+      <div className="crm-filter-toolbar-wrap animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         
-        {/* Pill Filter Tabs */}
-        <div className="crm-filter-tabs-bar">
-          <button
-            type="button"
-            onClick={() => setStatusFilter('All')}
-            className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
-          >
-            All Contracts ({contracts.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Draft')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
-          >
-            📝 Drafts / Pending ({pendingSignatureCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Signed')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Signed' ? 'active-paid' : ''}`}
-          >
-            ✅ Signed &amp; Executed ({activeContractsCount})
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          {/* Pill Filter Tabs */}
+          <div className="crm-filter-tabs-bar">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('All')}
+              className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
+            >
+              All Contracts ({contracts.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Draft')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
+            >
+              📝 Drafts / Pending ({pendingSignatureCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Signed')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Signed' ? 'active-paid' : ''}`}
+            >
+              ✅ Signed &amp; Executed ({activeContractsCount})
+            </button>
+          </div>
+
+          {/* Scope Toggle for Managers & Admins */}
+          {isManagerOrAboveSelected && (
+            <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <button
+                type="button"
+                onClick={() => setDataScope('personal')}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: dataScope === 'personal' ? 'var(--accent-primary)' : 'transparent',
+                  color: dataScope === 'personal' ? '#fff' : 'var(--text-muted)',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+              >
+                <UserCheck size={14} /> My Contracts
+              </button>
+              <button
+                type="button"
+                onClick={() => setDataScope('team')}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: dataScope === 'team' ? 'var(--accent-primary)' : 'transparent',
+                  color: dataScope === 'team' ? '#fff' : 'var(--text-muted)',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}
+              >
+                <Users size={14} /> All Company
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Search Bar */}

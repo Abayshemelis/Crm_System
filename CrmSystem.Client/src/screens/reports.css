@@ -140,8 +140,8 @@
 /* ── KPI grid ───────────────────────────────────────────────────────────────── */
 .rpt-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
 }
 
 @media (max-width: 820px) {
@@ -149,40 +149,29 @@
     grid-template-columns: 1fr;
   }
 }
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
 
 /* ── Stat card ──────────────────────────────────────────────────────────────── */
 .rpt-stat-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 1.25rem 1.5rem;
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  justify-content: space-between;
+  min-height: 72px;
+  max-height: 80px;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 @media (max-width: 480px) {
   .rpt-stat-card {
-    padding: 1rem;
+    padding: 0.55rem 0.8rem;
+    min-height: 66px;
   }
-}
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 1.25rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  position: relative;
-  overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
 }
 .rpt-stat-card:hover {
   border-color: var(--card-color, var(--accent-primary));

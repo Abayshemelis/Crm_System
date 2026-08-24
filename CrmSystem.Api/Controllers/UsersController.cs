@@ -93,7 +93,6 @@ public class UsersController : ControllerBase
             .Include(i => i.Role)
             .Include(i => i.IdentityRoles)
                 .ThenInclude(ir => ir.Role)
-            .Where(i => i.Role!.Name != "Admin")
             .AsQueryable();
 
         if (User.IsInRole("SalesRep"))

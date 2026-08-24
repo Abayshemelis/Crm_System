@@ -6,7 +6,8 @@ public interface ITaskService
 {
     Task<TaskGroupedDto> GetMyTasksAsync(int identityId);
     Task<TaskGroupedDto> GetByAssigneeAsync(int assigneeId);
-    Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int identityId, int take = 50);
+    Task<TaskGroupedDto> GetAllTasksGroupedAsync(int? assigneeId = null);
+    Task<IReadOnlyList<TaskReadDto>> GetCompletedAsync(int? identityId = null, int take = 50);
     Task<IReadOnlyList<TaskReadDto>> GetByCustomerAsync(int customerId);
     Task<IReadOnlyList<TaskReadDto>> GetByOpportunityAsync(int opportunityId);
     Task<IReadOnlyList<TaskReadDto>> GetByLeadAsync(int leadId);

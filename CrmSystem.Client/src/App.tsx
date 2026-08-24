@@ -40,7 +40,7 @@ const ReportsScreen = lazy(() => import('./screens/ReportsScreen').then(m => ({ 
 const UsersScreen = lazy(() => import('./screens/UsersScreen').then(m => ({ default: m.UsersScreen })));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
 const SearchResultsScreen = lazy(() => import('./screens/SearchResultsScreen').then(m => ({ default: m.SearchResultsScreen })));
-const ImportWizardScreen = lazy(() => import('./screens/ImportWizardScreen').then(m => ({ default: m.ImportWizardScreen })));
+
 const AuditLogsScreen = lazy(() => import('./screens/AuditLogsScreen').then(m => ({ default: m.AuditLogsScreen })));
 
 // Dedicated module-specific report screens
@@ -51,7 +51,7 @@ const PipelineReportsScreen = lazy(() => import('./screens/reports/PipelineRepor
 const ContractReportsScreen = lazy(() => import('./screens/reports/ContractReportsScreen').then(m => ({ default: m.ContractReportsScreen })));
 const InvoiceReportsScreen = lazy(() => import('./screens/reports/InvoiceReportsScreen').then(m => ({ default: m.InvoiceReportsScreen })));
 const TaskReportsScreen = lazy(() => import('./screens/reports/TaskReportsScreen').then(m => ({ default: m.TaskReportsScreen })));
-const ImportReportsScreen = lazy(() => import('./screens/reports/ImportReportsScreen').then(m => ({ default: m.ImportReportsScreen })));
+
 const UserReportsScreen = lazy(() => import('./screens/reports/UserReportsScreen').then(m => ({ default: m.UserReportsScreen })));
 const AuditReportsScreen = lazy(() => import('./screens/reports/AuditReportsScreen').then(m => ({ default: m.AuditReportsScreen })));
 
@@ -90,8 +90,7 @@ function AppRoutes() {
           <Route path="/invoices/pay/:id" element={<PublicInvoicePayScreen />} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><ReportsScreen /></ProtectedRoute>} />
-          <Route path="/import" element={<ProtectedRoute><ImportWizardScreen /></ProtectedRoute>} />
-          <Route path="/import/reports" element={<ProtectedRoute><ImportReportsScreen /></ProtectedRoute>} />
+
           <Route path="/customers" element={<ProtectedRoute><CustomersScreen /></ProtectedRoute>} />
           <Route path="/customers/new" element={<ProtectedRoute><CustomerFormScreen /></ProtectedRoute>} />
           <Route path="/customers/reports" element={<ProtectedRoute><CustomerReportsScreen /></ProtectedRoute>} />

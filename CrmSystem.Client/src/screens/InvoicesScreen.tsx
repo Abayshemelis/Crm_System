@@ -5,10 +5,11 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2, RefreshCw, Users, UserCheck } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { useAuth } from '../context/AuthContext';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -37,17 +38,19 @@ export interface InvoiceItem {
   terms?: string;
   createdByName: string;
   createdAt: string;
+  ownerName?: string;
 }
 
 const InvoiceActionMenu: React.FC<{
   invoice: InvoiceItem;
   onPay: (inv: InvoiceItem) => void;
-  onPrint: (inv: InvoiceItem) => void;
-  onEdit: (inv: InvoiceItem) => void;
-  onDelete: (inv: InvoiceItem) => void;
   onStripePay: (inv: InvoiceItem) => void;
   onSyncStripe?: (inv: InvoiceItem) => void;
-}> = ({ invoice, onPay, onPrint, onEdit, onDelete, onStripePay, onSyncStripe }) => {
+  onEdit: (inv: InvoiceItem) => void;
+  onDelete: (inv: InvoiceItem) => void;
+  onView: (inv: InvoiceItem) => void;
+  onPrint: (inv: InvoiceItem) => void;
+}> = ({ invoice, onPay, onStripePay, onSyncStripe, onEdit, onDelete, onView, onPrint }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,61 +60,37 @@ const InvoiceActionMenu: React.FC<{
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (open) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [open]);
 
   return (
-    <div ref={menuRef} className="crm-action-menu-wrap">
-      {/* Primary Action Button */}
-      {invoice.status !== 'Paid' ? (
-        <button
-          type="button"
-          onClick={() => onPay(invoice)}
-          title="Record payment for invoice"
-          style={{
-            padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)',
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
-          }}
-        >
-          <CreditCard size={14} /> 💳 Pay Invoice
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onPrint(invoice)}
-          title="Print & export PDF receipt"
-          style={{
-            padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.35)',
-            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
-          }}
-        >
-          <Printer size={14} /> 🖨️ PDF Invoice
-        </button>
-      )}
-
-      {/* Action Menu Trigger Button */}
+    <div ref={menuRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
         type="button"
         className="crm-action-menu-trigger"
-        onClick={() => setOpen(!open)}
-        title="More actions"
-        aria-label="More actions"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title="Invoice Options"
       >
         <MoreVertical size={16} />
       </button>
 
-      {/* Dropdown Options */}
       {open && (
-        <div className="crm-action-menu-dropdown">
+        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px' }}>
+          <button
+            type="button"
+            className="crm-action-menu-item"
+            onClick={(e) => { e.stopPropagation(); onView(invoice); setOpen(false); }}
+          >
+            <FileText size={14} /> View Invoice
+          </button>
+
           <button
             type="button"
             className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onPrint(invoice); setOpen(false); }}
           >
-            <Printer size={14} style={{ color: '#6366f1' }} /> Print / Export PDF
+            <Printer size={14} /> Print / Save PDF
           </button>
 
           {invoice.status !== 'Paid' && (
@@ -171,10 +150,16 @@ const InvoiceActionMenu: React.FC<{
 };
 
 export const InvoicesScreen: React.FC = () => {
+  const { isManagerOrAboveSelected, selectedRole } = useAuth();
+
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAboveSelected ? 'team' : 'personal');
+  const [selectedRepId, setSelectedRepId] = useState<string>('all');
+  const [usersList, setUsersList] = useState<any[]>([]);
+
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceItem | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -208,17 +193,46 @@ export const InvoicesScreen: React.FC = () => {
   const [editTerms, setEditTerms] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Load team users for Managers/Admins
+  useEffect(() => {
+    if (isManagerOrAboveSelected) {
+      api.get<any[]>('/api/users')
+        .then(res => setUsersList(Array.isArray(res) ? res : []))
+        .catch(() => {});
+    }
+  }, [isManagerOrAboveSelected]);
+
+  // Auto-sync scope when role switcher toggles
+  useEffect(() => {
+    if (!isManagerOrAboveSelected) {
+      setDataScope('personal');
+      setSelectedRepId('all');
+    } else {
+      setDataScope('team');
+    }
+  }, [isManagerOrAboveSelected, selectedRole]);
+
   const fetchInvoices = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await api.get<InvoiceItem[]>('/api/invoices');
+      const q = new URLSearchParams();
+      if (dataScope === 'personal') {
+        q.append('scope', 'personal');
+      } else {
+        q.append('scope', 'company');
+        if (selectedRepId && selectedRepId !== 'all') {
+          q.append('repId', selectedRepId);
+        }
+      }
+
+      const data = await api.get<InvoiceItem[]>(`/api/invoices?${q.toString()}`);
       setInvoices(data);
     } catch {
       showToast('Failed to load invoices', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dataScope, selectedRepId]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -724,45 +738,116 @@ export const InvoicesScreen: React.FC = () => {
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="crm-filter-toolbar-wrap animate-fade-in">
+      <div className="crm-filter-toolbar-wrap animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
 
-        {/* Pill Filter Tabs */}
-        <div className="crm-filter-tabs-bar">
-          <button
-            type="button"
-            onClick={() => setStatusFilter('All')}
-            className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
-          >
-            All Invoices ({invoices.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Sent')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Sent' ? 'active-sent' : ''}`}
-          >
-            📬 Sent / Pending ({pendingCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Paid')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Paid' ? 'active-paid' : ''}`}
-          >
-            ✅ Paid &amp; Settled ({paidCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Overdue')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Overdue' ? 'active-overdue' : ''}`}
-          >
-            ⚠️ Overdue ({overdueInvoices.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter('Draft')}
-            className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
-          >
-            📝 Drafts ({invoices.filter(i => i.status === 'Draft' && !isInvoiceOverdue(i)).length})
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          {/* Pill Filter Tabs */}
+          <div className="crm-filter-tabs-bar">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('All')}
+              className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
+            >
+              All Invoices ({invoices.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Sent')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Sent' ? 'active-sent' : ''}`}
+            >
+              📬 Sent / Pending ({pendingCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Paid')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Paid' ? 'active-paid' : ''}`}
+            >
+              ✅ Paid &amp; Settled ({paidCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Overdue')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Overdue' ? 'active-overdue' : ''}`}
+            >
+              ⚠️ Overdue ({overdueInvoices.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('Draft')}
+              className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
+            >
+              📝 Drafts ({invoices.filter(i => i.status === 'Draft' && !isInvoiceOverdue(i)).length})
+            </button>
+          </div>
+
+          {/* Role-Based Scope & Rep Toggle for Manager/Admin */}
+          {isManagerOrAboveSelected && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <button
+                  type="button"
+                  onClick={() => setDataScope('personal')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: dataScope === 'personal' ? 'var(--accent-primary)' : 'transparent',
+                    color: dataScope === 'personal' ? '#fff' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <UserCheck size={14} /> My Invoices
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDataScope('team')}
+                  style={{
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: dataScope === 'team' ? 'var(--accent-primary)' : 'transparent',
+                    color: dataScope === 'team' ? '#fff' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Users size={14} /> All Company
+                </button>
+              </div>
+
+              {dataScope === 'team' && usersList.length > 0 && (
+                <select
+                  value={selectedRepId}
+                  onChange={(e) => setSelectedRepId(e.target.value)}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.82rem',
+                    fontWeight: 500
+                  }}
+                >
+                  <option value="all">All Sales Representatives</option>
+                  {usersList.map((u: any) => (
+                    <option key={u.userId} value={u.userId}>
+                      {u.name} ({u.roles ? u.roles.join(', ') : 'User'})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Search Bar */}
@@ -794,7 +879,7 @@ export const InvoicesScreen: React.FC = () => {
               title={searchTerm || statusFilter !== 'All' ? 'No invoices match your filters' : 'No invoices yet'}
               description={searchTerm || statusFilter !== 'All' ? 'Try clearing your search or changing the status filter.' : 'Create your first invoice or generate one directly from a signed contract.'}
               actionText={!searchTerm && statusFilter === 'All' ? 'Create Invoice' : undefined}
-              onActionClick={!searchTerm && statusFilter === 'All' ? handleOpenCreateModal : undefined}
+              onActionClick={!searchTerm && statusFilter === 'All' ? () => setShowCreateModal(true) : undefined}
             />
           ) : (
             <>
@@ -803,46 +888,71 @@ export const InvoicesScreen: React.FC = () => {
                 <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice Ref</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Customer &amp; Company</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Ref Contract</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Total Amount</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice #</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Customer &amp; Account</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Related Agreement</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Amount Due</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payment Status</th>
                       <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Due Date</th>
                       <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredInvoices.map(inv => (
-                      <tr key={inv.invoiceId} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.9rem', transition: 'background 0.15s' }}>
-                        <td style={{ padding: '1rem 1.25rem', fontWeight: 800, color: 'var(--accent-primary)', whiteSpace: 'nowrap' }}>
-                          {inv.invoiceNumber}
+                      <tr
+                        key={inv.invoiceId}
+                        style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}
+                        className="contract-table-row"
+                      >
+                        <td style={{ padding: '1rem 1.25rem' }}>
+                          <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.9rem' }}>
+                            {inv.invoiceNumber}
+                          </span>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            Issued: {new Date(inv.issueDate).toLocaleDateString()}
+                          </div>
                         </td>
-                        <td style={{ padding: '1rem 1.25rem', minWidth: '220px' }}>
-                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>👤 {inv.customerName}</div>
-                          {inv.companyName && (
-                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                              🏢 {inv.companyName}
-                            </div>
-                          )}
+                        <td style={{ padding: '1rem 1.25rem' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>
+                            {inv.customerName}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                            {inv.companyName ? `🏢 ${inv.companyName}` : inv.customerEmail}
+                          </div>
                         </td>
-                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '1rem 1.25rem' }}>
                           {inv.contractNumber ? (
-                            <span style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '0.2rem 0.6rem', borderRadius: '6px', fontWeight: 600, border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-                              📄 {inv.contractNumber}
-                            </span>
+                            <div>
+                              <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                📄 {inv.contractNumber}
+                              </span>
+                              {inv.contractTitle && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {inv.contractTitle}
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Direct Invoice —</span>
                           )}
                         </td>
-                        <td style={{ padding: '1rem 1.25rem', fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                          ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        <td style={{ padding: '1rem 1.25rem' }}>
+                          <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1rem' }}>
+                            ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                          {inv.taxRate > 0 && (
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              incl. {inv.taxRate}% tax
+                            </span>
+                          )}
                         </td>
-                        <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>{statusBadge(inv)}</td>
-                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                        <td style={{ padding: '1rem 1.25rem' }}>
+                          {statusBadge(inv)}
+                        </td>
+                        <td style={{ padding: '1rem 1.25rem' }}>
                           {(() => {
                             const overdue = isInvoiceOverdue(inv);
-                            const daysOverdue = getOverdueDays(inv.dueDate);
+                            const daysOverdue = Math.floor((Date.now() - new Date(inv.dueDate).getTime()) / 86400000);
                             return (
                               <div>
                                 <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500 }}>
@@ -866,6 +976,7 @@ export const InvoicesScreen: React.FC = () => {
                             onDelete={handleDeleteInvoice}
                             onStripePay={handleStripePay}
                             onSyncStripe={handleSyncStripe}
+                            onView={setSelectedInvoice}
                           />
                         </td>
                       </tr>
@@ -905,6 +1016,7 @@ export const InvoicesScreen: React.FC = () => {
                         onDelete={handleDeleteInvoice}
                         onStripePay={handleStripePay}
                         onSyncStripe={handleSyncStripe}
+                        onView={setSelectedInvoice}
                       />
                     </div>
                   </div>

@@ -59,7 +59,13 @@ function getToken() {
 }
 
 function authHeaders(extra?: Record<string, string>): HeadersInit {
-  return { 'Authorization': `Bearer ${getToken()}`, 'Content-Type': 'application/json', ...extra };
+  const selectedRole = typeof localStorage !== 'undefined' ? localStorage.getItem('selectedRole') : null;
+  return {
+    'Authorization': `Bearer ${getToken()}`,
+    'Content-Type': 'application/json',
+    ...(selectedRole ? { 'X-Selected-Role': selectedRole } : {}),
+    ...extra
+  };
 }
 
 // ── 3. CORE REQUEST INTERCEPTOR ───────────────────────────────────────────────
@@ -70,6 +76,7 @@ export const setOfflineHandler = (cb: () => void) => {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
+  const selectedRole = typeof localStorage !== 'undefined' ? localStorage.getItem('selectedRole') : null;
   const headers: Record<string, string> = {
     ...(options?.headers as Record<string, string> || {}),
   };
@@ -84,6 +91,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (selectedRole) {
+    headers['X-Selected-Role'] = selectedRole;
   }
 
   if (DEBUG_API) {

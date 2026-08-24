@@ -1,15 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { DatePicker } from '../components/ui/DatePicker';
 import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { OpportunityDetailPanel } from '../components/ui/OpportunityDetailPanel';
 import { OpportunityCreateModal } from '../components/ui/OpportunityCreateModal';
 import { api } from '../lib/api';
-import { Plus, Filter, Search, X, Calendar } from 'lucide-react';
+import { showToast } from '../lib/toast';
+import { confirmAction } from '../lib/confirm';
+import { useAuth } from '../context/AuthContext';
+import {
+    Plus, Search, X, Calendar, ArrowRight, Sparkles
+} from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { getExpectedCloseDateStatus } from '../lib/dateUtils';
@@ -50,6 +54,8 @@ interface User {
 
 export const PipelineScreen: React.FC = () => {
     const navigate = useNavigate();
+    const { isManagerOrAboveSelected } = useAuth();
+    
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [stages, setStages] = useState<OpportunityStage[]>([]);
     const [users, setUsers] = useState<User[]>([]);
@@ -94,7 +100,7 @@ export const PipelineScreen: React.FC = () => {
                 api.get<{ data: any[] }>('/api/companies?page=1&pageSize=1000')
             ]);
             setOpportunities(oppData);
-            setStages(stageData.sort((a, b) => a.sortOrder - b.sortOrder));
+            setStages((stageData ?? []).sort((a, b) => a.sortOrder - b.sortOrder));
             setUsers(userData ?? []);
             setCustomers(custData.data ?? []);
             setCompanies(compData.data ?? []);
@@ -134,14 +140,12 @@ export const PipelineScreen: React.FC = () => {
     const handleStageChange = async (opportunityId: number, newStageId: number) => {
         try {
             await api.patch(`/api/opportunities/${opportunityId}/stage`, { stageId: newStageId });
+            showToast('Opportunity stage updated!', 'success');
             await loadOpportunities();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to update stage:', error);
             await loadOpportunities();
-            const event = new CustomEvent('app:toast', {
-                detail: { message: 'Failed to update stage. Please try again.', type: 'error' as const }
-            });
-            window.dispatchEvent(event);
+            showToast(error?.message || 'Failed to update opportunity stage.', 'error');
         }
     };
 
@@ -219,12 +223,14 @@ export const PipelineScreen: React.FC = () => {
         <Layout>
             <div className="dashboard-header animate-fade-in">
                 <div className="dashboard-title">
-                    <h1>Pipeline</h1>
-                    <p>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'}</p>
+                    <h1>Opportunity Pipeline</h1>
+                    <p>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'deal' : 'deals'} across {stages.length} stages</p>
                 </div>
-                <Button onClick={() => navigate('/pipeline/new')}>
-                    <Plus size={16} style={{ marginRight: 6 }} /> New Opportunity
-                </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <Button onClick={() => navigate('/pipeline/new')}>
+                        <Plus size={16} style={{ marginRight: 6 }} /> New Deal
+                    </Button>
+                </div>
             </div>
 
             <div className="filters-bar customer-filters animate-fade-in" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -232,7 +238,7 @@ export const PipelineScreen: React.FC = () => {
                     <Search size={16} className="filter-icon" />
                     <input
                         className="filter-input"
-                        placeholder="Search pipeline..."
+                        placeholder="Search deals, clients, stages..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                     />
@@ -308,10 +314,24 @@ export const PipelineScreen: React.FC = () => {
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, stage.opportunityStageId)}
                         >
-                            <div className="pipeline-column-header">
-                                <h3>{stage.name}</h3>
+                            <div className="pipeline-column-header" style={{ position: 'relative' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                    <h3 style={{ margin: 0, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        {stage.name}
+                                        {stage.isWon && (
+                                            <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(16,185,129,0.18)', color: '#10b981', fontWeight: 700 }}>
+                                                Won
+                                            </span>
+                                        )}
+                                        {stage.isLost && (
+                                            <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(239,68,68,0.18)', color: '#ef4444', fontWeight: 700 }}>
+                                                Lost
+                                            </span>
+                                        )}
+                                    </h3>
+                                </div>
                                 <div className="pipeline-column-stats">
-                                    <span>{stageOpps.length}</span>
+                                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{stageOpps.length}</span>
                                     <span>${stageTotal.toLocaleString()}</span>
                                 </div>
                             </div>
@@ -323,34 +343,45 @@ export const PipelineScreen: React.FC = () => {
                                         onDragStart={(e: React.DragEvent) => handleDragStart(e, opp)}
                                         onDragEnd={handleDragEnd}
                                         onClick={() => handleCardClick(opp.opportunityId)}
-                                        style={{ cursor: 'grab', opacity: draggedOpportunity?.opportunityId === opp.opportunityId ? 0.5 : 1 }}
+                                        style={{ cursor: 'grab', opacity: draggedOpportunity?.opportunityId === opp.opportunityId ? 0.5 : 1, position: 'relative' }}
                                     >
                                         <Card 
                                             className="opportunity-card glass-panel animate-fade-in"
                                             style={{ 
-                                                borderLeft: stage.isWon ? '4px solid #10b981' : stage.isLost ? '4px solid #ef4444' : 'none'
+                                                borderLeft: stage.isWon ? '4px solid #10b981' : stage.isLost ? '4px solid #ef4444' : '4px solid var(--accent-primary)',
+                                                position: 'relative'
                                             }}
                                         >
                                             <Card.Content>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                                    <h4 style={{ margin: 0 }}>{opp.title}</h4>
-                                                    {!stage.isWon && !stage.isLost && (Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / (1000 * 60 * 60 * 24))) > 5 && (
-                                                        <span style={{
-                                                            fontSize: '0.65rem',
-                                                            fontWeight: 700,
-                                                            padding: '0.15rem 0.4rem',
-                                                            borderRadius: '0.3rem',
-                                                            background: 'rgba(239, 68, 68, 0.15)',
-                                                            color: '#ef4444',
-                                                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                                                            whiteSpace: 'nowrap'
-                                                        }}>
-                                                            ⚠️ Stalled ({Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / (1000 * 60 * 60 * 24))}d)
-                                                        </span>
-                                                    )}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{opp.title}</h4>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        {!stage.isWon && !stage.isLost && (Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / (1000 * 60 * 60 * 24))) > 5 && (
+                                                            <span style={{
+                                                                fontSize: '0.65rem',
+                                                                fontWeight: 700,
+                                                                padding: '0.15rem 0.4rem',
+                                                                borderRadius: '0.3rem',
+                                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                                color: '#ef4444',
+                                                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                ⚠️ Stalled
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <p>{opp.customerFirstName} {opp.customerLastName}</p>
-                                                <p className="opportunity-value">${opp.estimatedValue.toLocaleString()}</p>
+
+                                                <p style={{ margin: '0.3rem 0 0.4rem 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                                    {opp.customerFirstName} {opp.customerLastName} {opp.companyName ? `• ${opp.companyName}` : ''}
+                                                </p>
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.4rem 0' }}>
+                                                    <p className="opportunity-value" style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                                                        ${opp.estimatedValue.toLocaleString()}
+                                                    </p>
+                                                </div>
                                                 
                                                 {(() => {
                                                     const closeStatus = getExpectedCloseDateStatus(opp.expectedCloseDate, stage.isWon, stage.isLost);
@@ -386,7 +417,7 @@ export const PipelineScreen: React.FC = () => {
                                 ))}
                                 {stageOpps.length === 0 && (
                                     <div className="empty-column">
-                                        <p>No opportunities</p>
+                                        <p>No deals in this stage</p>
                                     </div>
                                 )}
                             </div>
@@ -414,3 +445,4 @@ export const PipelineScreen: React.FC = () => {
         </Layout>
     );
 };
+

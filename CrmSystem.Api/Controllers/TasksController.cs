@@ -36,10 +36,20 @@ public class TasksController : ControllerBase
         return Ok(await _service.GetCompletedAsync(_currentUser.UserId.Value, take));
     }
 
+    /// <summary>GET /api/tasks/all/completed  — completed tasks for all team members</summary>
+    [HttpGet("all/completed")]
+    public async Task<ActionResult<IReadOnlyList<TaskReadDto>>> GetAllCompleted([FromQuery] int take = 50)
+    {
+        return Ok(await _service.GetCompletedAsync(null, take));
+    }
 
-    /// <summary>GET /api/tasks/assignee/{id}  — grouped tasks for any user (managers)</summary>
+    /// <summary>GET /api/tasks/all  — grouped tasks for all team members</summary>
+    [HttpGet("all")]
+    public async Task<ActionResult<TaskGroupedDto>> GetAllTasks([FromQuery] int? assigneeId = null)
+        => Ok(await _service.GetAllTasksGroupedAsync(assigneeId));
+
+    /// <summary>GET /api/tasks/assignee/{id}  — grouped tasks for any user</summary>
     [HttpGet("assignee/{assigneeId:int}")]
-    [Authorize(Policy = "ManagerOrAbove")]
     public async Task<ActionResult<TaskGroupedDto>> GetByAssignee(int assigneeId)
         => Ok(await _service.GetByAssigneeAsync(assigneeId));
 

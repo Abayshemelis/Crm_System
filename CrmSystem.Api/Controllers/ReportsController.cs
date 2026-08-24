@@ -538,22 +538,24 @@ public class ReportsController : ControllerBase
     }
 
     // ── 11. Invoice Revenue & Financial Report ─────────────────────────────────
+    [HttpGet("invoices")]
     [HttpGet("invoice-revenue")]
     public async Task<IActionResult> GetInvoiceRevenueReport(
         [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
     {
-        var isAdmin = _currentUser.IsAdmin && scope != "personal";
-        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
-        var userId = _currentUser.UserId;
+        var now = DateTime.UtcNow;
         var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
+        
         var query = _db.Invoices
             .Include(i => i.Customer)
-            .Where(i => !i.IsDeleted && !i.Customer.IsDeleted && (isManager || i.CreatedById == userId || i.Customer.AssignedRepId == userId));
+            .Include(i => i.CreatedBy)
+            .Where(i => !i.IsDeleted)
+            .AsQueryable();
 
-        if (startDate.HasValue) query = query.Where(i => i.CreatedAt >= startDate.Value);
-        if (end.HasValue)       query = query.Where(i => i.CreatedAt <= end.Value);
+        if (startDate.HasValue) query = query.Where(i => i.CreatedAt >= startDate.Value || i.DueDate >= startDate.Value);
+        if (end.HasValue)       query = query.Where(i => i.CreatedAt <= end.Value || i.DueDate <= end.Value);
 
-        var invoices = await query.ToListAsync();
+        var invoices = await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
 
         var totalCollected = invoices.Where(i => i.Status == "Paid").Sum(i => (double)i.TotalAmount);
         var totalPending = invoices.Where(i => i.Status != "Paid" && i.Status != "Cancelled").Sum(i => (double)i.TotalAmount);
@@ -562,108 +564,424 @@ public class ReportsController : ControllerBase
 
         var paidCount = invoices.Count(i => i.Status == "Paid");
         var pendingCount = invoices.Count(i => i.Status != "Paid" && i.Status != "Cancelled");
+        var overdueCount = invoices.Count(i => i.Status != "Paid" && i.Status != "Cancelled" && i.DueDate < now);
 
         var byMonth = invoices
             .GroupBy(i => i.CreatedAt.ToString("yyyy-MM"))
             .Select(g => new
             {
-                Month = g.Key,
-                Collected = g.Where(i => i.Status == "Paid").Sum(i => (double)i.TotalAmount),
-                Pending = g.Where(i => i.Status != "Paid" && i.Status != "Cancelled").Sum(i => (double)i.TotalAmount),
-                Count = g.Count()
+                month = g.Key,
+                collected = g.Where(i => i.Status == "Paid").Sum(i => (double)i.TotalAmount),
+                pending = g.Where(i => i.Status != "Paid" && i.Status != "Cancelled").Sum(i => (double)i.TotalAmount),
+                count = g.Count()
             })
-            .OrderBy(x => x.Month)
+            .OrderBy(x => x.month)
             .ToList();
+
+        var monthlyInflow = byMonth.Select(m => new
+        {
+            month = m.month,
+            inflow = m.collected,
+            pending = m.pending,
+            total = m.collected + m.pending
+        }).ToList();
+
+        var byStatus = invoices
+            .GroupBy(i => string.IsNullOrWhiteSpace(i.Status) ? "Draft" : i.Status)
+            .Select(g => new { status = g.Key, count = g.Count(), value = g.Sum(i => (double)i.TotalAmount) })
+            .ToList();
+
+        var items = invoices.Select(i => new
+        {
+            invoiceId = i.InvoiceId,
+            invoiceNumber = i.InvoiceNumber ?? $"INV-{i.InvoiceId:D5}",
+            customerName = i.Customer != null ? $"{i.Customer.FirstName} {i.Customer.LastName}" : "Unknown Customer",
+            customerId = i.CustomerId,
+            totalAmount = (double)i.TotalAmount,
+            status = i.Status ?? "Draft",
+            dueDate = i.DueDate,
+            createdAt = i.CreatedAt,
+            isOverdue = i.Status != "Paid" && i.Status != "Cancelled" && i.DueDate < now
+        }).ToList();
 
         return Ok(new
         {
+            totalInvoiced,
             totalCollected,
             totalPending,
             totalCancelled,
-            totalInvoiced,
             paidCount,
             pendingCount,
-            byMonth
+            overdueCount,
+            byMonth,
+            monthlyInflow,
+            byStatus,
+            items
         });
     }
 
     // ── 12. Contract Analytics Report ──────────────────────────────────────────
     [HttpGet("contracts")]
     public async Task<IActionResult> GetContractsReport(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] string scope = "company",
+        [FromQuery] int? repId = null)
     {
-        var isAdmin = _currentUser.IsAdmin && scope != "personal";
-        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
-        var userId = _currentUser.UserId;
-        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
-        var query = _db.Contracts
-            .Include(c => c.Customer)
-            .Where(c => !c.IsDeleted && !c.Customer.IsDeleted && (isManager || c.CreatedById == userId || c.Customer.AssignedRepId == userId));
-
-        if (startDate.HasValue) query = query.Where(c => c.CreatedAt >= startDate.Value);
-        if (end.HasValue)       query = query.Where(c => c.CreatedAt <= end.Value);
-
-        var contracts = await query.ToListAsync();
         var now = DateTime.UtcNow;
         var in30Days = now.AddDays(30);
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
 
-        var totalCount = contracts.Count;
-        var activeCount = contracts.Count(c => c.Status == "Active" || c.Status == "Signed");
-        var draftCount = contracts.Count(c => c.Status == "Draft" || c.Status == "SentForSignature");
-        var expiringCount = contracts.Count(c => c.EndDate >= now && c.EndDate <= in30Days);
+        var query = _db.Contracts
+            .Include(c => c.Customer)
+                .ThenInclude(cust => cust.AssignedRep)
+            .Include(c => c.Opportunity)
+                .ThenInclude(opp => opp.Owner)
+            .Include(c => c.CreatedBy)
+            .Where(c => !c.IsDeleted)
+            .AsQueryable();
 
-        var totalValue = contracts.Sum(c => (double)c.ContractValue);
-        var activeValue = contracts.Where(c => c.Status == "Active" || c.Status == "Signed").Sum(c => (double)c.ContractValue);
+        if (_currentUser.UserId == null)
+        {
+            return Unauthorized();
+        }
 
-        var byStatus = contracts
-            .GroupBy(c => string.IsNullOrWhiteSpace(c.Status) ? "Draft" : c.Status)
-            .Select(g => new { Status = g.Key, Count = g.Count(), Value = g.Sum(c => (double)c.ContractValue) })
+        var userId = _currentUser.UserId.Value;
+
+        // Role-based visibility for reports:
+        if (!_currentUser.IsAdmin)
+        {
+            if (_currentUser.IsManagerOrAbove)
+            {
+                if (scope == "personal")
+                {
+                    query = query.Where(c =>
+                        c.CreatedById == userId ||
+                        (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                        (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+                    );
+                }
+                else if (repId.HasValue && repId.Value > 0)
+                {
+                    // Manager filtering by a specific managed rep
+                    query = query.Where(c =>
+                        ((c.Customer != null && c.Customer.AssignedRepId == repId.Value) ||
+                         (c.Opportunity != null && c.Opportunity.OwnerId == repId.Value) ||
+                         (c.CreatedById == repId.Value)) &&
+                        ((c.Customer != null && (c.Customer.AssignedRepId == userId || (c.Customer.AssignedRep != null && c.Customer.AssignedRep.ManagerId == userId))) ||
+                         (c.Opportunity != null && (c.Opportunity.OwnerId == userId || (c.Opportunity.Owner != null && c.Opportunity.Owner.ManagerId == userId))) ||
+                         (c.CreatedById == userId))
+                    );
+                }
+                else
+                {
+                    // Manager team view: their own records + their managed reps' records
+                    query = query.Where(c =>
+                        c.CreatedById == userId ||
+                        (c.Customer != null && (c.Customer.AssignedRepId == userId || (c.Customer.AssignedRep != null && c.Customer.AssignedRep.ManagerId == userId))) ||
+                        (c.Opportunity != null && (c.Opportunity.OwnerId == userId || (c.Opportunity.Owner != null && c.Opportunity.Owner.ManagerId == userId)))
+                    );
+                }
+            }
+            else
+            {
+                // SalesRep / Regular user: ONLY see their own contracts in report metrics
+                query = query.Where(c =>
+                    c.CreatedById == userId ||
+                    (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                    (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+                );
+            }
+        }
+        else
+        {
+            // Admin: can toggle scope == "personal" or filter by repId or view all company
+            if (scope == "personal")
+            {
+                query = query.Where(c =>
+                    c.CreatedById == userId ||
+                    (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                    (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+                );
+            }
+            else if (repId.HasValue && repId.Value > 0)
+            {
+                query = query.Where(c =>
+                    (c.Customer != null && c.Customer.AssignedRepId == repId.Value) ||
+                    (c.Opportunity != null && c.Opportunity.OwnerId == repId.Value) ||
+                    (c.CreatedById == repId.Value)
+                );
+            }
+        }
+
+        if (startDate.HasValue) query = query.Where(c => c.CreatedAt >= startDate.Value || c.StartDate >= startDate.Value);
+        if (end.HasValue)       query = query.Where(c => c.CreatedAt <= end.Value || c.EndDate <= end.Value);
+
+        var contracts = await query.OrderByDescending(c => c.CreatedAt).ToListAsync();
+
+        var enriched = contracts.Select(c =>
+        {
+            bool hasCompany = !string.IsNullOrEmpty(c.CompanySignatureDataUrl) || c.CompanySignedAt != null;
+            bool hasCustomer = !string.IsNullOrEmpty(c.CustomerSignatureDataUrl) || !string.IsNullOrEmpty(c.SignatureDataUrl) || c.CustomerSignedAt != null || c.SignedAt != null;
+            bool isSigned = c.Status == "Signed" || c.Status == "Active" || (hasCompany && hasCustomer);
+
+            string displayStatus;
+            string category;
+
+            if (c.Status == "Cancelled" || c.Status == "Terminated")
+            {
+                displayStatus = "Cancelled";
+                category = "Cancelled";
+            }
+            else if (c.Status == "Expired" || (c.EndDate < now && !isSigned))
+            {
+                displayStatus = "Expired";
+                category = "Expired";
+            }
+            else if (isSigned)
+            {
+                displayStatus = c.Status == "Active" ? "Active" : "Signed & Executed";
+                category = "Signed";
+            }
+            else if (c.Status == "PendingCustomer" || (hasCompany && !hasCustomer))
+            {
+                displayStatus = "Partially Signed (Pending Client)";
+                category = "PartiallySigned";
+            }
+            else if (c.Status == "PendingSeller" || (!hasCompany && hasCustomer))
+            {
+                displayStatus = "Partially Signed (Pending Company)";
+                category = "PartiallySigned";
+            }
+            else if (c.Status == "SentForSignature" || c.Status == "Pending" || c.Status == "Awaiting" || c.Status == "Pending Signature")
+            {
+                displayStatus = "Pending Signature";
+                category = "PendingSignature";
+            }
+            else
+            {
+                displayStatus = "Draft";
+                category = "Draft";
+            }
+
+            string signatureProgress = (hasCompany && hasCustomer) ? "2/2 Signed" : (hasCompany || hasCustomer) ? "1/2 Partially Signed" : "0/2 Awaiting Signatures";
+            string ownerName = c.Customer?.AssignedRep?.Name ?? c.CreatedBy?.Name ?? "Unassigned";
+
+            return new
+            {
+                contract = c,
+                hasCompany,
+                hasCustomer,
+                isSigned,
+                displayStatus,
+                category,
+                signatureProgress,
+                ownerName
+            };
+        }).ToList();
+
+        var totalCount = enriched.Count;
+        var signedCount = enriched.Count(x => x.category == "Signed");
+        var partiallySignedCount = enriched.Count(x => x.category == "PartiallySigned");
+        var pendingSignatureCount = enriched.Count(x => x.category == "PendingSignature");
+        var pendingExecutionCount = partiallySignedCount + pendingSignatureCount;
+        var draftCount = enriched.Count(x => x.category == "Draft");
+        var expiringCount = enriched.Count(x => x.contract.EndDate >= now && x.contract.EndDate <= in30Days && x.category != "Cancelled");
+
+        var totalContractValue = enriched.Sum(x => (double)x.contract.ContractValue);
+        var activeValue = enriched.Where(x => x.category == "Signed").Sum(x => (double)x.contract.ContractValue);
+        var partiallySignedValue = enriched.Where(x => x.category == "PartiallySigned").Sum(x => (double)x.contract.ContractValue);
+        var pendingSignatureValue = enriched.Where(x => x.category == "PendingSignature").Sum(x => (double)x.contract.ContractValue);
+        var pendingExecutionValue = partiallySignedValue + pendingSignatureValue;
+        var draftValue = enriched.Where(x => x.category == "Draft").Sum(x => (double)x.contract.ContractValue);
+
+        var signingRate = totalCount > 0 ? Math.Round((double)signedCount / totalCount * 100, 1) : 0.0;
+
+        var byStatus = enriched
+            .GroupBy(x => x.displayStatus)
+            .Select(g => new { status = g.Key, count = g.Count(), value = g.Sum(x => (double)x.contract.ContractValue) })
+            .OrderByDescending(g => g.value)
             .ToList();
 
-        var byMonth = contracts
-            .GroupBy(c => c.CreatedAt.ToString("yyyy-MM"))
+        var byMonth = enriched
+            .GroupBy(x => x.contract.CreatedAt.ToString("yyyy-MM"))
             .Select(g => new
             {
-                Month = g.Key,
-                Count = g.Count(),
-                Value = g.Sum(c => (double)c.ContractValue)
+                month = g.Key,
+                count = g.Count(),
+                value = g.Sum(x => (double)x.contract.ContractValue)
             })
-            .OrderBy(x => x.Month)
+            .OrderBy(x => x.month)
             .ToList();
+
+        var byRep = enriched
+            .GroupBy(x => x.ownerName)
+            .Select(g => new
+            {
+                repName = g.Key,
+                totalContracts = g.Count(),
+                totalValue = g.Sum(x => (double)x.contract.ContractValue),
+                signedContracts = g.Count(x => x.category == "Signed"),
+                activeValue = g.Where(x => x.category == "Signed").Sum(x => (double)x.contract.ContractValue),
+                pendingContracts = g.Count(x => x.category == "PartiallySigned" || x.category == "PendingSignature"),
+                pendingValue = g.Where(x => x.category == "PartiallySigned" || x.category == "PendingSignature").Sum(x => (double)x.contract.ContractValue)
+            })
+            .OrderByDescending(g => g.totalValue)
+            .ToList();
+
+        var items = enriched.Select(x => new
+        {
+            contractId = x.contract.ContractId,
+            title = x.contract.Title,
+            contractNumber = x.contract.ContractNumber ?? $"CTR-{x.contract.ContractId:D5}",
+            customerName = x.contract.Customer != null ? $"{x.contract.Customer.FirstName} {x.contract.Customer.LastName}" : "Unknown Customer",
+            customerId = x.contract.CustomerId,
+            ownerName = x.ownerName,
+            createdByName = x.contract.CreatedBy?.Name ?? "Admin",
+            contractValue = (double)x.contract.ContractValue,
+            status = x.displayStatus,
+            rawStatus = x.contract.Status,
+            category = x.category,
+            hasCompanySignature = x.hasCompany,
+            hasCustomerSignature = x.hasCustomer,
+            signatureProgress = x.signatureProgress,
+            startDate = x.contract.StartDate,
+            endDate = x.contract.EndDate,
+            createdAt = x.contract.CreatedAt
+        }).ToList();
 
         return Ok(new
         {
             totalCount,
-            activeCount,
+            signedContracts = signedCount,
+            activeCount = signedCount,
+            partiallySignedCount,
+            pendingSignatureCount,
+            pendingContracts = pendingExecutionCount,
             draftCount,
             expiringCount,
-            totalValue,
+            totalContractValue,
+            totalValue = totalContractValue,
             activeValue,
+            partiallySignedValue,
+            pendingSignatureValue,
+            pendingValue = pendingExecutionValue,
+            draftValue,
+            signingRate,
             byStatus,
-            byMonth
+            byMonth,
+            byRep,
+            items
         });
     }
 
-    // ── 13. Data Import Activity Report ───────────────────────────────────────
-    [HttpGet("imports")]
-    public async Task<IActionResult> GetImportReport(
-        [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] string scope = "company")
+    // ── 14. Tasks & Execution Activity Report ───────────────────────────────────
+    [HttpGet("tasks")]
+    public async Task<IActionResult> GetTaskReports(
+        [FromQuery] DateTime? startDate,
+        [FromQuery] DateTime? endDate,
+        [FromQuery] string scope = "company",
+        [FromQuery] int? assigneeId = null)
     {
-        var isAdmin = _currentUser.IsAdmin && scope != "personal";
-        var isManager = _currentUser.IsManagerOrAbove && scope != "personal";
-        var userId = _currentUser.UserId;
-        var totalLeadsImported = await _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null) && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep.ManagerId == userId))).CountAsync();
-        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId))).CountAsync();
-        var totalCompanies = await _db.Companies.Where(c => !c.IsDeleted && (isAdmin || c.AssignedRepId == userId || (isManager && c.AssignedRep.ManagerId == userId))).CountAsync();
-        var totalProducts = await _db.Products.CountAsync();
+        var now = DateTime.UtcNow;
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : (DateTime?)null;
+
+        var query = _db.CrmTasks
+            .Include(t => t.CrmTaskStatus)
+            .Include(t => t.Customer)
+            .Include(t => t.Opportunity)
+            .Include(t => t.Lead)
+            .Include(t => t.Activity)
+                .ThenInclude(a => a.ActivityType)
+            .Include(t => t.AssignedTo)
+            .Include(t => t.CreatedBy)
+            .AsQueryable();
+
+        if (assigneeId.HasValue && assigneeId.Value > 0)
+        {
+            query = query.Where(t => t.AssignedToId == assigneeId.Value || (t.CreatedById == assigneeId.Value && t.AssignedToId == null));
+        }
+
+        // Date filter
+        if (startDate.HasValue)
+        {
+            query = query.Where(t => t.CreatedAt >= startDate.Value || (t.DueDate.HasValue && t.DueDate.Value >= startDate.Value));
+        }
+        if (end.HasValue)
+        {
+            query = query.Where(t => t.CreatedAt <= end.Value || (t.DueDate.HasValue && t.DueDate.Value <= end.Value));
+        }
+
+        var allTasks = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
+
+        var total = allTasks.Count;
+        var completed = allTasks.Count(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal);
+        var overdue = allTasks.Count(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate.HasValue && t.DueDate.Value < now);
+        var pending = allTasks.Count(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && (!t.DueDate.HasValue || t.DueDate.Value >= now));
+        var dueToday = allTasks.Count(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate.HasValue && t.DueDate.Value.Date == now.Date);
+
+        var completionRate = total > 0 ? Math.Round((double)completed / total * 100, 1) : 0;
+
+        // Group by Status
+        var byStatus = allTasks
+            .GroupBy(t => t.CrmTaskStatus?.Name ?? "Pending")
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToList();
+
+        // Group by Activity Channel / Type
+        var byType = allTasks
+            .GroupBy(t => t.Activity?.ActivityType?.Name ?? (t.Title.ToLower().Contains("call") ? "Call" : t.Title.ToLower().Contains("email") ? "Email" : t.Title.ToLower().Contains("meeting") ? "Meeting" : "General"))
+            .Select(g => new { Type = g.Key, Count = g.Count() })
+            .OrderByDescending(g => g.Count)
+            .ToList();
+
+        // Group by Assignee
+        var byAssignee = allTasks
+            .GroupBy(t => t.AssignedTo?.Name ?? "Unassigned")
+            .Select(g => new
+            {
+                Assignee = g.Key,
+                Total = g.Count(),
+                Completed = g.Count(t => t.CrmTaskStatus != null && t.CrmTaskStatus.IsTerminal),
+                Overdue = g.Count(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate.HasValue && t.DueDate.Value < now)
+            })
+            .OrderByDescending(g => g.Total)
+            .ToList();
+
+        // Mapped Task Ledger Items
+        var items = allTasks.Select(t => new
+        {
+            crmTaskId = t.CrmTaskId,
+            title = t.Title,
+            description = t.Description,
+            dueDate = t.DueDate,
+            createdAt = t.CreatedAt,
+            statusName = t.CrmTaskStatus?.Name ?? (t.DueDate.HasValue && t.DueDate.Value < now ? "Overdue" : "Pending"),
+            isTerminal = t.CrmTaskStatus?.IsTerminal ?? false,
+            isOverdue = (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate.HasValue && t.DueDate.Value < now,
+            activityTypeName = t.Activity?.ActivityType?.Name ?? "Task",
+            activitySubject = t.Activity?.Subject,
+            assignedToName = t.AssignedTo?.Name ?? "Unassigned",
+            customerName = t.Customer != null ? $"{t.Customer.FirstName} {t.Customer.LastName}" : null,
+            customerId = t.CustomerId,
+            opportunityTitle = t.Opportunity?.Title,
+            opportunityId = t.OpportunityId,
+            leadName = t.Lead != null ? $"{t.Lead.FirstName} {t.Lead.LastName}" : null,
+            leadId = t.LeadId
+        }).ToList();
 
         return Ok(new
         {
-            totalLeadsImported,
-            totalCustomers,
-            totalCompanies,
-            totalProducts,
-            lastImportDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm")
+            total,
+            completed,
+            pending,
+            overdue,
+            dueToday,
+            completionRate,
+            byStatus,
+            byType,
+            byAssignee,
+            items
         });
     }
 }

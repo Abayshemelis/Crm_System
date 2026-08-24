@@ -38,15 +38,69 @@ public class ContractsController : ControllerBase
     public async Task<ActionResult<IEnumerable<ContractReadDto>>> GetAll(
         [FromQuery] int? customerId,
         [FromQuery] int? opportunityId,
-        [FromQuery] string? status)
+        [FromQuery] string? status,
+        [FromQuery] string scope = "company")
     {
         var query = _db.Contracts
             .Where(c => !c.IsDeleted)
             .Include(c => c.Customer)
                 .ThenInclude(cust => cust.Company)
+            .Include(c => c.Customer)
+                .ThenInclude(cust => cust.AssignedRep)
             .Include(c => c.Opportunity)
+                .ThenInclude(opp => opp.Owner)
             .Include(c => c.CreatedBy)
             .AsQueryable();
+
+        if (_currentUser.UserId == null)
+        {
+            return Unauthorized();
+        }
+
+        var userId = _currentUser.UserId.Value;
+
+        // Role-based authorization & visibility:
+        if (!_currentUser.IsAdmin)
+        {
+            if (_currentUser.IsManagerOrAbove)
+            {
+                if (scope == "personal")
+                {
+                    query = query.Where(c =>
+                        c.CreatedById == userId ||
+                        (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                        (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+                    );
+                }
+                else
+                {
+                    // Managers see their own contracts + contracts of sales reps they manage
+                    query = query.Where(c =>
+                        c.CreatedById == userId ||
+                        (c.Customer != null && (c.Customer.AssignedRepId == userId || (c.Customer.AssignedRep != null && c.Customer.AssignedRep.ManagerId == userId))) ||
+                        (c.Opportunity != null && (c.Opportunity.OwnerId == userId || (c.Opportunity.Owner != null && c.Opportunity.Owner.ManagerId == userId)))
+                    );
+                }
+            }
+            else
+            {
+                // Sales Representatives strictly see ONLY contracts they created or are assigned to
+                query = query.Where(c =>
+                    c.CreatedById == userId ||
+                    (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                    (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+                );
+            }
+        }
+        else if (scope == "personal")
+        {
+            // Admin explicitly viewing "My Contracts"
+            query = query.Where(c =>
+                c.CreatedById == userId ||
+                (c.Customer != null && c.Customer.AssignedRepId == userId) ||
+                (c.Opportunity != null && c.Opportunity.OwnerId == userId)
+            );
+        }
 
         if (customerId.HasValue)
             query = query.Where(c => c.CustomerId == customerId.Value);

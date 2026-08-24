@@ -95,7 +95,7 @@ interface ImportReportData {
   lastImportDate: string;
 }
 
-type Section = 'overview' | 'invoices' | 'contracts' | 'pipeline' | 'winrate' | 'velocity' | 'sources' | 'repperf' | 'funnel' | 'activity' | 'priority' | 'import';
+type Section = 'overview' | 'invoices' | 'contracts' | 'pipeline' | 'winrate' | 'velocity' | 'sources' | 'repperf' | 'funnel' | 'activity' | 'priority';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4'];
@@ -738,7 +738,7 @@ const NAV_ITEMS: NavItem[] = [
   { id:'sources',   label:'Acquisition Channels',shortLabel: 'Channels',  icon:<Users size={15}/>,        group:'Leads',      desc: 'Lead generation attribution, channel breakdown, and marketing source ROI', color: '#14b8a6' },
   { id:'priority',  label:'Priority & SLA Health',shortLabel: 'SLA Health',icon:<ShieldAlert size={15}/>, group:'Leads',     desc: 'Lead tier distribution, urgent follow-up deadlines, and SLA execution rate', color: '#ef4444' },
   { id:'activity',  label:'Task & Activity Log', shortLabel: 'Activity',  icon:<Activity size={15}/>,     group:'Execution',  desc: 'Calls, meetings, emails, task completion rates, and team workload', color: '#84cc16' },
-  { id:'import',    label:'Data Import History', shortLabel: 'Imports',   icon:<UploadCloud size={15}/>,  group:'Execution',  desc: 'Data import history, batch logs, record counts, and data sync audit', color: '#64748b' },
+
 ];
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
@@ -759,7 +759,7 @@ export const ReportsScreen: React.FC = () => {
   const getInitialSection = (): Section => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') || params.get('section');
-    if (tab && ['overview', 'invoices', 'contracts', 'pipeline', 'winrate', 'velocity', 'repperf', 'funnel', 'sources', 'priority', 'activity', 'import'].includes(tab)) {
+    if (tab && ['overview', 'invoices', 'contracts', 'pipeline', 'winrate', 'velocity', 'repperf', 'funnel', 'sources', 'priority', 'activity'].includes(tab)) {
       return tab as Section;
     }
     return 'overview';
@@ -815,7 +815,7 @@ export const ReportsScreen: React.FC = () => {
   const [slaHealth,    setSlaHealth]    = useState<FollowUpSlaData | null>(null);
   const [invoiceReport, setInvoiceReport] = useState<InvoiceReportData | null>(null);
   const [contractReport, setContractReport] = useState<ContractReportData | null>(null);
-  const [importReport, setImportReport] = useState<ImportReportData | null>(null);
+
 
   // Pipeline Stage Analysis interactive state
   const [pipeViewMode, setPipeViewMode] = useState<'visual' | 'cards' | 'table'>('visual');
@@ -910,7 +910,7 @@ export const ReportsScreen: React.FC = () => {
     setLoading(true);
     try {
       const q = `?startDate=${s}&endDate=${e}&scope=${dataScope}`;
-      const [pipe, win, time, src, ov, rep, fn, act, pri, sla, invRep, cntRep, impRep] = await Promise.all([
+      const [pipe, win, time, src, ov, rep, fn, act, pri, sla, invRep, cntRep] = await Promise.all([
         api.get<PipelineItem[]>(`/api/reports/pipeline-by-stage${q}`),
         api.get<{ overallWinRate: number; byMonth: WinRateItem[] }>(`/api/reports/win-rate${q}`),
         api.get<TimeItem[]>(`/api/reports/time-per-stage${q}`),
@@ -923,7 +923,7 @@ export const ReportsScreen: React.FC = () => {
         api.get<FollowUpSlaData>(`/api/reports/followup-sla${q}`),
         api.get<InvoiceReportData>(`/api/reports/invoice-revenue${q}`).catch(() => null),
         api.get<ContractReportData>(`/api/reports/contracts${q}`).catch(() => null),
-        api.get<ImportReportData>(`/api/reports/imports${q}`).catch(() => null),
+
       ]);
       setPipelineData((pipe as any) ?? []);
       setWinRateData(((win as any)?.byMonth) ?? []);
@@ -938,7 +938,7 @@ export const ReportsScreen: React.FC = () => {
       setSlaHealth((sla as any) ?? null);
       setInvoiceReport((invRep as any) ?? null);
       setContractReport((cntRep as any) ?? null);
-      setImportReport((impRep as any) ?? null);
+
     } catch (err) {
       console.error('Failed to load report data', err);
     } finally {
@@ -958,7 +958,7 @@ export const ReportsScreen: React.FC = () => {
     switch (section) {
       case 'invoices': return { data: invoiceReport?.byMonth || [], name: 'invoice_revenue_report', title: 'Invoice Revenue & Financial Report' };
       case 'contracts': return { data: contractReport?.byStatus || [], name: 'contract_analytics_report', title: 'Contract Analytics Report' };
-      case 'import': return { data: importReport ? [importReport] : [], name: 'data_import_history_report', title: 'Data Import History Report' };
+
       case 'pipeline': return { data: pipelineData, name: 'pipeline_stage_analysis', title: 'Pipeline Stage Analysis' };
       case 'winrate': return { data: winRateData, name: 'win_rate_trends', title: 'Win Rate Trends' };
       case 'velocity': return { data: timeData, name: 'sales_velocity', title: 'Sales Velocity (Time in Stage)' };
@@ -1069,7 +1069,7 @@ export const ReportsScreen: React.FC = () => {
               </optgroup>
               <optgroup label="Execution & Logs">
                 <option value="activity">📋 Task & Activity Log</option>
-                <option value="import">📦 Data Import History</option>
+
               </optgroup>
             </select>
             <ChevronDown size={18} className="rpt-mobile-select-chevron" />
@@ -1260,105 +1260,6 @@ export const ReportsScreen: React.FC = () => {
               </div>
             )}
 
-            {/* ── DATA IMPORT HISTORY REPORT ── */}
-            {section === 'import' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Data Import Audit & Ingestion Capacity</h2>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '1rem', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.2)' }}>Bulk Ingestion Scope</span>
-                    </div>
-                    <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                      Record counts across system entities imported via CSV & PDF bulk uploads
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rpt-kpi-grid">
-                  <StatCard
-                    label="Total Prospects / Leads"
-                    value={importReport ? fmtNum(importReport.totalLeadsImported) : '0'}
-                    sub="Leads stored in database"
-                    icon={<Target size={18} />}
-                    color="#6366f1"
-                    loading={loading}
-                  />
-                  <StatCard
-                    label="Total Customers"
-                    value={importReport ? fmtNum(importReport.totalCustomers) : '0'}
-                    sub="Active customer contacts"
-                    icon={<Users size={18} />}
-                    color="#10b981"
-                    loading={loading}
-                  />
-                  <StatCard
-                    label="Total Companies"
-                    value={importReport ? fmtNum(importReport.totalCompanies) : '0'}
-                    sub="Account records in database"
-                    icon={<Layers size={18} />}
-                    color="#3b82f6"
-                    loading={loading}
-                  />
-                  <StatCard
-                    label="Total Catalog Products"
-                    value={importReport ? fmtNum(importReport.totalProducts) : '0'}
-                    sub="Catalog product items"
-                    icon={<UploadCloud size={18} />}
-                    color="#8b5cf6"
-                    loading={loading}
-                  />
-                </div>
-
-                {/* Entity Distribution Bar Chart */}
-                {importReport && (
-                  <div className="rpt-card">
-                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 700 }}>Database Record Volume by Entity</h3>
-                    <div style={{ height: '220px', width: '100%', marginBottom: '1.5rem' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={[
-                            { entity: 'Leads', count: importReport.totalLeadsImported, fill: '#4338ca' },
-                            { entity: 'Customers', count: importReport.totalCustomers, fill: '#059669' },
-                            { entity: 'Companies', count: importReport.totalCompanies, fill: '#2563eb' },
-                            { entity: 'Products', count: importReport.totalProducts, fill: '#7c3aed' },
-                          ]}
-                          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                          <XAxis dataKey="entity" tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
-                          <YAxis tick={{ fill: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }} axisLine={{ stroke: 'var(--border-color)' }} tickLine={false} />
-                          <Tooltip formatter={(v: any) => [fmtNum(Number(v)), 'Total Records']} contentStyle={{ background: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', color: '#ffffff', fontWeight: 700 }} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff', fontWeight: 800 }} />
-                          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                            {[
-                              { entity: 'Leads', count: importReport.totalLeadsImported, fill: '#6366f1' },
-                              { entity: 'Customers', count: importReport.totalCustomers, fill: '#10b981' },
-                              { entity: 'Companies', count: importReport.totalCompanies, fill: '#3b82f6' },
-                              { entity: 'Products', count: importReport.totalProducts, fill: '#8b5cf6' },
-                            ].map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-                      <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--bg-hover)', border: '1px solid var(--border-color)' }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Supported Formats</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.35rem', color: 'var(--text-primary)' }}>CSV & PDF Files</div>
-                        <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>● Header Parser Enabled</span>
-                      </div>
-                      <div style={{ padding: '1rem', borderRadius: '0.75rem', background: 'var(--bg-hover)', border: '1px solid var(--border-color)' }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Audit Telemetry</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '0.35rem', color: 'var(--text-primary)' }}>System Logged</div>
-                        <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600 }}>● Audit Trail Active</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* ── INVOICE REVENUE & FINANCIAL REPORT (EXECUTIVE BILLING HUB) ── */}
             {section === 'invoices' && (
@@ -1670,29 +1571,7 @@ export const ReportsScreen: React.FC = () => {
                     </div>
                   </div>
 
-                  <div
-                    onClick={() => setSection('import')}
-                    style={{
-                      padding: '1.1rem 1.25rem', borderRadius: '0.85rem', background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%)',
-                      border: '1px solid rgba(139, 92, 246, 0.3)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#8b5cf6', letterSpacing: '0.05em' }}>DATA TELEMETRY</span>
-                        <UploadCloud size={16} style={{ color: '#8b5cf6' }} />
-                      </div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, margin: '0.4rem 0 0.2rem 0', color: 'var(--text-primary)' }}>Data Import History</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        Leads: <strong>{importReport?.totalLeadsImported ?? 0}</strong> | Customers: <strong>{importReport?.totalCustomers ?? 0}</strong>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.85rem', fontSize: '0.8rem', fontWeight: 700, color: '#8b5cf6' }}>
-                      View Ingestion History <ChevronRight size={14} />
-                    </div>
-                  </div>
+
                 </div>
 
                 {/* Row 1: Executive KPI Stat Cards */}
