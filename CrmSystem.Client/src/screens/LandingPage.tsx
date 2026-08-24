@@ -23,7 +23,7 @@ export const LandingPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [contactForm, setContactForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [isCursorActive, setIsCursorActive] = useState(false);
@@ -180,7 +180,7 @@ export const LandingPage: React.FC = () => {
       setDashboardData(data);
       setTimeout(() => {
         setFormSubmitted(false);
-        setContactForm({ name: '', email: '', subject: '', message: '' });
+        setContactForm({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
       }, 4000);
     } catch (err) {
       console.error('Failed to submit contact message:', err);
@@ -188,7 +188,7 @@ export const LandingPage: React.FC = () => {
       setFormSubmitted(true);
       setTimeout(() => {
         setFormSubmitted(false);
-        setContactForm({ name: '', email: '', subject: '', message: '' });
+        setContactForm({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
       }, 4000);
     }
   };
@@ -784,27 +784,50 @@ export const LandingPage: React.FC = () => {
             <p>Direct backend metric synchronization delivering accuracy for executives and sales leads.</p>
           </div>
 
-          {/* Analytics Live KPI Cards */}
-          <div className="stats-grid" style={{ marginBottom: '2.5rem' }}>
-            <div className="stat-card glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-              <Users size={26} style={{ color: 'var(--accent)', marginBottom: '0.35rem' }} />
-              <div className="stat-number" style={{ fontSize: '2rem', fontWeight: 800 }}>{isLoading ? '...' : dashboardData?.totalCustomers ?? 0}</div>
-              <div className="stat-label" style={{ color: 'var(--fg-muted)', fontSize: '0.85rem' }}>Total Customers</div>
+          {/* Analytics Live KPI Cards - Compact UI-Friendly Grid */}
+          <div className="landing-analytics-kpi-grid">
+            <div className="landing-kpi-card glass-panel">
+              <div className="landing-kpi-top">
+                <div className="landing-kpi-icon-box accent">
+                  <Users size={18} />
+                </div>
+                <span className="landing-kpi-badge green">+14% MoM</span>
+              </div>
+              <div className="landing-kpi-number">{isLoading ? '...' : (dashboardData?.totalCustomers ?? 0).toLocaleString()}</div>
+              <div className="landing-kpi-label">Total Customers</div>
             </div>
-            <div className="stat-card glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-              <Target size={26} style={{ color: '#3b82f6', marginBottom: '0.35rem' }} />
-              <div className="stat-number" style={{ fontSize: '2rem', fontWeight: 800 }}>{isLoading ? '...' : dashboardData?.totalLeads ?? 0}</div>
-              <div className="stat-label" style={{ color: 'var(--fg-muted)', fontSize: '0.85rem' }}>Active Leads</div>
+
+            <div className="landing-kpi-card glass-panel">
+              <div className="landing-kpi-top">
+                <div className="landing-kpi-icon-box blue">
+                  <Target size={18} />
+                </div>
+                <span className="landing-kpi-badge blue">Active</span>
+              </div>
+              <div className="landing-kpi-number">{isLoading ? '...' : (dashboardData?.totalLeads ?? 0).toLocaleString()}</div>
+              <div className="landing-kpi-label">Managed Leads</div>
             </div>
-            <div className="stat-card glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-              <DollarSign size={26} style={{ color: '#10b981', marginBottom: '0.35rem' }} />
-              <div className="stat-number" style={{ fontSize: '2rem', fontWeight: 800 }}>{isLoading ? '...' : `$${Math.round((dashboardData?.totalRevenue ?? 0) / 1000)}K`}</div>
-              <div className="stat-label" style={{ color: 'var(--fg-muted)', fontSize: '0.85rem' }}>Won Revenue</div>
+
+            <div className="landing-kpi-card glass-panel">
+              <div className="landing-kpi-top">
+                <div className="landing-kpi-icon-box emerald">
+                  <DollarSign size={18} />
+                </div>
+                <span className="landing-kpi-badge emerald">Won</span>
+              </div>
+              <div className="landing-kpi-number">{isLoading ? '...' : `$${Math.round((dashboardData?.totalRevenue ?? 0) / 1000)}K`}</div>
+              <div className="landing-kpi-label">Closed Revenue</div>
             </div>
-            <div className="stat-card glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
-              <TrendingUp size={26} style={{ color: '#f59e0b', marginBottom: '0.35rem' }} />
-              <div className="stat-number" style={{ fontSize: '2rem', fontWeight: 800 }}>{isLoading ? '...' : `${dashboardData?.winRate ?? 94.2}%`}</div>
-              <div className="stat-label" style={{ color: 'var(--fg-muted)', fontSize: '0.85rem' }}>Win Rate</div>
+
+            <div className="landing-kpi-card glass-panel">
+              <div className="landing-kpi-top">
+                <div className="landing-kpi-icon-box amber">
+                  <TrendingUp size={18} />
+                </div>
+                <span className="landing-kpi-badge amber">High</span>
+              </div>
+              <div className="landing-kpi-number">{isLoading ? '...' : `${dashboardData?.winRate ?? 94.2}%`}</div>
+              <div className="landing-kpi-label">Conversion Rate</div>
             </div>
           </div>
 
@@ -893,32 +916,63 @@ export const LandingPage: React.FC = () => {
           <div className="section-header">
             <span className="section-pill">Get In Touch</span>
             <h2>Contact Sales & Support</h2>
+            <p>Have questions about features, pricing, or custom deployment? We are here to help.</p>
           </div>
 
           <div className="contact-grid">
+            {/* Contact Information Card */}
             <div className="glass-panel contact-card">
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>Contact Information</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Mail size={18} className="contact-icon" />
-                  <span>abayshemelisshiferaw@gmail.com</span>
+              <h3 className="contact-card-title">Contact Information</h3>
+              <p className="contact-card-subtitle">Reach out directly via email, phone, or our social channels.</p>
+              
+              <div className="contact-info-list">
+                <div className="contact-info-item">
+                  <div className="contact-info-icon-wrapper">
+                    <Mail size={18} className="contact-icon" />
+                  </div>
+                  <div className="contact-info-content">
+                    <span className="contact-info-label">Email</span>
+                    <a href="mailto:abayshemelisshiferaw@gmail.com" className="contact-info-value" title="abayshemelisshiferaw@gmail.com">
+                      abayshemelisshiferaw@gmail.com
+                    </a>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Phone size={18} className="contact-icon" />
-                  <span>+251909861075</span>
+
+                <div className="contact-info-item">
+                  <div className="contact-info-icon-wrapper">
+                    <Phone size={18} className="contact-icon" />
+                  </div>
+                  <div className="contact-info-content">
+                    <span className="contact-info-label">Direct Phone</span>
+                    <a href="tel:+251909861075" className="contact-info-value">
+                      +251 909 861 075
+                    </a>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <MapPin size={18} className="contact-icon" />
-                  <span>Hawassa, Ethiopia</span>
+
+                <div className="contact-info-item">
+                  <div className="contact-info-icon-wrapper">
+                    <MapPin size={18} className="contact-icon" />
+                  </div>
+                  <div className="contact-info-content">
+                    <span className="contact-info-label">Location</span>
+                    <span className="contact-info-value">Hawassa, Ethiopia</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Clock size={18} className="contact-icon" />
-                  <span>Mon – Fri, 2:30 AM – 11:00 PM </span>
+
+                <div className="contact-info-item">
+                  <div className="contact-info-icon-wrapper">
+                    <Clock size={18} className="contact-icon" />
+                  </div>
+                  <div className="contact-info-content">
+                    <span className="contact-info-label">Working Hours</span>
+                    <span className="contact-info-value">Mon – Fri, 8:30 AM – 5:30 PM (EAT)</span>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ borderTop: '1px solid var(--card-border)', paddingTop: '1.25rem' }}>
-                <h4 className="connect-heading" style={{ fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Connect With Us</h4>
+              <div className="contact-social-section">
+                <h4 className="connect-heading">Connect With Us</h4>
                 <div className="social-links-grid">
                   <a href="https://www.linkedin.com/in/amazi" target="_blank" rel="noopener noreferrer" className="social-btn" title="LinkedIn">
                     <Linkedin size={16} />
@@ -936,49 +990,104 @@ export const LandingPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Interactive Contact Form Card */}
             <div className="glass-panel contact-card">
+              <h3 className="contact-card-title">Send Us a Message</h3>
+              <p className="contact-card-subtitle">Fill out the details below and our team will get back to you promptly.</p>
+              
               {formSubmitted ? (
                 <div className="form-success">
                   <CheckCircle2 size={48} />
-                  <h3>Message Sent!</h3>
-                  <p>Thank you for reaching out. Our team will respond shortly.</p>
+                  <h3>Message Sent Successfully!</h3>
+                  <p>Thank you for reaching out. Our team has received your inquiry and will follow up shortly.</p>
                 </div>
               ) : (
-                <form onSubmit={handleContactSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <input
-                    type="text"
-                    placeholder="Your Name"
-                    className="input-field"
-                    value={contactForm.name}
-                    onChange={e => setContactForm({ ...contactForm, name: e.target.value })}
-                    required
-                  />
-                  <input
-                    type="email"
-                    placeholder="Your Email"
-                    className="input-field"
-                    value={contactForm.email}
-                    onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
-                    required
-                  />
-                  <input
-                    type="text"
-                    placeholder="Subject"
-                    className="input-field"
-                    value={contactForm.subject}
-                    onChange={e => setContactForm({ ...contactForm, subject: e.target.value })}
-                    required
-                  />
-                  <textarea
-                    placeholder="Your Message"
-                    rows={4}
-                    className="input-field"
-                    value={contactForm.message}
-                    onChange={e => setContactForm({ ...contactForm, message: e.target.value })}
-                    required
-                  />
-                  <button type="submit" className="btn-primary" style={{ justifyContent: 'center' }}>
-                    Send Message
+                <form onSubmit={handleContactSubmit} className="contact-form-layout">
+                  {/* Row 1: Name & Email */}
+                  <div className="contact-form-row">
+                    <div className="contact-form-field">
+                      <label className="contact-field-label">Full Name *</label>
+                      <input
+                        type="text"
+                        placeholder="John Doe"
+                        className="input-field contact-input"
+                        value={contactForm.name}
+                        onChange={e => setContactForm({ ...contactForm, name: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="contact-form-field">
+                      <label className="contact-field-label">Email Address *</label>
+                      <input
+                        type="email"
+                        placeholder="john@example.com"
+                        className="input-field contact-input"
+                        value={contactForm.email}
+                        onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 2: Phone & Source */}
+                  <div className="contact-form-row">
+                    <div className="contact-form-field">
+                      <label className="contact-field-label">Phone Number</label>
+                      <input
+                        type="tel"
+                        placeholder="+251 900 000 000"
+                        className="input-field contact-input"
+                        value={contactForm.phone}
+                        onChange={e => setContactForm({ ...contactForm, phone: e.target.value })}
+                      />
+                    </div>
+                    <div className="contact-form-field">
+                      <label className="contact-field-label">Lead Source *</label>
+                      <select
+                        className="input-field contact-select"
+                        value={contactForm.source}
+                        onChange={e => setContactForm({ ...contactForm, source: e.target.value })}
+                        required
+                      >
+                        <option value="Google Search">Google Search</option>
+                        <option value="LinkedIn">LinkedIn</option>
+                        <option value="Telegram">Telegram / Social Media</option>
+                        <option value="Referral">Colleague / Referral</option>
+                        <option value="Direct Website">Direct Website</option>
+                        <option value="Event / Webinar">Event / Webinar</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 3: Subject */}
+                  <div className="contact-form-field">
+                    <label className="contact-field-label">Subject *</label>
+                    <input
+                      type="text"
+                      placeholder="Inquiry regarding CRM features, pricing, or custom setup..."
+                      className="input-field contact-input"
+                      value={contactForm.subject}
+                      onChange={e => setContactForm({ ...contactForm, subject: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  {/* Row 4: Message */}
+                  <div className="contact-form-field">
+                    <label className="contact-field-label">Message *</label>
+                    <textarea
+                      placeholder="Please share any specific requirements, team size, or questions you have..."
+                      rows={4}
+                      className="input-field contact-textarea"
+                      value={contactForm.message}
+                      onChange={e => setContactForm({ ...contactForm, message: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="btn-primary contact-submit-btn">
+                    <Send size={16} /> Send Message
                   </button>
                 </form>
               )}

@@ -144,6 +144,8 @@ public class DashboardController : ControllerBase
     {
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Source { get; set; }
         public string Subject { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
     }
@@ -158,7 +160,13 @@ public class DashboardController : ControllerBase
         }
 
         var defaultStatus = await _db.LeadStatuses.FirstOrDefaultAsync(s => s.Name == "New");
-        var websiteSource = await _db.Sources.FirstOrDefaultAsync(s => s.Name == "Website");
+        
+        Source? matchedSource = null;
+        if (!string.IsNullOrWhiteSpace(dto.Source))
+        {
+            matchedSource = await _db.Sources.FirstOrDefaultAsync(s => s.Name.ToLower() == dto.Source.Trim().ToLower());
+        }
+        matchedSource ??= await _db.Sources.FirstOrDefaultAsync(s => s.Name == "Website");
 
         var names = dto.Name.Trim().Split(' ', 2);
         var firstName = names[0];
@@ -169,10 +177,11 @@ public class DashboardController : ControllerBase
             FirstName = firstName,
             LastName = lastName,
             Email = dto.Email.Trim(),
+            Phone = !string.IsNullOrWhiteSpace(dto.Phone) ? dto.Phone.Trim() : null,
             CompanyName = !string.IsNullOrWhiteSpace(dto.Subject) ? dto.Subject.Trim() : "Website Contact Form",
             LeadStatusId = defaultStatus?.LeadStatusId,
-            SourceId = websiteSource?.SourceId,
-            Notes = $"[Website Contact Form Inquiry]\nSubject: {dto.Subject}\n\nMessage:\n{dto.Message}",
+            SourceId = matchedSource?.SourceId,
+            Notes = $"[Website Contact Form Inquiry]\nSubject: {dto.Subject}\nPhone: {dto.Phone ?? "N/A"}\nSource: {dto.Source ?? "Website"}\n\nMessage:\n{dto.Message}",
             CreatedAt = DateTime.UtcNow
         };
 
