@@ -274,5 +274,6 @@ export function initTheme() {
     }
   } catch { /* ignore */ }
 
-  applyThemePreset(ATTRACTIVE_THEMES[0]);
+  const defaultLightPreset = ATTRACTIVE_THEMES.find(t => t.id === 'clean-enterprise') || ATTRACTIVE_THEMES[0];
+  applyThemePreset(defaultLightPreset);
 }

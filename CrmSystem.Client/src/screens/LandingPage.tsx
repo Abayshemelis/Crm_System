@@ -62,10 +62,9 @@ export const LandingPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Check localStorage first, then system preference
+    // Check localStorage - default to white/light theme unless explicitly saved as 'dark'
     const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldUseDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+    const shouldUseDark = savedTheme === 'dark';
     setIsDarkMode(shouldUseDark);
     document.documentElement.setAttribute('data-theme', shouldUseDark ? 'dark' : 'light');
 
