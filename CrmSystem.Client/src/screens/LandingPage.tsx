@@ -9,7 +9,8 @@ import {
   Activity, Shield, DollarSign, Award, Layers, HelpCircle,
   CheckCircle2, AlertCircle, FileText, Check, Zap,
   TrendingUp, Linkedin, Instagram, Send,
-  Sparkles, FileSignature, CreditCard, Sliders, History
+  Sparkles, FileSignature, CreditCard, Sliders, History,
+  Home, Info, Briefcase, LogIn
 } from 'lucide-react';
 import { AuthLoginForm } from '../components/auth/AuthLoginForm';
 import { PublicAiAssistant } from '../components/ai/PublicAiAssistant';
@@ -63,7 +64,7 @@ export const LandingPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [user, navigate]);
 
-  // Lock background body scroll when mobile navigation menu is open
+  // Lock background body scroll and listen for Escape key when mobile navigation menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -74,10 +75,19 @@ export const LandingPage: React.FC = () => {
       document.body.style.touchAction = '';
       document.documentElement.style.overflow = '';
     }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
       document.documentElement.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [mobileMenuOpen]);
 
@@ -333,51 +343,158 @@ export const LandingPage: React.FC = () => {
   return (
     <div className={`landing-page ${isDarkMode ? 'dark' : 'light'}`}>
       {/* Navigation Bar */}
-      <nav className={`landing-nav ${isScrolled ? 'scrolled' : ''} ${mobileMenuOpen ? 'menu-open' : ''}`}>
+      <nav className={`landing-nav ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <div className="nav-logo" onClick={() => scrollToSection('home')} style={{ cursor: 'pointer' }}>
             <span className="logo-icon">CRM</span>
             <span className="logo-text">System</span>
           </div>
 
-          <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="#home" onClick={() => { setMobileMenuOpen(false); scrollToSection('home'); }}>Home</a>
-            <a href="#about" onClick={() => { setMobileMenuOpen(false); scrollToSection('about'); }}>About</a>
-            <a href="#services" onClick={() => { setMobileMenuOpen(false); scrollToSection('services'); }}>Services</a>
-            <a href="#features" onClick={() => { setMobileMenuOpen(false); scrollToSection('features'); }}>Features</a>
-            <a href="#analytics" onClick={() => { setMobileMenuOpen(false); scrollToSection('analytics'); }}>Analytics</a>
-            <a href="#contact" onClick={() => { setMobileMenuOpen(false); scrollToSection('contact'); }}>Contact</a>
-            <div className="mobile-nav-actions">
-              <button className="btn-secondary" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}>
-                Login
-              </button>
-              <button className="btn-primary" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}>
-                Get Started <ArrowRight size={16} />
-              </button>
-            </div>
+          {/* Desktop Navigation Links */}
+          <div className="nav-links desktop-only">
+            <a href="#home" onClick={(e) => { e.preventDefault(); scrollToSection('home'); }}>Home</a>
+            <a href="#about" onClick={(e) => { e.preventDefault(); scrollToSection('about'); }}>About</a>
+            <a href="#services" onClick={(e) => { e.preventDefault(); scrollToSection('services'); }}>Services</a>
+            <a href="#features" onClick={(e) => { e.preventDefault(); scrollToSection('features'); }}>Features</a>
+            <a href="#analytics" onClick={(e) => { e.preventDefault(); scrollToSection('analytics'); }}>Analytics</a>
+            <a href="#contact" onClick={(e) => { e.preventDefault(); scrollToSection('contact'); }}>Contact</a>
           </div>
 
           <div className="nav-actions">
-            <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+            <button className="theme-toggle desktop-only" onClick={toggleTheme} aria-label="Toggle theme">
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <button className="btn-secondary" onClick={() => navigate('/login')}>
+            <button className="btn-secondary desktop-only" onClick={() => navigate('/login')}>
               Login
             </button>
-            <button className="btn-primary" onClick={() => navigate('/login')}>
+            <button className="btn-primary desktop-only" onClick={() => navigate('/login')}>
               Get Started
             </button>
-            <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Open navigation menu">
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            <button 
+              className="mobile-menu-btn" 
+              onClick={() => setMobileMenuOpen(true)} 
+              aria-label="Open navigation sidebar"
+              aria-expanded={mobileMenuOpen}
+            >
+              <Menu size={24} />
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Mobile Menu Dim Backdrop */}
-      {mobileMenuOpen && (
-        <div className="mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} />
-      )}
+      {/* Mobile Menu Backdrop (Tap outside sidebar to close) */}
+      <div 
+        className={`mobile-menu-backdrop ${mobileMenuOpen ? 'open' : ''}`} 
+        onClick={() => setMobileMenuOpen(false)} 
+        aria-hidden={!mobileMenuOpen}
+      />
+
+      {/* Mobile Navigation Sidebar Drawer */}
+      <aside 
+        className={`mobile-sidebar-drawer ${mobileMenuOpen ? 'open' : ''}`}
+        aria-label="Mobile Navigation Sidebar"
+        aria-hidden={!mobileMenuOpen}
+      >
+        {/* Sidebar Top Header */}
+        <div className="mobile-sidebar-header">
+          <div className="nav-logo" onClick={() => { setMobileMenuOpen(false); scrollToSection('home'); }} style={{ cursor: 'pointer' }}>
+            <span className="logo-icon">CRM</span>
+            <span className="logo-text">System</span>
+          </div>
+          <button 
+            className="mobile-sidebar-close-btn" 
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation sidebar"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Sidebar Nav Links with Icons */}
+        <nav className="mobile-sidebar-nav">
+          <a 
+            href="#home" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('home'); }}
+          >
+            <Home size={18} className="sidebar-link-icon" />
+            <span>Home</span>
+          </a>
+          <a 
+            href="#about" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('about'); }}
+          >
+            <Info size={18} className="sidebar-link-icon" />
+            <span>About</span>
+          </a>
+          <a 
+            href="#services" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('services'); }}
+          >
+            <Briefcase size={18} className="sidebar-link-icon" />
+            <span>Services</span>
+          </a>
+          <a 
+            href="#features" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('features'); }}
+          >
+            <Zap size={18} className="sidebar-link-icon" />
+            <span>Features</span>
+          </a>
+          <a 
+            href="#analytics" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('analytics'); }}
+          >
+            <BarChart3 size={18} className="sidebar-link-icon" />
+            <span>Analytics</span>
+          </a>
+          <a 
+            href="#contact" 
+            className="mobile-sidebar-link"
+            onClick={(e) => { e.preventDefault(); scrollToSection('contact'); }}
+          >
+            <Mail size={18} className="sidebar-link-icon" />
+            <span>Contact</span>
+          </a>
+        </nav>
+
+        {/* Sidebar Footer Theme Toggle & Actions */}
+        <div className="mobile-sidebar-footer">
+          <div className="mobile-sidebar-theme-row">
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--fg-muted)' }}>Theme</span>
+            <button className="theme-toggle-sidebar" onClick={toggleTheme} aria-label="Toggle theme">
+              {isDarkMode ? (
+                <>
+                  <Sun size={16} /> <span>Light Mode</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={16} /> <span>Dark Mode</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="mobile-sidebar-actions">
+            <button 
+              className="btn-secondary mobile-sidebar-btn" 
+              onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
+            >
+              <LogIn size={16} /> Login
+            </button>
+            <button 
+              className="btn-primary mobile-sidebar-btn" 
+              onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
+            >
+              Get Started <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </aside>
 
       {/* 1. Hero Section (#home) */}
       <section id="home" className="hero-section" ref={setHeroRef}>

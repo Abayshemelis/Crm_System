@@ -582,37 +582,85 @@
 
 /* ── Mobile Viewports (320px – 767px) ── */
 @media (max-width: 767px) {
+  .auth-50split-container {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+    padding: 1.5rem 1rem;
+    box-sizing: border-box;
+  }
+
   .auth-left-panel {
     display: none; /* Hide left showcase hero on mobile to prioritize instant login access */
   }
 
   .auth-right-panel {
+    flex: none;
     width: 100%;
-    padding: 1.5rem 1rem;
+    max-width: 440px;
+    height: auto;
+    padding: 0;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: visible;
+  }
+
+  .auth-right-content {
+    width: 100%;
+    max-width: 100%;
+    gap: 1rem;
   }
 
   .auth-compact-kpi-bar {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
+    width: 100%;
+  }
+
+  .compact-kpi-card {
+    padding: 0.45rem 0.6rem;
   }
 
   .login-card {
-    padding: 1.5rem 1.15rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 14px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
+  }
+
+  .login-header h2 {
+    font-size: 1.45rem;
   }
 }
 
 /* ── Small Mobile (< 425px) ── */
 @media (max-width: 424px) {
-  .auth-right-panel {
+  .auth-50split-container {
     padding: 1rem 0.75rem;
   }
 
   .compact-kpi-card {
-    padding: 0.4rem 0.5rem;
+    padding: 0.38rem 0.45rem;
+  }
+
+  .compact-value {
+    font-size: 0.8rem;
+  }
+
+  .compact-badge {
+    font-size: 0.58rem;
+    padding: 0.08rem 0.28rem;
   }
 
   .login-card {
-    padding: 1.25rem 0.875rem;
+    padding: 1.25rem 0.95rem;
+    border-radius: 12px;
   }
 
   .login-form .input-field {
@@ -625,12 +673,13 @@
   .auth-50split-container {
     height: auto;
     overflow-y: auto;
+    padding: 1rem;
   }
   .auth-left-panel {
     display: none;
   }
   .auth-right-panel {
-    padding: 1rem;
+    padding: 0;
   }
   .login-card {
     padding: 1rem;
