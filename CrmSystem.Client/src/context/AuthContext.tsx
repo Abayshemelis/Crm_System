@@ -18,6 +18,7 @@ interface User {
   name: string;
   email: string;
   roles: Array<'Admin' | 'Manager' | 'SalesRep'>;
+  profileImage?: string | null;
 }
 
 interface AuthContextValue {
@@ -33,6 +34,7 @@ interface AuthContextValue {
   selectedRole: 'Admin' | 'Manager' | 'SalesRep';
   switchRole: (role: 'Admin' | 'Manager' | 'SalesRep') => void;
   refresh: () => Promise<boolean>;
+  updateProfileImage: (image: string | null) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -100,11 +102,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
+    const userId = Number(payload?.['sub'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? 0);
+    const cachedAvatar = userId ? localStorage.getItem(`crm_user_avatar_${userId}`) : null;
+
     setUser({
-      userId: Number(payload?.['sub'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? 0),
+      userId,
       name: payload?.['name'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ?? 'User',
       email: payload?.['email'] ?? payload?.['http://schemas.microsoft.com/ws/2005/05/identity/claims/emailaddress'] ?? '',
       roles: roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'],
+      profileImage: cachedAvatar || null,
     });
 
     // Default the active working role to the highest available role
@@ -115,6 +121,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSelectedRole('Manager');
     } else {
       setSelectedRole('SalesRep');
+    }
+  }, []);
+
+  // Sync profile data from server
+  const syncServerProfile = useCallback(async (authToken: string) => {
+    try {
+      const res = await fetch(buildUrl('/api/users/me'), {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.userId) {
+          if (data.profileImage) {
+            localStorage.setItem(`crm_user_avatar_${data.userId}`, data.profileImage);
+          }
+          setUser(prev => prev ? {
+            ...prev,
+            name: data.name || prev.name,
+            email: data.email || prev.email,
+            profileImage: data.profileImage || prev.profileImage,
+          } : null);
+        }
+      }
+    } catch {
+      // Ignore network errors on background sync
     }
   }, []);
 
@@ -132,11 +166,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })();
       } else {
         hydrateUser(token);
+        syncServerProfile(token);
       }
     } else {
       setUser(null);
     }
-  }, [token, hydrateUser]);
+  }, [token, hydrateUser, syncServerProfile]);
 
   // ── 5. LOGIN ACTION ─────────────────────────────────────────────────────────
   const login = (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => {
@@ -145,6 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('token', newToken);
       setToken(newToken);
       hydrateUser(newToken);
+      syncServerProfile(newToken);
     } else {
       const newToken = tokenOrResponse.accessToken ?? null;
       if (newToken) {
@@ -155,6 +191,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('refreshToken', tokenOrResponse.refreshToken);
       }
       hydrateUser(newToken ?? '', tokenOrResponse.roles ?? []);
+      if (newToken) {
+        syncServerProfile(newToken);
+      }
     }
   };
 
@@ -203,6 +242,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ── 8. UPDATE PROFILE IMAGE ─────────────────────────────────────────────────
+  const updateProfileImage = async (imageUrl: string | null): Promise<boolean> => {
+    if (user?.userId) {
+      if (imageUrl) {
+        localStorage.setItem(`crm_user_avatar_${user.userId}`, imageUrl);
+      } else {
+        localStorage.removeItem(`crm_user_avatar_${user.userId}`);
+      }
+    }
+
+    setUser(prev => prev ? { ...prev, profileImage: imageUrl } : null);
+
+    if (token) {
+      try {
+        const res = await fetch(buildUrl('/api/users/me/profile-image'), {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'ngrok-skip-browser-warning': 'true',
+          },
+          body: JSON.stringify({ profileImage: imageUrl }),
+        });
+        return res.ok;
+      } catch {
+        return true; // Still persisted locally
+      }
+    }
+    return true;
+  };
+
   const primaryRole = user?.roles.includes('Admin')
     ? 'Admin'
     : user?.roles.includes('Manager')
@@ -223,6 +293,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login,
       logout,
       refresh,
+      updateProfileImage,
       isAdmin: user?.roles.includes('Admin') ?? false,
       isManagerOrAbove: (user?.roles.includes('Admin') || user?.roles.includes('Manager')) ?? false,
       isAdminSelected: selectedRole === 'Admin',

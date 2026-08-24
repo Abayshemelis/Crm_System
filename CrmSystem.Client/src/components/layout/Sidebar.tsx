@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
   Kanban, CheckSquare, BarChart2, X, Receipt,
-  LayoutDashboard, Target, FileText, UploadCloud, History
+  LayoutDashboard, Target, FileText, UploadCloud, History,
+  LogOut, Camera
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { UserProfileModal } from './UserProfileModal';
 import './layout.css';
 
 interface SidebarProps {
@@ -164,9 +166,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onClose,
 }) => {
-  const { isManagerOrAboveSelected, user } = useAuth();
+  const { isManagerOrAboveSelected, user, logout, selectedRole } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
 
   const sidebarClass = [
     'sidebar',
@@ -175,111 +185,165 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ].filter(Boolean).join(' ');
 
   return (
-    <aside className={sidebarClass} aria-label="Main navigation">
-      {/* Brand */}
-      <div className="sidebar-brand">
-        <Building2 className="brand-icon" aria-hidden="true" />
-        <span className="brand-text">CRM</span>
-        {/* Close button – only visible on mobile/tablet */}
-        <button
-          className="sidebar-close-btn"
-          onClick={onClose}
-          aria-label="Close navigation"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-      </div>
+    <>
+      <aside className={sidebarClass} aria-label="Main navigation">
+        {/* Brand */}
+        <div className="sidebar-brand">
+          <Building2 className="brand-icon" aria-hidden="true" />
+          <span className="brand-text">CRM</span>
+          {/* Close button – only visible on mobile/tablet */}
+          <button
+            className="sidebar-close-btn"
+            onClick={onClose}
+            aria-label="Close navigation"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
 
-      {/* Nav items */}
-      <nav className="sidebar-nav">
-        {NAV_SECTIONS.map((section) => {
-          if (section.authRequired && !user) return null;
-          if (section.managerOnly && !isManagerOrAboveSelected) return null;
+        {/* Nav items */}
+        <nav className="sidebar-nav">
+          {NAV_SECTIONS.map((section) => {
+            if (section.authRequired && !user) return null;
+            if (section.managerOnly && !isManagerOrAboveSelected) return null;
 
-          const Icon = section.icon;
-          const hasSubItems = Boolean(section.subItems && section.subItems.length > 0);
+            const Icon = section.icon;
+            const hasSubItems = Boolean(section.subItems && section.subItems.length > 0);
 
-          // Check if section or any sub-item is currently active (clicked/navigated)
-          const isSectionActive =
-            currentPath === section.to ||
-            (section.to !== '/dashboard' && currentPath.startsWith(section.to + '/')) ||
-            (section.key === 'pipeline' && currentPath.startsWith('/opportunities'));
+            // Check if section or any sub-item is currently active (clicked/navigated)
+            const isSectionActive =
+              currentPath === section.to ||
+              (section.to !== '/dashboard' && currentPath.startsWith(section.to + '/')) ||
+              (section.key === 'pipeline' && currentPath.startsWith('/opportunities'));
 
-          // Only expand when active (clicked/navigated into) and not collapsed
-          const isExpanded = !collapsed && hasSubItems && isSectionActive;
+            // Only expand when active (clicked/navigated into) and not collapsed
+            const isExpanded = !collapsed && hasSubItems && isSectionActive;
 
-          return (
-            <div
-              key={section.key}
-              className={`sidebar-section-block ${isSectionActive ? 'section-active' : ''} ${isExpanded ? 'is-expanded' : ''}`}
-            >
-              {/* Primary Main Navigation Link (Acts as default view for the section) */}
-              <NavLink
-                to={section.to}
-                className={`sidebar-link ${isSectionActive ? 'active' : ''}`}
-                title={collapsed ? section.label : undefined}
+            return (
+              <div
+                key={section.key}
+                className={`sidebar-section-block ${isSectionActive ? 'section-active' : ''} ${isExpanded ? 'is-expanded' : ''}`}
               >
-                <Icon className="link-icon" size={18} aria-hidden="true" />
-                <span className="link-text">{section.label}</span>
-              </NavLink>
+                {/* Primary Main Navigation Link (Acts as default view for the section) */}
+                <NavLink
+                  to={section.to}
+                  className={`sidebar-link ${isSectionActive ? 'active' : ''}`}
+                  title={collapsed ? section.label : undefined}
+                >
+                  <Icon className="link-icon" size={18} aria-hidden="true" />
+                  <span className="link-text">{section.label}</span>
+                </NavLink>
 
-              {/* Sub-Navigation Items (e.g. Reports, Stage Settings) */}
-              {hasSubItems && !collapsed && (
-                <div className={`sidebar-touch-expand-drawer ${isExpanded ? 'open' : ''}`}>
-                  <div className="sidebar-tree-container">
-                    <div className="sidebar-tree-line" />
-                    <div className="sidebar-tree-items">
-                      {section.subItems!.map((sub) => {
-                        const isSubActive =
-                          currentPath === sub.to ||
-                          (sub.to !== section.to && currentPath.startsWith(sub.to + '/'));
+                {/* Sub-Navigation Items (e.g. Reports, Stage Settings) */}
+                {hasSubItems && !collapsed && (
+                  <div className={`sidebar-touch-expand-drawer ${isExpanded ? 'open' : ''}`}>
+                    <div className="sidebar-tree-container">
+                      <div className="sidebar-tree-line" />
+                      <div className="sidebar-tree-items">
+                        {section.subItems!.map((sub) => {
+                          const isSubActive =
+                            currentPath === sub.to ||
+                            (sub.to !== section.to && currentPath.startsWith(sub.to + '/'));
 
-                        return (
-                          <NavLink
-                            key={sub.to + sub.label}
-                            to={sub.to}
-                            className={`sidebar-tree-link ${isSubActive ? 'active' : ''}`}
-                          >
-                            <span className="tree-node-label">{sub.label}</span>
-                          </NavLink>
-                        );
-                      })}
+                          return (
+                            <NavLink
+                              key={sub.to + sub.label}
+                              to={sub.to}
+                              className={`sidebar-tree-link ${isSubActive ? 'active' : ''}`}
+                            >
+                              <span className="tree-node-label">{sub.label}</span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Sign in for unauthenticated users */}
+          {!user && (
+            <div className="sidebar-section-block">
+              <NavLink
+                to="/login"
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                title={collapsed ? 'Sign In' : undefined}
+              >
+                <LogIn className="link-icon" size={18} aria-hidden="true" />
+                <span className="link-text">Sign In</span>
+              </NavLink>
+            </div>
+          )}
+        </nav>
+
+        {/* Footer (Settings & User Profile with Sign Out) */}
+        <div className="sidebar-footer">
+          {user && isManagerOrAboveSelected && (
+            <NavLink
+              to="/settings"
+              className={({ isActive }) => `sidebar-link sidebar-settings-link ${isActive ? 'active' : ''}`}
+              title={collapsed ? 'Settings' : undefined}
+            >
+              <Settings className="link-icon" size={18} aria-hidden="true" />
+              <span className="link-text">Settings</span>
+            </NavLink>
+          )}
+
+          {user && (
+            <div className={`sidebar-user-card ${collapsed ? 'collapsed' : ''}`}>
+              <button
+                type="button"
+                className="sidebar-user-avatar-btn"
+                onClick={() => setIsProfileModalOpen(true)}
+                title="Click to edit profile photo"
+                aria-label="Edit profile photo"
+              >
+                <div className="sidebar-user-avatar">
+                  {user.profileImage ? (
+                    <img src={user.profileImage} alt={user.name} className="sidebar-avatar-img" />
+                  ) : (
+                    <span className="sidebar-avatar-initials">{getInitials(user.name)}</span>
+                  )}
+                  <span className="sidebar-avatar-badge" title="Change photo">
+                    <Camera size={10} />
+                  </span>
+                </div>
+              </button>
+
+              {!collapsed && (
+                <div className="sidebar-user-meta" onClick={() => setIsProfileModalOpen(true)}>
+                  <span className="sidebar-user-name" title={user.name}>{user.name}</span>
+                  <span className="sidebar-user-role">
+                    {selectedRole === 'SalesRep' ? 'Sales Rep' : selectedRole}
+                  </span>
                 </div>
               )}
+
+              <button
+                type="button"
+                className="sidebar-logout-btn"
+                onClick={() => {
+                  if (onClose) onClose();
+                  logout();
+                }}
+                title="Sign Out"
+                aria-label="Sign Out"
+              >
+                <LogOut size={17} />
+                {!collapsed && <span>Sign Out</span>}
+              </button>
             </div>
-          );
-        })}
+          )}
+        </div>
+      </aside>
 
-        {/* Sign in for unauthenticated users */}
-        {!user && (
-          <div className="sidebar-section-block">
-            <NavLink
-              to="/login"
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-              title={collapsed ? 'Sign In' : undefined}
-            >
-              <LogIn className="link-icon" size={18} aria-hidden="true" />
-              <span className="link-text">Sign In</span>
-            </NavLink>
-          </div>
-        )}
-      </nav>
-
-      {/* Footer (Settings) */}
-      <div className="sidebar-footer">
-        {user && isManagerOrAboveSelected && (
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            title={collapsed ? 'Settings' : undefined}
-          >
-            <Settings className="link-icon" size={18} aria-hidden="true" />
-            <span className="link-text">Settings</span>
-          </NavLink>
-        )}
-      </div>
-    </aside>
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
+    </>
   );
 };

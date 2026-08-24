@@ -31,6 +31,48 @@ public class UsersController : ControllerBase
         return int.Parse(claim!.Value);
     }
 
+    [HttpGet("me")]
+    public async Task<IActionResult> GetCurrentUserProfile()
+    {
+        var userId = GetCurrentUserId();
+        var identity = await _db.Identities
+            .Include(i => i.Role)
+            .Include(i => i.IdentityRoles)
+                .ThenInclude(ir => ir.Role)
+            .FirstOrDefaultAsync(i => i.IdentityId == userId);
+
+        if (identity == null) return NotFound(new { message = "User not found." });
+
+        return Ok(new
+        {
+            id = identity.IdentityId,
+            userId = identity.IdentityId,
+            name = identity.Name,
+            email = identity.Email,
+            role = identity.IdentityRoles.Select(ir => ir.Role!.Name).FirstOrDefault() ?? identity.Role!.Name,
+            roles = identity.IdentityRoles.Select(ir => ir.Role!.Name).ToArray(),
+            profileImage = identity.ProfileImage,
+            isActive = identity.IsActive
+        });
+    }
+
+    [HttpPut("me/profile-image")]
+    public async Task<IActionResult> UpdateProfileImage([FromBody] UpdateProfileImageRequest request)
+    {
+        var userId = GetCurrentUserId();
+        var identity = await _db.Identities.FindAsync(userId);
+        if (identity == null) return NotFound(new { message = "User not found." });
+
+        identity.ProfileImage = request.ProfileImage;
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Profile image updated successfully.",
+            profileImage = identity.ProfileImage
+        });
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetUsers()
     {
@@ -57,7 +99,8 @@ public class UsersController : ControllerBase
             Role = i.IdentityRoles.Select(ir => ir.Role!.Name).FirstOrDefault() ?? i.Role!.Name,
             RoleId = i.RoleId,
             Roles = i.IdentityRoles.Select(ir => ir.Role!.Name).ToArray(),
-            IsActive = i.IsActive
+            IsActive = i.IsActive,
+            ProfileImage = i.ProfileImage
         }).ToListAsync();
 
         return Ok(users);
@@ -414,4 +457,9 @@ public class UpdateStatusRequest
 public class UpdateRolesRequest
 {
     public int[] RoleIds { get; set; } = Array.Empty<int>();
+}
+
+public class UpdateProfileImageRequest
+{
+    public string? ProfileImage { get; set; }
 }

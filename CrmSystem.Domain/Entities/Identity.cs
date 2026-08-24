@@ -18,6 +18,7 @@ public class Identity
     // User Profile
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+    public string? ProfileImage { get; set; }
 
     // Secure BCrypt password hash (or generated random hash for Google OAuth users)
     public string PasswordHash { get; set; } = string.Empty;
