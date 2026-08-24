@@ -69,10 +69,10 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         refreshToken: data.refreshToken,
       });
 
-      // Step C: Show success message and redirect user into the dashboard
-      showToast('Signed in with Google successfully', 'success');
+      // Step C: Seamlessly redirect directly to the main dashboard
+      showToast('Signed in successfully', 'success');
       if (onSuccess) onSuccess();
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       const msg = err.message || 'Google authentication failed';
       setErrorMessage(msg);
@@ -110,12 +110,13 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           const container = document.getElementById(buttonId);
           if (container) {
             container.innerHTML = '';
+            const containerWidth = Math.min(Math.max(container.clientWidth || 300, 240), 360);
             window.google.accounts.id.renderButton(container, {
               theme: 'outline',
               size: 'large',
               text: 'continue_with',
               shape: 'rectangular',
-              width: 320,
+              width: containerWidth,
               logo_alignment: 'left',
             });
             setGsiReady(true);
@@ -145,7 +146,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
   // ── 6. UI RENDER ────────────────────────────────────────────────────────────
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
       {/* Container where the Google SDK renders the iframe button */}
       <div
         id={buttonId}
@@ -155,31 +156,15 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           alignItems: 'center',
           minHeight: '44px',
           width: '100%',
+          opacity: isLoading ? 0.7 : 1,
+          pointerEvents: isLoading ? 'none' : 'auto',
+          transition: 'opacity 0.2s ease',
         }}
-      >
-        {/* Loading spinner shown while the backend verifies the token */}
-        {isLoading && (
-          <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary, #94a3b8)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              className="spinner-icon"
-              style={{
-                display: 'inline-block',
-                width: '16px',
-                height: '16px',
-                border: '2px solid rgba(255,255,255,0.3)',
-                borderTopColor: '#3b82f6',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-              }}
-            ></span>
-            Authenticating with Google...
-          </div>
-        )}
-      </div>
+      />
 
       {/* Error message display if Google login or backend verification fails */}
       {errorMessage && (
-        <div style={{ color: '#ef4444', fontSize: '0.75rem', textAlign: 'center', marginTop: '0.25rem', padding: '0 0.5rem', maxWidth: '320px' }}>
+        <div style={{ color: '#ef4444', fontSize: '0.8rem', textAlign: 'center', marginTop: '0.35rem', padding: '0 0.5rem', width: '100%', maxWidth: '340px' }}>
           {errorMessage}
         </div>
       )}
