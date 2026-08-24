@@ -39,7 +39,7 @@ const ContractActionMenu: React.FC<{
   }, []);
 
   return (
-    <div ref={menuRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-end' }}>
+    <div ref={menuRef} className="crm-action-menu-wrap">
       {/* Primary Action Button */}
       {isSigned ? (
         <button
@@ -48,7 +48,7 @@ const ContractActionMenu: React.FC<{
           title="Generate billing invoice from signed contract"
           style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)',
+            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)',
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
           }}
         >
@@ -61,7 +61,7 @@ const ContractActionMenu: React.FC<{
           title="View contract details"
           style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)',
+            background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.35)',
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
           }}
         >
@@ -72,111 +72,68 @@ const ContractActionMenu: React.FC<{
       {/* Action Dropdown Trigger Button */}
       <button
         type="button"
+        className="crm-action-menu-trigger"
         onClick={() => setOpen(!open)}
-        title="More contract actions"
-        style={{
-          padding: '0.35rem 0.55rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-          background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)',
-          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem'
-        }}
+        title="More actions"
+        aria-label="More actions"
       >
-        <MoreVertical size={14} />
+        <MoreVertical size={16} />
       </button>
 
       {/* Floating Action Menu Dropdown */}
       {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: '0.35rem', zIndex: 99999,
-          background: '#1e293b', border: '1px solid #334155',
-          borderRadius: '8px', boxShadow: '0 12px 30px rgba(0,0,0,0.6)', width: '195px', padding: '0.35rem',
-          display: 'flex', flexDirection: 'column', gap: '0.25rem'
-        }}>
+        <div className="crm-action-menu-dropdown">
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onView(contract); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#f8fafc',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
-            <Eye size={14} style={{ color: '#94a3b8' }} /> View Document
+            <Eye size={14} style={{ color: '#6366f1' }} /> View Document
           </button>
 
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onCopyLink(contract); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#818cf8',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
-            <LinkIcon size={14} /> Copy Signing Link
+            <LinkIcon size={14} style={{ color: '#818cf8' }} /> Copy Signing Link
           </button>
 
           {!isSigned && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onSendEmail(contract); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#38bdf8',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <Mail size={14} /> Email Signing Link
+              <Mail size={14} style={{ color: '#0284c7' }} /> Email Signing Link
             </button>
           )}
 
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onEdit(contract); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#f59e0b',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
-            <Edit3 size={14} /> Edit Contract
+            <Edit3 size={14} style={{ color: '#d97706' }} /> Edit Contract
           </button>
 
           {isSigned && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onInvoice(contract); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#10b981',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <Receipt size={14} /> Generate Invoice
+              <Receipt size={14} style={{ color: '#10b981' }} /> Generate Invoice
             </button>
           )}
 
-          <div style={{ height: '1px', background: '#334155', margin: '0.2rem 0' }} />
+          <div className="crm-action-menu-divider" />
 
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onDelete(contract); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.55rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#ef4444',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            style={{ color: '#ef4444' }}
           >
             <Trash2 size={14} /> Delete Contract
           </button>
@@ -285,6 +242,7 @@ export const ContractsScreen: React.FC = () => {
     }
     setCreating(true);
     try {
+      const existingOppContract = newOpportunityId > 0 ? contracts.find(c => c.opportunityId === newOpportunityId) : null;
       await api.post('/api/contracts', {
         customerId: newCustomerId,
         opportunityId: newOpportunityId || null,
@@ -293,7 +251,7 @@ export const ContractsScreen: React.FC = () => {
         startDate: new Date().toISOString(),
         endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
       });
-      showToast('Contract draft created successfully!');
+      showToast(existingOppContract ? `Existing contract (${existingOppContract.contractNumber}) updated & reused!` : 'Contract draft created successfully!');
       setShowCreateModal(false);
       setNewTitle('');
       setNewOpportunityId(0);
@@ -409,10 +367,19 @@ export const ContractsScreen: React.FC = () => {
   };
 
   const handleSendSigningEmail = async (c: ContractItem) => {
-    showToast(`Sending signing request email to ${c.customerName || 'client'}...`);
+    let targetEmail = (c.customerEmail || '').trim();
+    if (!targetEmail) {
+      const input = window.prompt(`Please enter the customer email address to send Contract #${c.contractNumber} to:`);
+      if (!input || !input.trim()) return;
+      targetEmail = input.trim();
+    }
+
+    showToast(`Sending signing request email to ${targetEmail}...`, 'info');
     try {
-      const res = await api.post<{ message: string }>(`/api/contracts/${c.contractId}/send-email`, {});
-      showToast(res.message || 'Signing invitation email sent successfully!');
+      const res = await api.post<{ message: string }>(`/api/contracts/${c.contractId}/send-email`, {
+        recipientEmail: targetEmail
+      });
+      showToast(res.message || `Signing invitation email sent successfully to ${targetEmail}!`);
       fetchContracts();
     } catch (err: any) {
       let msg = 'Failed to send email';
@@ -531,20 +498,11 @@ export const ContractsScreen: React.FC = () => {
       </div>
 
       {/* Interactive E-Signature Workflow Guide Banner */}
-      <div className="animate-fade-in" style={{
-        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.06) 100%)',
-        border: '1px solid rgba(99, 102, 241, 0.25)',
-        borderRadius: '12px',
-        padding: '1.25rem 1.5rem',
-        marginBottom: '1.75rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-      }}>
+      <div className="crm-workflow-guide-banner animate-fade-in">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.95rem' }}>
           💡 How Contract E-Signatures Work:
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+        <div className="crm-workflow-guide-grid">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <div style={{ background: '#6366f1', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>1</div>
             <div><strong>Draft Contract</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Staff creates contract details</span></div>
@@ -565,7 +523,7 @@ export const ContractsScreen: React.FC = () => {
       </div>
 
       {/* 4 Metric KPI Cards */}
-      <div className="metrics-grid animate-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1.75rem' }}>
+      <div className="crm-metrics-responsive-grid animate-fade-in">
         <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #6366f1' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -620,40 +578,28 @@ export const ContractsScreen: React.FC = () => {
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+      <div className="crm-filter-toolbar-wrap animate-fade-in">
         
         {/* Pill Filter Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.3rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+        <div className="crm-filter-tabs-bar">
           <button
             type="button"
             onClick={() => setStatusFilter('All')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'All' ? 'var(--accent-primary)' : 'transparent',
-              color: statusFilter === 'All' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
           >
             All Contracts ({contracts.length})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Draft')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Draft' ? '#f59e0b' : 'transparent',
-              color: statusFilter === 'Draft' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
           >
             📝 Drafts / Pending ({pendingSignatureCount})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Signed')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Signed' ? '#10b981' : 'transparent',
-              color: statusFilter === 'Signed' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Signed' ? 'active-paid' : ''}`}
           >
             ✅ Signed &amp; Executed ({activeContractsCount})
           </button>
@@ -847,20 +793,8 @@ export const ContractsScreen: React.FC = () => {
 
       {/* Edit Contract Modal */}
       {editingContract && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 99999, padding: '1rem', backdropFilter: 'blur(4px)',
-          overflowY: 'auto',
-        }}>
-          <div style={{
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--radius-xl)',
-            border: '1px solid var(--border-color)',
-            width: '100%', maxWidth: '500px',
-            padding: '1.5rem', margin: 'auto',
-          }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem' }}>✏️ Edit Contract</h3>
@@ -930,7 +864,7 @@ export const ContractsScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="crm-form-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Start Date</label>
                   <Input
@@ -958,7 +892,7 @@ export const ContractsScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <Button type="button" variant="secondary" onClick={() => setEditingContract(null)}>
                   Cancel
                 </Button>
@@ -973,21 +907,8 @@ export const ContractsScreen: React.FC = () => {
 
       {/* Create Contract Modal */}
       {showCreateModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.75)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 99999, padding: '1rem', backdropFilter: 'blur(4px)',
-          overflowY: 'auto',
-        }}>
-          <div style={{
-            background: 'var(--bg-primary)',
-            borderRadius: 'var(--radius-xl)',
-            border: '1px solid var(--border-color)',
-            width: '100%', maxWidth: '500px',
-            padding: '1.5rem',
-            margin: 'auto',
-          }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
             <h3 style={{ margin: '0 0 1.25rem 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
               📜 Create New Commercial Contract
             </h3>
@@ -1044,6 +965,11 @@ export const ContractsScreen: React.FC = () => {
                 {!loadingOpps && opportunities.length > 0 && (
                   <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>
                     ✓ {opportunities.length} deal{opportunities.length > 1 ? 's' : ''} available — select one to auto-link
+                  </div>
+                )}
+                {newOpportunityId > 0 && contracts.some(c => c.opportunityId === newOpportunityId) && (
+                  <div style={{ fontSize: '0.75rem', color: '#818cf8', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '0.35rem 0.65rem', borderRadius: '6px', marginTop: '0.4rem' }}>
+                    ℹ️ This deal is already linked to contract <strong>{contracts.find(c => c.opportunityId === newOpportunityId)?.contractNumber}</strong>. Submitting will update &amp; reuse the existing contract.
                   </div>
                 )}
                 {newCustomerId > 0 && !loadingOpps && opportunities.length === 0 && (

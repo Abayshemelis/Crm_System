@@ -49,14 +49,27 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
 
         // Step C: Build the SignalR Hub connection with JWT token factory & auto-reconnect policy
-        const apiHost = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:5072';
-        const hubUrl = `${apiHost}/hubs/notifications`;
+        const envApiBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+        let apiHost = envApiBase || '';
+        if (!apiHost) {
+            if (window.location.hostname.includes('ngrok') || window.location.protocol === 'https:') {
+                apiHost = window.location.origin;
+            } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                apiHost = 'http://localhost:5073';
+            } else {
+                apiHost = `http://${window.location.hostname}:5073`;
+            }
+        }
+        const hubUrl = `${apiHost.replace(/\/+$/, '')}/hubs/notifications`;
         const connection = new signalR.HubConnectionBuilder()
             .withUrl(hubUrl, {
                 // Pass JWT access token in WebSocket handshake query string / authorization header
                 accessTokenFactory: () => token,
                 skipNegotiation: false,
-                transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+                transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+                headers: {
+                    'ngrok-skip-browser-warning': 'true'
+                }
             })
             // Automatic retry intervals: immediate, 2s, 5s, 10s, 30s
             .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -99,14 +112,19 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
             .then(async () => {
                 setConnected(true);
                 try {
-                    const res = await fetch('/api/notifications/count', {
-                        headers: { Authorization: `Bearer ${token}` }
+                    const res = await fetch(`${apiHost.replace(/\/+$/, '')}/api/notifications/count`, {
+                        headers: { 
+                            Authorization: `Bearer ${token}`,
+                            'ngrok-skip-browser-warning': 'true'
+                        }
                     });
                     if (res.ok) {
                         const data = await res.json();
                         setUnreadCount(data.unreadCount ?? 0);
                     }
-                } catch { /* ignore */ }
+                } catch {
+                    // Fail silently for notification counter
+                }
             })
             .catch(() => {
                 setConnected(false);

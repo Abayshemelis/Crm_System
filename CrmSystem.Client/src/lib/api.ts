@@ -9,15 +9,46 @@
 // 5. Proxy & Base URL Resolution: Works seamlessly across Vite dev proxy, localhost, and production
 // ==============================================================================
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE as string) ?? '';
+const DEBUG_API = ((import.meta as any).env?.VITE_API_DEBUG as string) === 'true';
+
+const envApiBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+
+function getApiBase(): string {
+  if (envApiBase !== undefined && envApiBase !== '') {
+    return envApiBase;
+  }
+  if (typeof window !== 'undefined') {
+    // If accessing via ngrok tunnel or HTTPS, use relative paths so proxy handles it
+    if (window.location.hostname.includes('ngrok') || window.location.protocol === 'https:') {
+      return '';
+    }
+    // If on localhost
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:5073';
+    }
+    // If accessing over local Wi-Fi IP (e.g. 10.x.x.x or 192.168.x.x)
+    return `http://${window.location.hostname}:5073`;
+  }
+  return 'http://localhost:5073';
+}
+
+export const API_BASE = getApiBase();
+
+if (DEBUG_API) {
+  console.log('[API] Base URL:', API_BASE);
+}
 
 // ── 1. URL BUILDER ────────────────────────────────────────────────────────────
-function buildUrl(path: string) {
+export function buildUrl(path: string) {
   if (!path) return path;
   if (/^https?:\/\//i.test(path)) return path;
-  if (path.startsWith('/uploads')) return path;
+  if (path.startsWith('/uploads')) {
+    return API_BASE ? `${API_BASE.replace(/\/+$/, '')}${path}` : path;
+  }
   if (API_BASE) {
-    return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+    const base = API_BASE.replace(/\/+$/, '');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${base}${cleanPath}`;
   }
   return path.startsWith('/') ? path : `/${path}`;
 }
@@ -32,6 +63,11 @@ function authHeaders(extra?: Record<string, string>): HeadersInit {
 }
 
 // ── 3. CORE REQUEST INTERCEPTOR ───────────────────────────────────────────────
+let offlineCallback: (() => void) | null = null;
+export const setOfflineHandler = (cb: () => void) => {
+  offlineCallback = cb;
+};
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -50,10 +86,29 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(buildUrl(path), {
-    ...options,
-    headers,
-  });
+  if (DEBUG_API) {
+    console.log('[API] Request:', { method: options?.method ?? 'GET', url: buildUrl(path), headers, body: options?.body });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path), {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    if (err.name === 'TypeError' && (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed'))) {
+      console.warn(`[API] Network failure or tunnel unreachable for ${path}:`, err.message);
+      if (offlineCallback) {
+        offlineCallback();
+      }
+    }
+    throw err;
+  }
+
+  if (DEBUG_API) {
+    console.log('[API] Response:', { status: res.status, url: res.url });
+  }
 
   // Step A: Handle session expiry (401 Unauthorized)
   if (res.status === 401) {

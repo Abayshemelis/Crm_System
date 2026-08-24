@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { showToast } from '../lib/toast';
+import { buildUrl } from '../lib/api';
 import './screens.css';
 
 export const ForgotPasswordScreen: React.FC = () => {
@@ -19,9 +20,12 @@ export const ForgotPasswordScreen: React.FC = () => {
     setMessage('');
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(buildUrl('/api/auth/forgot-password'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ email }),
       });
       if (!response.ok) {

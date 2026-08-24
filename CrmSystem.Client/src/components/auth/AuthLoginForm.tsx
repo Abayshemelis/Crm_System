@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../lib/toast';
 import { GoogleSignInButton } from './GoogleSignInButton';
 import { ArrowLeft } from 'lucide-react';
+import { buildUrl } from '../../lib/api';
 
 interface AuthLoginFormProps {
   onSuccess?: () => void;
@@ -37,9 +38,12 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(buildUrl('/api/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ email: trimmedEmail, password }),
       });
 

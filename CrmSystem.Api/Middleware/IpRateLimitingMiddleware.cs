@@ -18,6 +18,13 @@ namespace CrmSystem.Api.Middleware
 
         public async Task InvokeAsync(HttpContext context)
         {
+            // Bypass preflight CORS OPTIONS requests
+            if (HttpMethods.IsOptions(context.Request.Method))
+            {
+                await _next(context);
+                return;
+            }
+
             var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
             var path = context.Request.Path.Value?.ToLower() ?? string.Empty;
 

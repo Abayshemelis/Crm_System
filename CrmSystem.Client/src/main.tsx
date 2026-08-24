@@ -1,6 +1,9 @@
 import { StrictMode } from 'react'
+import OfflineNotice from './components/OfflineNotice'
+import { setOfflineHandler } from './lib/api'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './components/notifications/NotificationBell.css'
 import App from './App.tsx'
 
 // Unregister any legacy dev Service Worker to prevent caching old JS bundles
@@ -16,4 +19,13 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
-)
+);
+
+// Register offline UI fallback for when ngrok tunnel is unreachable
+setOfflineHandler(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <OfflineNotice />
+    </StrictMode>
+  );
+});

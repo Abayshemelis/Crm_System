@@ -91,6 +91,70 @@ public class ContractsControllerTests
     }
 
     [Fact]
+    public async Task Create_WhenOpportunityAlreadyHasContract_ReusesAndUpdatesExistingContract()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var currentUser = new TestContractCurrentUserService();
+        var audit = new MockAuditService();
+        var emailSender = new TestEmailSender();
+        var templateService = new TestEmailTemplateService();
+
+        var role = new Role { RoleId = 1, Name = "Admin" };
+        context.Roles.Add(role);
+        var identity = new Identity { IdentityId = 1, Name = "Admin User", Email = "admin@crm.com", PasswordHash = "x", RoleId = 1 };
+        context.Identities.Add(identity);
+        var customer = new Customer { CustomerId = 1, FirstName = "Acme", LastName = "Corp", Email = "acme@corp.com" };
+        context.Customers.Add(customer);
+        var opportunity = new Opportunity { OpportunityId = 10, CustomerId = 1, Title = "Cloud Migration", EstimatedValue = 50000m, OwnerId = 1 };
+        context.Opportunities.Add(opportunity);
+
+        // Pre-existing contract for this deal
+        var existingContract = new Contract
+        {
+            ContractId = 1,
+            ContractNumber = "CTR-2026-00001",
+            CustomerId = 1,
+            OpportunityId = 10,
+            Title = "Initial Service Agreement",
+            ContractValue = 40000m,
+            Status = "Draft",
+            CreatedById = 1,
+            CreatedAt = DateTime.UtcNow.AddDays(-5)
+        };
+        context.Contracts.Add(existingContract);
+        await context.SaveChangesAsync();
+
+        var controller = new ContractsController(context, currentUser, audit, emailSender, templateService);
+
+        var dto = new CreateContractDto
+        {
+            CustomerId = 1,
+            OpportunityId = 10,
+            Title = "Updated Enterprise Agreement: Cloud Migration",
+            ContractValue = 50000m,
+            StartDate = DateTime.UtcNow,
+            EndDate = DateTime.UtcNow.AddYears(1),
+            TermsAndConditions = "Net 45 terms."
+        };
+
+        // Act
+        var result = await controller.Create(dto);
+
+        // Assert - Should return OkObjectResult with the reused existing contract
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var contractDto = Assert.IsType<ContractReadDto>(okResult.Value);
+        Assert.Equal(1, contractDto.ContractId);
+        Assert.Equal("CTR-2026-00001", contractDto.ContractNumber);
+        Assert.Equal("Updated Enterprise Agreement: Cloud Migration", contractDto.Title);
+        Assert.Equal(50000m, contractDto.ContractValue);
+
+        // Ensure total contracts in DB is still 1 (no duplicates!)
+        var totalContracts = await context.Contracts.CountAsync();
+        Assert.Equal(1, totalContracts);
+    }
+
+    [Fact]
     public async Task SignContract_ValidSignature_UpdatesStatusToSigned()
     {
         // Arrange
@@ -115,14 +179,23 @@ public class ContractsControllerTests
         var templateService = new TestEmailTemplateService();
         var controller = new ContractsController(context, currentUser, audit, emailSender, templateService);
 
-        var signDto = new SignContractDto
+        var companySignDto = new SignContractDto
         {
             SignatureDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            SignedByName = "Jane Doe"
+            SignedByName = "Company Rep",
+            SignerRole = "Company"
+        };
+
+        var customerSignDto = new SignContractDto
+        {
+            SignatureDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            SignedByName = "Jane Doe",
+            SignerRole = "Customer"
         };
 
         // Act
-        var result = await controller.SignContract(1, signDto);
+        await controller.SignContract(1, companySignDto);
+        var result = await controller.SignContract(1, customerSignDto);
 
         // Assert
         Assert.IsType<OkObjectResult>(result);

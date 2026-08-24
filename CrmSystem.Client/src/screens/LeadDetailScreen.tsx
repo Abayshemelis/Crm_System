@@ -398,11 +398,11 @@ export const LeadDetailScreen: React.FC = () => {
                                     borderRadius: '0.5rem',
                                     fontSize: '0.75rem',
                                     fontWeight: 700,
-                                    background: 'rgba(99, 102, 241, 0.12)',
-                                    color: '#4f46e5',
-                                    border: '1px solid rgba(99, 102, 241, 0.2)'
+                                    background: lead.leadScore >= 70 ? 'rgba(239, 68, 68, 0.12)' : lead.leadScore >= 40 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(99, 102, 241, 0.12)',
+                                    color: lead.leadScore >= 70 ? '#ef4444' : lead.leadScore >= 40 ? '#d97706' : '#4f46e5',
+                                    border: '1px solid rgba(0, 0, 0, 0.08)'
                                 }}>
-                                    Score {lead.leadScore}
+                                    Score: {lead.leadScore}%
                                 </span>
                             )}
                         </div>
@@ -515,17 +515,18 @@ export const LeadDetailScreen: React.FC = () => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '1.25rem',
+                            fontSize: '1.15rem',
                             fontWeight: 800
                         }}>
-                            {scoreBreakdown.score}
+                            {scoreBreakdown.score}%
                         </div>
                         <div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
                                 Lead Score Rating
                             </div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 {scoreBreakdown.rating === 'Hot' ? '🔥 Hot Prospect' : scoreBreakdown.rating === 'Warm' ? '⚡ Warm Lead' : '❄️ Cold Lead'}
+                                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>({scoreBreakdown.score}% of 100%)</span>
                             </div>
                         </div>
                     </div>
@@ -835,7 +836,7 @@ export const LeadDetailScreen: React.FC = () => {
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Lead Score</div>
-                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.leadScore}</div>
+                                        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{lead.leadScore}% ({lead.leadScore}/100 pts)</div>
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Assigned Sales Rep</div>

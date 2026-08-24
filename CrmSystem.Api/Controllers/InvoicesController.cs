@@ -105,52 +105,70 @@ public class InvoicesController : ControllerBase
             return BadRequest(new { message = "Invalid customer." });
 
         Contract? contract = null;
-        if (dto.ContractId.HasValue)
+        if (dto.ContractId.HasValue && dto.ContractId.Value > 0)
         {
             contract = await _db.Contracts.FindAsync(dto.ContractId.Value);
             if (contract == null || contract.IsDeleted)
                 return BadRequest(new { message = "Linked contract not found." });
 
-            // Prevent duplicate invoices: If an active invoice already exists for this contract, return it immediately.
+            // Prevent duplicate invoices: If an active invoice already exists for this contract, update and return it.
             var existingContractInvoice = await _db.Invoices
-                .Where(i => !i.IsDeleted && i.ContractId == dto.ContractId.Value && i.Status != "Cancelled")
-                .Include(i => i.Customer)
-                    .ThenInclude(cust => cust.Company)
-                .Include(i => i.Contract)
-                .Include(i => i.Opportunity)
-                .Include(i => i.CreatedBy)
+                .Where(i => !i.IsDeleted && i.ContractId == dto.ContractId.Value && i.Status != "Cancelled" && i.Status != "Void")
                 .OrderByDescending(i => i.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (existingContractInvoice != null)
             {
+                if (existingContractInvoice.Status != "Paid")
+                {
+                    var existingTaxRate = dto.TaxRate >= 0 ? dto.TaxRate : existingContractInvoice.TaxRate;
+                    existingContractInvoice.Amount = dto.Amount > 0 ? dto.Amount : existingContractInvoice.Amount;
+                    existingContractInvoice.TaxRate = existingTaxRate;
+                    existingContractInvoice.TaxAmount = Math.Round(existingContractInvoice.Amount * (existingTaxRate / 100m), 2);
+                    existingContractInvoice.TotalAmount = existingContractInvoice.Amount + existingContractInvoice.TaxAmount;
+                    if (dto.DueDate != default) existingContractInvoice.DueDate = dto.DueDate;
+                    if (!string.IsNullOrWhiteSpace(dto.Notes)) existingContractInvoice.Notes = dto.Notes;
+                    if (!string.IsNullOrWhiteSpace(dto.Terms)) existingContractInvoice.Terms = dto.Terms;
+                    existingContractInvoice.OpportunityId = dto.OpportunityId ?? existingContractInvoice.OpportunityId;
+                    existingContractInvoice.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
                 return Ok(MapToReadDto(existingContractInvoice));
             }
         }
 
         Opportunity? opp = null;
-        if (dto.OpportunityId.HasValue)
+        if (dto.OpportunityId.HasValue && dto.OpportunityId.Value > 0)
         {
             opp = await _db.Opportunities.FindAsync(dto.OpportunityId.Value);
             if (opp == null)
                 return BadRequest(new { message = "Linked opportunity not found." });
 
-            if (!dto.ContractId.HasValue)
-            {
-                var existingOppInvoice = await _db.Invoices
-                    .Where(i => !i.IsDeleted && i.OpportunityId == dto.OpportunityId.Value && i.ContractId == null && i.Status != "Cancelled")
-                    .Include(i => i.Customer)
-                        .ThenInclude(cust => cust.Company)
-                    .Include(i => i.Contract)
-                    .Include(i => i.Opportunity)
-                    .Include(i => i.CreatedBy)
-                    .OrderByDescending(i => i.CreatedAt)
-                    .FirstOrDefaultAsync();
+            var existingOppInvoice = await _db.Invoices
+                .Where(i => !i.IsDeleted && i.OpportunityId == dto.OpportunityId.Value && i.Status != "Cancelled" && i.Status != "Void")
+                .OrderByDescending(i => i.CreatedAt)
+                .FirstOrDefaultAsync();
 
-                if (existingOppInvoice != null)
+            if (existingOppInvoice != null)
+            {
+                if (dto.ContractId.HasValue && !existingOppInvoice.ContractId.HasValue)
                 {
-                    return Ok(MapToReadDto(existingOppInvoice));
+                    existingOppInvoice.ContractId = dto.ContractId.Value;
                 }
+                if (existingOppInvoice.Status != "Paid")
+                {
+                    var existingTaxRate = dto.TaxRate >= 0 ? dto.TaxRate : existingOppInvoice.TaxRate;
+                    existingOppInvoice.Amount = dto.Amount > 0 ? dto.Amount : existingOppInvoice.Amount;
+                    existingOppInvoice.TaxRate = existingTaxRate;
+                    existingOppInvoice.TaxAmount = Math.Round(existingOppInvoice.Amount * (existingTaxRate / 100m), 2);
+                    existingOppInvoice.TotalAmount = existingOppInvoice.Amount + existingOppInvoice.TaxAmount;
+                    if (dto.DueDate != default) existingOppInvoice.DueDate = dto.DueDate;
+                    if (!string.IsNullOrWhiteSpace(dto.Notes)) existingOppInvoice.Notes = dto.Notes;
+                    if (!string.IsNullOrWhiteSpace(dto.Terms)) existingOppInvoice.Terms = dto.Terms;
+                    existingOppInvoice.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                }
+                return Ok(MapToReadDto(existingOppInvoice));
             }
         }
 
@@ -186,13 +204,12 @@ public class InvoicesController : ControllerBase
         await _db.SaveChangesAsync();
 
         var created = await _db.Invoices
-            .Where(i => i.InvoiceId == invoice.InvoiceId)
             .Include(i => i.Customer)
                 .ThenInclude(cust => cust.Company)
             .Include(i => i.Contract)
             .Include(i => i.Opportunity)
             .Include(i => i.CreatedBy)
-            .FirstAsync();
+            .FirstOrDefaultAsync(i => i.InvoiceId == invoice.InvoiceId) ?? invoice;
 
         // Send Invoice Issued Email to Customer
         try

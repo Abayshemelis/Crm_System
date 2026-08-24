@@ -242,7 +242,7 @@ export const LeadFormScreen: React.FC = () => {
                         </div>
 
                         <Input 
-                            label="Lead Score (0-100 — Leave 0 for Auto-Calculate)" 
+                            label="Lead Score (% of total possible score: 0% - 100% — Leave 0 for Auto-Calculate)" 
                             type="number" 
                             min="0" 
                             max="100" 

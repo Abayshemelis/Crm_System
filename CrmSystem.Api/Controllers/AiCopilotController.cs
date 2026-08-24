@@ -23,8 +23,10 @@ public class AiCopilotController : ControllerBase
     }
 
     [HttpPost("chat")]
-    public async Task<IActionResult> Chat([FromBody] CopilotChatRequest request)
+    public async Task<IActionResult> Chat([FromBody] CopilotChatRequest? request)
     {
+        request ??= new CopilotChatRequest { Message = string.Empty };
+
         if (!_currentUser.UserId.HasValue)
         {
             return Unauthorized();
@@ -35,24 +37,36 @@ public class AiCopilotController : ControllerBase
             var response = await _copilotService.ProcessCopilotChatAsync(request, _currentUser.UserId.Value);
             return Ok(response);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return BadRequest(new { message = ex.Message });
+            return Ok(new CopilotChatResponse
+            {
+                Reply = "I am currently running in offline fallback mode. How can I help you manage your CRM leads, deals, contacts, or invoices today?",
+                IsGeminiPowered = false,
+                CurrentContextSummary = "AI Assistant (Offline Mode)"
+            });
         }
     }
 
     [AllowAnonymous]
     [HttpPost("public/chat")]
-    public async Task<IActionResult> PublicChat([FromBody] CopilotChatRequest request)
+    public async Task<IActionResult> PublicChat([FromBody] CopilotChatRequest? request)
     {
+        request ??= new CopilotChatRequest { Message = string.Empty };
+
         try
         {
             var response = await _copilotService.ProcessPublicVisitorChatAsync(request);
             return Ok(response);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return BadRequest(new { message = ex.Message });
+            return Ok(new CopilotChatResponse
+            {
+                Reply = "Welcome to our Enterprise CRM! Explore our features including visual deal pipelines, AI lead scoring, e-signatures, Stripe checkout, and custom fields.",
+                IsGeminiPowered = false,
+                CurrentContextSummary = "Public Product Advisor"
+            });
         }
     }
 }

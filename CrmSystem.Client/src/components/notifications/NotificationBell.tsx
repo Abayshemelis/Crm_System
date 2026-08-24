@@ -9,6 +9,7 @@ import { api } from '../../lib/api';
 import { useSignalR } from '../../context/SignalRContext';
 import { playNotificationSound, isSoundEnabled, setSoundEnabled } from '../../lib/sound';
 import { showToast } from '../../lib/toast';
+import './NotificationBell.css';
 
 export interface NotificationDto {
   notificationId: number;
@@ -236,15 +237,66 @@ export const NotificationBell: React.FC = () => {
     if (!open) fetchNotifications();
   };
 
-  // Close on outside click
+  // Lock background scroll (body, html, .main-content, .layout-main) when notifications panel or detail modal is open
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+    if (!open && !selectedNotif) return;
+
+    const mainContent = document.querySelector('.main-content') as HTMLElement | null;
+    const layoutMain = document.querySelector('.layout-main') as HTMLElement | null;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevMainOverflow = mainContent ? mainContent.style.overflow : '';
+    const prevLayoutOverflow = layoutMain ? layoutMain.style.overflow : '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (mainContent) mainContent.style.overflow = 'hidden';
+    if (layoutMain) layoutMain.style.overflow = 'hidden';
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const target = e.target as Node | null;
+      if (panelRef.current && target && panelRef.current.contains(target)) {
+        return;
+      }
+      const detailModal = document.querySelector('.notif-detail-modal');
+      if (detailModal && target && detailModal.contains(target)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      if (mainContent) mainContent.style.overflow = prevMainOverflow;
+      if (layoutMain) layoutMain.style.overflow = prevLayoutOverflow;
+      document.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [open, selectedNotif]);
+
+  // Close on outside click/touch, allowing the touch event to interact directly with the clicked element
+  useEffect(() => {
+    if (!open) return;
+
+    const handleOutsideInteract = (e: Event) => {
+      const target = e.target as Node | null;
+      if (panelRef.current && target && !panelRef.current.contains(target)) {
         setOpen(false);
       }
     };
-    if (open) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+
+    document.addEventListener('pointerdown', handleOutsideInteract);
+    document.addEventListener('touchstart', handleOutsideInteract, { passive: true });
+    document.addEventListener('mousedown', handleOutsideInteract);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideInteract);
+      document.removeEventListener('touchstart', handleOutsideInteract);
+      document.removeEventListener('mousedown', handleOutsideInteract);
+    };
   }, [open]);
 
   const markRead = async (id: number) => {
@@ -309,6 +361,8 @@ export const NotificationBell: React.FC = () => {
     ? notifications.filter(n => !n.isRead) 
     : notifications;
 
+  const isLight = typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light';
+
   return (
     <>
       <div className="notif-bell-wrapper" ref={panelRef}>
@@ -318,9 +372,22 @@ export const NotificationBell: React.FC = () => {
         </button>
 
         {open && (
-          <div className="notif-panel">
-            <div className="notif-panel-header">
-              <span className="notif-panel-title">
+          <div 
+            className="notif-panel"
+              style={{
+                backgroundColor: isLight ? '#ffffff' : '#1e293b',
+                borderColor: isLight ? '#cbd5e1' : '#334155',
+                color: isLight ? '#0f172a' : '#f8fafc'
+              }}
+            >
+            <div 
+              className="notif-panel-header"
+              style={{
+                backgroundColor: isLight ? '#f8fafc' : '#0f172a',
+                borderBottomColor: isLight ? '#e2e8f0' : '#334155'
+              }}
+            >
+              <span className="notif-panel-title" style={{ color: isLight ? '#0f172a' : '#f8fafc' }}>
                 <Bell size={16} /> Notifications
                 {count > 0 && <span style={{ fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '0.1rem 0.4rem', borderRadius: '10px' }}>{count} new</span>}
               </span>
@@ -344,7 +411,13 @@ export const NotificationBell: React.FC = () => {
             </div>
 
             {/* Filter Tabs */}
-            <div className="notif-filter-tabs">
+            <div 
+              className="notif-filter-tabs"
+              style={{
+                backgroundColor: isLight ? '#f1f5f9' : '#0f172a',
+                borderBottomColor: isLight ? '#e2e8f0' : '#334155'
+              }}
+            >
               <button 
                 type="button" 
                 className={`notif-filter-tab ${filterTab === 'all' ? 'active' : ''}`}
@@ -361,7 +434,12 @@ export const NotificationBell: React.FC = () => {
               </button>
             </div>
 
-            <div className="notif-panel-body">
+            <div 
+              className="notif-panel-body"
+              style={{
+                backgroundColor: isLight ? '#ffffff' : '#1e293b'
+              }}
+            >
               {loading && <div className="notif-loading">Loading notifications…</div>}
               {!loading && displayedNotifications.length === 0 && (
                 <div className="notif-empty">
@@ -374,6 +452,12 @@ export const NotificationBell: React.FC = () => {
                   <div
                     key={n.notificationId}
                     className={`notif-row ${n.isRead ? 'notif-row-read' : 'notif-row-unread'}`}
+                    style={{
+                      backgroundColor: isLight 
+                        ? (n.isRead ? '#ffffff' : '#f0f4ff') 
+                        : (n.isRead ? '#1e293b' : '#1e2846'),
+                      borderBottomColor: isLight ? '#f1f5f9' : '#334155'
+                    }}
                     onClick={() => handleNotifClick(n)}
                     title="Click to view full details"
                   >
@@ -387,7 +471,7 @@ export const NotificationBell: React.FC = () => {
                         </span>
                         <span className="notif-time">{timeAgo(n.createdAt)}</span>
                       </div>
-                      <p className="notif-message">{n.message}</p>
+                      <p className="notif-message" style={{ color: isLight ? '#1e293b' : '#f1f5f9' }}>{n.message}</p>
                     </div>
 
                     <div className="notif-row-actions" onClick={e => e.stopPropagation()}>

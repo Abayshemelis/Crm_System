@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../lib/toast';
+import { buildUrl } from '../../lib/api';
 
 // ── 1. GLOBAL TYPE DECLARATION ────────────────────────────────────────────────
 // The Google Identity Services (GSI) JavaScript library injects a global `google` 
@@ -46,9 +47,12 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     setErrorMessage('');
     try {
       // Step A: Send Google's JWT token to our backend for cryptographic signature verification
-      const res = await fetch('/api/auth/google', {
+      const res = await fetch(buildUrl('/api/auth/google'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ idToken }),
       });
 

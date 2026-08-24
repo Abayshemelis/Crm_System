@@ -24,6 +24,10 @@ using CrmSystem.Domain.Entities;
 using IAuditService = CrmSystem.Infrastructure.Services.IAuditService;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => {
+    options.ListenAnyIP(5073); // changed port to avoid conflict
+    options.ListenAnyIP(7190, listenOptions => listenOptions.UseHttps());
+});
 
 // ── 1. CONTROLLERS & JSON SERIALIZATION ────────────────────────────────────────
 // Configures ASP.NET Core controllers with CamelCase JSON naming conventions
@@ -44,16 +48,34 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR(); // Registers SignalR for real-time WebSocket notifications
 
 // ── 2. CROSS-ORIGIN RESOURCE SHARING (CORS) ───────────────────────────────────
-// Allows our React frontend (running on Vite http://localhost:5173) to communicate
+// Allows our React frontend (running on Vite http://localhost:5173, etc.) to communicate
 // with this backend API securely, including credentials and headers.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        policy.SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin)) return false;
+                try
+                {
+                    var uri = new Uri(origin);
+                    // Allow localhost, 127.0.0.1, or Android emulator loopback on any port
+                    if (uri.Host == "localhost" || uri.Host == "127.0.0.1" || uri.Host == "10.0.2.2") return true;
+                    // Allow any local network IP for mobile/LAN testing
+                    if (uri.Host.StartsWith("192.168.") || uri.Host.StartsWith("10.")) return true;
+                    // Allow any ngrok tunnel subdomain (standard, free, or app)
+                    if (origin.StartsWith("https://") && (origin.Contains(".ngrok.io") || origin.Contains(".ngrok-free.dev") || origin.Contains(".ngrok.app"))) return true;
+                }
+                catch
+                {
+                    // Ignore malformed origin headers
+                }
+                return false;
+            })
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -89,10 +111,10 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();          
 builder.Services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();                   // Secure BCrypt password hashing & verification
 builder.Services.AddScoped<ITokenService, JwtTokenService>();                           // JWT Access & Refresh token generation
 builder.Services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();               // Google OAuth token validation HTTP client
-builder.Services.AddHttpClient<IGeminiService, GeminiService>();                       // AI / LLM integration service
-builder.Services.AddScoped<IOpportunityService, OpportunityService>();                 // Sales pipeline & opportunity lifecycle
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();                           // Outbound SMTP email dispatch
-builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();             // Email templating & variable substitution
+builder.Services.AddHttpClient<IGeminiService, GeminiService>();                           // AI / LLM integration service
+builder.Services.AddScoped<IOpportunityService, OpportunityService>();                     // Sales pipeline & opportunity lifecycle
+builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();                         // Outbound email dispatch (Resend API with SMTP fallback)
+builder.Services.AddScoped<IEmailTemplateService, EmailTemplateService>();                 // Email templating & variable substitution
 builder.Services.AddScoped<IEmailTriggerService, EmailTriggerService>();               // Event-based email triggers
 builder.Services.AddScoped<IAuditService, AuditService>();                             // Audit trail logging
 builder.Services.AddScoped<IActivityService, ActivityService>();                       // Activity & timeline logging
@@ -232,6 +254,16 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications"); // Map SignalR WebSocket route
+
+// Root API Health & Info Endpoint
+app.MapGet("/", () => Results.Ok(new
+{
+    status = "Online",
+    service = "CRM System API",
+    version = "1.0.0",
+    health = "/api/health",
+    frontend = "http://localhost:5173"
+}));
 
 // ── 8. BASELINE DATABASE SEEDING ──────────────────────────────────────────────
 // Automatically seeds necessary lookup values (Roles, Lead Statuses, Pipeline Stages,

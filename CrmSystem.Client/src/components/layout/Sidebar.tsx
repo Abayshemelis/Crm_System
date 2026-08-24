@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Users, Building2, UserCircle, Settings, LogIn,
@@ -14,21 +14,150 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-// Nav items definition (single source of truth)
-const NAV_ITEMS = [
-  { to: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard, authRequired: false, managerOnly: false },
-  { to: '/reports',    label: 'Reports',    icon: BarChart2,        authRequired: false, managerOnly: false },
-  { to: '/import',     label: 'Import Data',icon: UploadCloud,      authRequired: true,  managerOnly: false },
-  { to: '/customers',  label: 'Customers',  icon: Users,            authRequired: true,  managerOnly: false },
-  { to: '/companies',  label: 'Companies',  icon: Building2,        authRequired: true,  managerOnly: false },
-  { to: '/leads',      label: 'Leads',      icon: Target,           authRequired: true,  managerOnly: false },
-  { to: '/pipeline',   label: 'Pipeline',   icon: Kanban,           authRequired: true,  managerOnly: false },
-  { to: '/contracts',  label: 'Contracts',  icon: FileText,         authRequired: true,  managerOnly: false },
-  { to: '/invoices',   label: 'Invoices',   icon: Receipt,          authRequired: true,  managerOnly: false },
-  { to: '/tasks',      label: 'Tasks',      icon: CheckSquare,      authRequired: true,  managerOnly: false },
-  { to: '/audit-logs', label: 'System History', icon: History,     authRequired: true,  managerOnly: true  },
-  { to: '/users',      label: 'Users',      icon: UserCircle,       authRequired: true,  managerOnly: true  },
-] as const;
+interface SubNavItem {
+  to: string;
+  label: string;
+  isReport?: boolean;
+}
+
+interface NavSection {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  to: string;
+  authRequired: boolean;
+  managerOnly: boolean;
+  subItems?: SubNavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    key: 'dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    to: '/dashboard',
+    authRequired: false,
+    managerOnly: false
+  },
+  {
+    key: 'reports',
+    label: 'Overview Reports',
+    icon: BarChart2,
+    to: '/reports',
+    authRequired: false,
+    managerOnly: false
+  },
+  {
+    key: 'customers',
+    label: 'Customers',
+    icon: Users,
+    to: '/customers',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/customers/reports', label: 'Customer Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'companies',
+    label: 'Companies',
+    icon: Building2,
+    to: '/companies',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/companies/reports', label: 'Company Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'leads',
+    label: 'Leads',
+    icon: Target,
+    to: '/leads',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/leads/reports', label: 'Lead Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'pipeline',
+    label: 'Pipeline',
+    icon: Kanban,
+    to: '/pipeline',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/pipeline/reports', label: 'Pipeline Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'contracts',
+    label: 'Contracts',
+    icon: FileText,
+    to: '/contracts',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/contracts/reports', label: 'Contract Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'invoices',
+    label: 'Invoices',
+    icon: Receipt,
+    to: '/invoices',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/invoices/reports', label: 'Invoice Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'tasks',
+    label: 'Tasks',
+    icon: CheckSquare,
+    to: '/tasks',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/tasks/reports', label: 'Task Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'import',
+    label: 'Data Import',
+    icon: UploadCloud,
+    to: '/import',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/import/reports', label: 'Import Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'audit-logs',
+    label: 'System History',
+    icon: History,
+    to: '/audit-logs',
+    authRequired: true,
+    managerOnly: true,
+    subItems: [
+      { to: '/audit-logs/reports', label: 'History Reports', isReport: true }
+    ]
+  },
+  {
+    key: 'users',
+    label: 'Users',
+    icon: UserCircle,
+    to: '/users',
+    authRequired: true,
+    managerOnly: true,
+    subItems: [
+      { to: '/users/reports', label: 'Rep Leaderboard', isReport: true }
+    ]
+  }
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   collapsed = false,
@@ -36,17 +165,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const { isManagerOrAboveSelected, user } = useAuth();
-  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const location = useLocation();
-
-  const toggleMenu = (menuName: string) => {
-    setExpandedMenus(prev => ({ ...prev, [menuName]: !prev[menuName] }));
-  };
+  const currentPath = location.pathname;
 
   const sidebarClass = [
     'sidebar',
-    collapsed   ? 'sidebar-collapsed'    : '',
-    mobileOpen  ? 'sidebar-mobile-open'  : '',
+    collapsed ? 'sidebar-collapsed' : '',
+    mobileOpen ? 'sidebar-mobile-open' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -65,34 +190,80 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Nav links */}
+      {/* Nav items */}
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map(({ to, label, icon: Icon, authRequired, managerOnly }) => {
-          if (authRequired && !user) return null;
-          if (managerOnly && !isManagerOrAboveSelected) return null;
+        {NAV_SECTIONS.map((section) => {
+          if (section.authRequired && !user) return null;
+          if (section.managerOnly && !isManagerOrAboveSelected) return null;
+
+          const Icon = section.icon;
+          const hasSubItems = Boolean(section.subItems && section.subItems.length > 0);
+
+          // Check if section or any sub-item is currently active (clicked/navigated)
+          const isSectionActive =
+            currentPath === section.to ||
+            (section.to !== '/dashboard' && currentPath.startsWith(section.to + '/')) ||
+            (section.key === 'pipeline' && currentPath.startsWith('/opportunities'));
+
+          // Only expand when active (clicked/navigated into) and not collapsed
+          const isExpanded = !collapsed && hasSubItems && isSectionActive;
+
           return (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-              title={collapsed ? label : undefined}
+            <div
+              key={section.key}
+              className={`sidebar-section-block ${isSectionActive ? 'section-active' : ''} ${isExpanded ? 'is-expanded' : ''}`}
             >
-              <Icon className="link-icon" size={20} aria-hidden="true" />
-              <span className="link-text">{label}</span>
-            </NavLink>
+              {/* Primary Main Navigation Link (Acts as default view for the section) */}
+              <NavLink
+                to={section.to}
+                className={`sidebar-link ${isSectionActive ? 'active' : ''}`}
+                title={collapsed ? section.label : undefined}
+              >
+                <Icon className="link-icon" size={18} aria-hidden="true" />
+                <span className="link-text">{section.label}</span>
+              </NavLink>
+
+              {/* Sub-Navigation Items (e.g. Reports, Stage Settings) */}
+              {hasSubItems && !collapsed && (
+                <div className={`sidebar-touch-expand-drawer ${isExpanded ? 'open' : ''}`}>
+                  <div className="sidebar-tree-container">
+                    <div className="sidebar-tree-line" />
+                    <div className="sidebar-tree-items">
+                      {section.subItems!.map((sub) => {
+                        const isSubActive =
+                          currentPath === sub.to ||
+                          (sub.to !== section.to && currentPath.startsWith(sub.to + '/'));
+
+                        return (
+                          <NavLink
+                            key={sub.to + sub.label}
+                            to={sub.to}
+                            className={`sidebar-tree-link ${isSubActive ? 'active' : ''}`}
+                          >
+                            <span className="tree-node-label">{sub.label}</span>
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
 
         {/* Sign in for unauthenticated users */}
         {!user && (
-          <NavLink
-            to="/login"
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            title={collapsed ? 'Sign In' : undefined}
-          >
-            <LogIn className="link-icon" size={20} aria-hidden="true" />
-            <span className="link-text">Sign In</span>
-          </NavLink>
+          <div className="sidebar-section-block">
+            <NavLink
+              to="/login"
+              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+              title={collapsed ? 'Sign In' : undefined}
+            >
+              <LogIn className="link-icon" size={18} aria-hidden="true" />
+              <span className="link-text">Sign In</span>
+            </NavLink>
+          </div>
         )}
       </nav>
 
@@ -104,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
             title={collapsed ? 'Settings' : undefined}
           >
-            <Settings className="link-icon" size={20} aria-hidden="true" />
+            <Settings className="link-icon" size={18} aria-hidden="true" />
             <span className="link-text">Settings</span>
           </NavLink>
         )}

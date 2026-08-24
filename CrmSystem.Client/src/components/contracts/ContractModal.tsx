@@ -295,29 +295,8 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 99999,
-      padding: '1.5rem',
-      backdropFilter: 'blur(6px)'
-    }}>
-      <div style={{
-        background: 'var(--bg-primary)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid var(--border-color)',
-        width: '100%',
-        maxWidth: '880px',
-        maxHeight: '94vh',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
-        overflow: 'hidden'
-      }}>
+    <div className="crm-modal-overlay">
+      <div className="crm-contract-viewer-container">
         {/* Modal Action Header */}
         <div className="no-print" style={{
           padding: '1rem 1.5rem',
@@ -389,13 +368,13 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
         </div>
 
         {/* Contract Printable Document Area */}
-        <div style={{ padding: '2rem', overflowY: 'auto', flex: 1, background: '#ffffff', color: '#0f172a' }} id="printable-contract-area">
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e2e8f0', paddingBottom: '1.25rem', marginBottom: '1.5rem' }}>
+        <div style={{ padding: 'clamp(1rem, 3vw, 2rem)', overflowY: 'auto', flex: 1, background: '#ffffff', color: '#0f172a' }} id="printable-contract-area">
+          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e2e8f0', paddingBottom: '1.25rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#4338ca', margin: 0 }}>Enterprise Commercial Agreement</h2>
               <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>Contract Ref: <strong>{contract.contractNumber}</strong></p>
             </div>
-            <div style={{ textAlign: 'right', fontSize: '0.85rem' }}>
+            <div style={{ textAlign: 'left', fontSize: '0.85rem' }}>
               <div>Start Date: <strong>{new Date(contract.startDate).toLocaleDateString()}</strong></div>
               <div>End Date: <strong>{new Date(contract.endDate).toLocaleDateString()}</strong></div>
               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981', marginTop: 4 }}>
@@ -404,7 +383,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem', background: '#f8fafc', padding: '1.25rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+          <div className="crm-contract-doc-parties">
             <div>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#6366f1', marginBottom: 4 }}>Party A: Service Provider</div>
               <div style={{ fontWeight: 700, fontSize: '1rem' }}>CRM System Enterprise Inc.</div>
@@ -432,7 +411,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
 
           {/* DUAL-PARTY SIGNATURE BLOCK */}
           <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '1.5rem', marginTop: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e293b' }}>
                 Mutual Execution & Signatures
               </h4>
@@ -443,7 +422,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+            <div className="crm-contract-sig-grid">
               
               {/* Box 1: Seller / Company Signature */}
               <div style={{

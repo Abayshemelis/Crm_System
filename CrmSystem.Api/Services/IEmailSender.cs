@@ -49,12 +49,33 @@ public class SmtpEmailSender : IEmailSender
         {
             using var message = new MailMessage
             {
-                From = new MailAddress(from),
-                Subject = subject,
-                Body = body,
-                IsBodyHtml = isHtml
+                From = new MailAddress(from, "CRM System"),
+                Subject = subject
             };
             message.To.Add(toEmail);
+            message.ReplyToList.Add(new MailAddress(from, "CRM System"));
+
+            if (isHtml)
+            {
+                // Create plain text alternative to satisfy spam filter multipart/alternative requirements
+                var plainText = System.Text.RegularExpressions.Regex.Replace(body, @"<style[^>]*>[\s\S]*?</style>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                plainText = System.Text.RegularExpressions.Regex.Replace(plainText, @"<[^>]+>", " ");
+                plainText = System.Text.RegularExpressions.Regex.Replace(plainText, @"\s+", " ")
+                    .Replace("&amp;", "&")
+                    .Replace("&nbsp;", " ")
+                    .Trim();
+
+                var plainView = AlternateView.CreateAlternateViewFromString(plainText, System.Text.Encoding.UTF8, "text/plain");
+                var htmlView = AlternateView.CreateAlternateViewFromString(body, System.Text.Encoding.UTF8, "text/html");
+
+                message.AlternateViews.Add(plainView);
+                message.AlternateViews.Add(htmlView);
+            }
+            else
+            {
+                message.Body = body;
+                message.IsBodyHtml = false;
+            }
 
             using var client = new SmtpClient(host, port)
             {

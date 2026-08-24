@@ -62,7 +62,7 @@ const InvoiceActionMenu: React.FC<{
   }, []);
 
   return (
-    <div ref={menuRef} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-end' }}>
+    <div ref={menuRef} className="crm-action-menu-wrap">
       {/* Primary Action Button */}
       {invoice.status !== 'Paid' ? (
         <button
@@ -71,7 +71,7 @@ const InvoiceActionMenu: React.FC<{
           title="Record payment for invoice"
           style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)',
+            background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.35)',
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
           }}
         >
@@ -84,7 +84,7 @@ const InvoiceActionMenu: React.FC<{
           title="Print & export PDF receipt"
           style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)',
+            background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.35)',
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap'
           }}
         >
@@ -95,115 +95,72 @@ const InvoiceActionMenu: React.FC<{
       {/* Action Menu Trigger Button */}
       <button
         type="button"
+        className="crm-action-menu-trigger"
         onClick={() => setOpen(!open)}
-        title="More invoice options"
-        style={{
-          padding: '0.35rem 0.55rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600,
-          background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)',
-          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem'
-        }}
+        title="More actions"
+        aria-label="More actions"
       >
-        <MoreVertical size={14} />
+        <MoreVertical size={16} />
       </button>
 
       {/* Dropdown Options */}
       {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: '0.35rem', zIndex: 99999,
-          background: '#1e293b', border: '1px solid #334155',
-          borderRadius: '8px', boxShadow: '0 12px 30px rgba(0,0,0,0.6)', width: '195px', padding: '0.35rem',
-          display: 'flex', flexDirection: 'column', gap: '0.25rem'
-        }}>
+        <div className="crm-action-menu-dropdown">
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onPrint(invoice); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#818cf8',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
-            <Printer size={14} /> Print / Export PDF
+            <Printer size={14} style={{ color: '#6366f1' }} /> Print / Export PDF
           </button>
 
           {invoice.status !== 'Paid' && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onPay(invoice); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#10b981',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <CreditCard size={14} /> Record Payment
+              <CreditCard size={14} style={{ color: '#10b981' }} /> Record Payment
             </button>
           )}
 
           {invoice.status !== 'Paid' && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onStripePay(invoice); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#6366f1',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <CreditCard size={14} /> Pay via Stripe
+              <CreditCard size={14} style={{ color: '#818cf8' }} /> Pay via Stripe
             </button>
           )}
 
           {invoice.status !== 'Paid' && onSyncStripe && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onSyncStripe(invoice); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#38bdf8',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <RefreshCw size={14} /> 🔄 Check Stripe Status
+              <RefreshCw size={14} style={{ color: '#0284c7' }} /> 🔄 Check Stripe Status
             </button>
           )}
 
           {invoice.status !== 'Paid' && (
             <button
               type="button"
+              className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onEdit(invoice); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-                borderRadius: '6px', border: 'none', background: 'transparent', color: '#f59e0b',
-                fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <Edit3 size={14} /> Edit Invoice
+              <Edit3 size={14} style={{ color: '#d97706' }} /> Edit Invoice
             </button>
           )}
 
-          <div style={{ height: '1px', background: '#334155', margin: '0.2rem 0' }} />
+          <div className="crm-action-menu-divider" />
 
           <button
             type="button"
+            className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onDelete(invoice); setOpen(false); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: '6px', border: 'none', background: 'transparent', color: '#ef4444',
-              fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer', fontWeight: 500
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.15)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            style={{ color: '#ef4444' }}
           >
             <Trash2 size={14} /> Delete Invoice
           </button>
@@ -687,20 +644,11 @@ export const InvoicesScreen: React.FC = () => {
       </div>
 
       {/* Interactive Billing Workflow Guide Banner */}
-      <div className="animate-fade-in" style={{
-        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.06) 100%)',
-        border: '1px solid rgba(99, 102, 241, 0.25)',
-        borderRadius: '12px',
-        padding: '1.25rem 1.5rem',
-        marginBottom: '1.75rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-      }}>
+      <div className="crm-workflow-guide-banner animate-fade-in">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.95rem' }}>
           💡 Invoicing &amp; Payment Collection Workflow:
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', fontSize: '0.85rem' }}>
+        <div className="crm-workflow-guide-grid">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <div style={{ background: '#6366f1', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>1</div>
             <div><strong>Generate Invoice</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Create manual or 1-click contract invoice</span></div>
@@ -721,7 +669,7 @@ export const InvoicesScreen: React.FC = () => {
       </div>
 
       {/* 4 Financial Metric KPI Cards */}
-      <div className="metrics-grid animate-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1.75rem' }}>
+      <div className="crm-metrics-responsive-grid animate-fade-in">
         <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #6366f1' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -776,62 +724,42 @@ export const InvoicesScreen: React.FC = () => {
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+      <div className="crm-filter-toolbar-wrap animate-fade-in">
 
         {/* Pill Filter Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.3rem', borderRadius: '10px', border: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
+        <div className="crm-filter-tabs-bar">
           <button
             type="button"
             onClick={() => setStatusFilter('All')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'All' ? 'var(--accent-primary)' : 'transparent',
-              color: statusFilter === 'All' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
           >
             All Invoices ({invoices.length})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Sent')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Sent' ? '#3b82f6' : 'transparent',
-              color: statusFilter === 'Sent' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Sent' ? 'active-sent' : ''}`}
           >
             📬 Sent / Pending ({pendingCount})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Paid')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Paid' ? '#10b981' : 'transparent',
-              color: statusFilter === 'Paid' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Paid' ? 'active-paid' : ''}`}
           >
             ✅ Paid &amp; Settled ({paidCount})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Overdue')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Overdue' ? '#ef4444' : 'transparent',
-              color: statusFilter === 'Overdue' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Overdue' ? 'active-overdue' : ''}`}
           >
             ⚠️ Overdue ({overdueInvoices.length})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter('Draft')}
-            style={{
-              padding: '0.45rem 1rem', borderRadius: '7px', fontSize: '0.85rem', fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'all 0.2s',
-              background: statusFilter === 'Draft' ? '#f59e0b' : 'transparent',
-              color: statusFilter === 'Draft' ? '#fff' : 'var(--text-muted)'
-            }}
+            className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
           >
             📝 Drafts ({invoices.filter(i => i.status === 'Draft' && !isInvoiceOverdue(i)).length})
           </button>
@@ -989,8 +917,8 @@ export const InvoicesScreen: React.FC = () => {
 
       {/* Create Invoice Modal */}
       {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
-          <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', width: '100%', maxWidth: '520px', padding: '1.5rem', margin: 'auto' }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Create New Invoice</h3>
               <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
@@ -1030,7 +958,7 @@ export const InvoicesScreen: React.FC = () => {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="crm-form-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Subtotal Amount ($) *</label>
                   <Input
@@ -1050,7 +978,7 @@ export const InvoicesScreen: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="crm-form-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Issue Date</label>
                   <Input
@@ -1080,7 +1008,7 @@ export const InvoicesScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <Button variant="secondary" type="button" onClick={() => setShowCreateModal(false)}>Cancel</Button>
                 <Button variant="primary" type="submit" disabled={creating}>
                   {creating ? 'Creating...' : 'Create & Send Invoice'}
@@ -1093,8 +1021,8 @@ export const InvoicesScreen: React.FC = () => {
 
       {/* Record Payment Modal */}
       {payingInvoice && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', width: '100%', maxWidth: '440px', padding: '1.5rem' }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container" style={{ maxWidth: '460px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>💳 Record Payment</h3>
@@ -1159,7 +1087,7 @@ export const InvoicesScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <Button variant="secondary" type="button" onClick={() => setPayingInvoice(null)}>Cancel</Button>
                 <Button variant="primary" type="submit" disabled={processingPayment}>
                   {processingPayment ? 'Processing...' : 'Confirm Paid'}
@@ -1172,8 +1100,8 @@ export const InvoicesScreen: React.FC = () => {
 
       {/* Edit Invoice Modal */}
       {editingInvoice && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '1rem', backdropFilter: 'blur(4px)', overflowY: 'auto' }}>
-          <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-color)', width: '100%', maxWidth: '520px', padding: '1.5rem', margin: 'auto' }}>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>✏️ Edit Invoice</h3>
@@ -1185,7 +1113,7 @@ export const InvoicesScreen: React.FC = () => {
             </div>
 
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="crm-form-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Base Amount ($) *</label>
                   <Input
@@ -1223,7 +1151,7 @@ export const InvoicesScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="crm-form-2col">
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Issue Date</label>
                   <Input
@@ -1264,7 +1192,7 @@ export const InvoicesScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <Button variant="secondary" type="button" onClick={() => setEditingInvoice(null)}>Cancel</Button>
                 <Button variant="primary" type="submit" disabled={savingEdit}>
                   {savingEdit ? 'Saving...' : 'Save Changes'}

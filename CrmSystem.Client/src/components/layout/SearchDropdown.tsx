@@ -1,20 +1,31 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, User, Building2, Target, Loader2, ArrowRight, Clock } from 'lucide-react';
+import { 
+  Search, User, Building2, Target, Loader2, ArrowRight, 
+  Clock, Package, CreditCard, FileText, CheckSquare, TrendingUp, Compass 
+} from 'lucide-react';
 import { api } from '../../lib/api';
+import { searchSidebarPages, SearchPageItem } from './searchPages';
 import './search.css';
 
-interface SearchResult {
-  type: 'customer' | 'company' | 'opportunity';
+export interface SearchResult {
+  type: 'page' | 'customer' | 'company' | 'lead' | 'opportunity' | 'task' | 'product' | 'invoice' | 'contract';
   id: number;
   title: string;
   subtitle: string;
+  route?: string;
 }
 
-const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string; route: string }> = {
-  customer:    { label: 'Customers',    icon: <User size={14}/>,      color: '#34d399', bg: 'rgba(52,211,153,0.12)',   route: '/customers' },
-  company:     { label: 'Companies',    icon: <Building2 size={14}/>, color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',   route: '/companies' },
-  opportunity: { label: 'Opportunities', icon: <Target size={14}/>,  color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', route: '/opportunities' },
+const TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string; route: string; hasDetailRoute?: boolean }> = {
+  page:        { label: 'Navigation & Sidebar',  icon: <Compass size={14}/>,     color: '#06b6d4', bg: 'rgba(6,182,212,0.15)',   route: '',               hasDetailRoute: false },
+  customer:    { label: 'Customers',             icon: <User size={14}/>,        color: '#10b981', bg: 'rgba(16,185,129,0.15)',  route: '/customers',     hasDetailRoute: true },
+  company:     { label: 'Companies',             icon: <Building2 size={14}/>,   color: '#3b82f6', bg: 'rgba(59,130,246,0.15)',   route: '/companies',     hasDetailRoute: true },
+  lead:        { label: 'Leads',                 icon: <Target size={14}/>,      color: '#f59e0b', bg: 'rgba(245,158,11,0.15)',  route: '/leads',         hasDetailRoute: false },
+  opportunity: { label: 'Opportunities',         icon: <TrendingUp size={14}/>,  color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)',  route: '/opportunities', hasDetailRoute: true },
+  task:        { label: 'Tasks',                 icon: <CheckSquare size={14}/>, color: '#ec4899', bg: 'rgba(236,72,153,0.15)',  route: '/tasks',         hasDetailRoute: false },
+  product:     { label: 'Products',              icon: <Package size={14}/>,     color: '#06b6d4', bg: 'rgba(6,182,212,0.15)',   route: '/products',      hasDetailRoute: false },
+  invoice:     { label: 'Invoices',              icon: <CreditCard size={14}/>,  color: '#10b981', bg: 'rgba(16,185,129,0.15)',  route: '/invoices',      hasDetailRoute: false },
+  contract:    { label: 'Contracts',             icon: <FileText size={14}/>,    color: '#6366f1', bg: 'rgba(99,102,241,0.15)',  route: '/contracts',     hasDetailRoute: false },
 };
 
 /** Bold-highlight the matching portion of a string */
@@ -68,21 +79,27 @@ export const SearchDropdown: React.FC = () => {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  // Debounced search
+  // Debounced search combining sidebar pages and database results
   useEffect(() => {
     if (query.length < 2) { setResults([]); setIsLoading(false); setIsOpen(false); return; }
+    
+    // Instantly match sidebar navigation pages locally
+    const matchedPages = searchSidebarPages(query);
+    setResults(matchedPages);
+    setIsOpen(true);
     setIsLoading(true);
+
     const t = setTimeout(async () => {
       try {
         const data = await api.get<SearchResult[]>(`/api/search/global?query=${encodeURIComponent(query)}`);
-        setResults(data ?? []);
-        setIsOpen(true);
+        const combined = [...matchedPages, ...(data ?? [])];
+        setResults(combined);
       } catch {
-        setResults([]);
+        // Retain local page matches if backend fails
       } finally {
         setIsLoading(false);
       }
-    }, 280);
+    }, 250);
     return () => clearTimeout(t);
   }, [query]);
 
@@ -90,8 +107,20 @@ export const SearchDropdown: React.FC = () => {
     setIsOpen(false);
     setQuery('');
     setActiveIdx(-1);
+    
+    if (result.type === 'page' && result.route) {
+      navigate(result.route);
+      return;
+    }
+
     const cfg = TYPE_CONFIG[result.type];
-    if (cfg) navigate(`${cfg.route}/${result.id}`);
+    if (cfg) {
+      if (cfg.hasDetailRoute) {
+        navigate(`${cfg.route}/${result.id}`);
+      } else {
+        navigate(cfg.route);
+      }
+    }
   }, [navigate]);
 
   // Keyboard navigation

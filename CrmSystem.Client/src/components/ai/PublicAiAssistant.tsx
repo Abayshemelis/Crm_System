@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import './copilot.css';
 import { confirmAction } from '../../lib/confirm';
+import { buildUrl } from '../../lib/api';
 
 export interface PublicFileAttachment {
   fileName: string;
@@ -338,9 +339,12 @@ export const PublicAiAssistant: React.FC = () => {
     abortControllerRef.current = controller;
 
     try {
-      const response = await fetch('/api/ai/copilot/public/chat', {
+      const response = await fetch(buildUrl('/api/ai/copilot/public/chat'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         signal: controller.signal,
         body: JSON.stringify({
           message: displayMsgText,

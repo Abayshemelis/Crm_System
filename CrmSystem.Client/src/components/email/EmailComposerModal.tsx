@@ -34,6 +34,16 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setToEmail(defaultRecipient || '');
+      setSubject(initialSubject || '');
+      setBody(initialBody || '');
+      setError(null);
+      setSuccess(null);
+    }
+  }, [isOpen, defaultRecipient, initialSubject, initialBody]);
+
   if (!isOpen) return null;
 
   const handleSend = async (e: React.FormEvent) => {
@@ -48,7 +58,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
     setSuccess(null);
 
     try {
-      await api.post('/api/emails/send', {
+      const res = await api.post<{ success: boolean; message?: string; warning?: string }>('/api/emails/send', {
         toEmail: toEmail.trim(),
         subject: subject.trim(),
         bodyHtml: body,
@@ -57,7 +67,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
         opportunityId
       });
 
-      setSuccess('Email sent successfully!');
+      setSuccess(res?.message || 'Email sent successfully!');
       if (onEmailSent) onEmailSent();
 
       setTimeout(() => {
@@ -65,9 +75,9 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
         setBody('');
         setSuccess(null);
         onClose();
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to send email. Please check your SMTP settings.');
+      setError(err?.message || 'Failed to send email. Please check your SMTP settings.');
     } finally {
       setSending(false);
     }

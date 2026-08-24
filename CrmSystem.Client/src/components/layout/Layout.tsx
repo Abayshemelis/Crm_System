@@ -97,7 +97,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           onMobileMenuClick={openMobile}
         />
         <main className="main-content">
-          <div className="content-container">{children}</div>
+          <div className="content-container">
+            {children}
+          </div>
         </main>
       </div>
       <GlobalAiCopilot />

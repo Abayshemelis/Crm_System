@@ -65,13 +65,17 @@ public class EmailsController : ControllerBase
             return Unauthorized();
 
         // 1. Dispatch Email via IEmailSender
+        bool emailDelivered = false;
+        string? deliveryWarning = null;
         try
         {
             await _emailSender.SendEmailAsync(request.ToEmail, request.Subject, request.BodyHtml, cancellationToken);
+            emailDelivered = true;
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Email delivery failed: {ex.Message}" });
+            deliveryWarning = ex.Message;
+            Console.WriteLine($"[EmailsController] Email dispatch warning for {request.ToEmail}: {ex.Message}");
         }
 
         // 2. Automatically log an Email Activity into the Timeline
@@ -81,7 +85,7 @@ public class EmailsController : ControllerBase
             {
                 ActivityTypeId = 2, // Email activity type
                 Subject = $"[Sent Email] {request.Subject}",
-                Description = $"To: {request.ToEmail}\n\n{request.BodyHtml}",
+                Description = $"To: {request.ToEmail}\n\n{request.BodyHtml}" + (deliveryWarning != null ? $"\n\n[Delivery Status]: Logged in CRM ({deliveryWarning})" : ""),
                 ActivityDate = DateTime.UtcNow,
                 CustomerId = request.CustomerId,
                 OpportunityId = request.OpportunityId,
@@ -93,6 +97,15 @@ public class EmailsController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"[Email] Warning: Failed to log activity for sent email to {request.ToEmail}: {ex.Message}");
+        }
+
+        if (!emailDelivered && deliveryWarning != null)
+        {
+            return Ok(new { 
+                success = true, 
+                warning = deliveryWarning, 
+                message = $"Email logged to CRM timeline. (SMTP Note: {deliveryWarning})" 
+            });
         }
 
         return Ok(new { success = true, message = $"Email successfully sent to {request.ToEmail}" });

@@ -1,6 +1,40 @@
-import { defineConfig } from 'vite'
+/// <reference types="vite/client" />
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+
+const env = loadEnv('', process.cwd());
+
+const proxyConfig = {
+  '/api': {
+    target: env.VITE_API_BASE || 'http://localhost:5073',
+    changeOrigin: true,
+    secure: false,
+    configure: (proxy: any) => {
+      proxy.on('proxyReq', (proxyReq: any) => {
+        proxyReq.setHeader('ngrok-skip-browser-warning', 'true');
+      });
+      proxy.on('error', () => {});
+    }
+  },
+  '/uploads': {
+    target: env.VITE_API_BASE || 'http://localhost:5073',
+    changeOrigin: true,
+    secure: false,
+    configure: (proxy: any) => {
+      proxy.on('error', () => {});
+    }
+  },
+  '/hubs': {
+    target: env.VITE_API_BASE || 'http://localhost:5073',
+    changeOrigin: true,
+    secure: false,
+    ws: true,
+    configure: (proxy: any) => {
+      proxy.on('error', () => {});
+    }
+  }
+};
 
 export default defineConfig({
   plugins: [
@@ -41,38 +75,28 @@ export default defineConfig({
     allowedHosts: true,
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-      // Bypass ngrok browser warning interception for ALL responses (HTML, JSON, assets)
       'ngrok-skip-browser-warning': 'true',
     },
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5072',
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('ngrok-skip-browser-warning', 'true');
-          });
-          proxy.on('error', () => {
-            // Suppress ECONNREFUSED noise during server startup
-          });
-        }
-      },
-      '/uploads': {
-        target: 'http://localhost:5072',
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy) => {
-          proxy.on('error', () => {});
-        }
-      },
-      '/hubs': {
-        target: 'http://localhost:5072',
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-        configure: (proxy) => {
-          proxy.on('error', () => {});
+    proxy: proxyConfig
+  },
+  preview: {
+    host: true,
+    port: 5173,
+    allowedHosts: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'ngrok-skip-browser-warning': 'true',
+    },
+    proxy: proxyConfig
+  },
+  build: {
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          signalr: ['@microsoft/signalr'],
+          icons: ['lucide-react']
         }
       }
     }

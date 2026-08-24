@@ -63,6 +63,24 @@ export const LandingPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [user, navigate]);
 
+  // Lock background body scroll when mobile navigation menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+      document.documentElement.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   // Mouse cursor tracking inside hero section
   useEffect(() => {
     if (!heroRef.current) return;
@@ -315,7 +333,7 @@ export const LandingPage: React.FC = () => {
   return (
     <div className={`landing-page ${isDarkMode ? 'dark' : 'light'}`}>
       {/* Navigation Bar */}
-      <nav className={`landing-nav ${isScrolled ? 'scrolled' : ''}`}>
+      <nav className={`landing-nav ${isScrolled ? 'scrolled' : ''} ${mobileMenuOpen ? 'menu-open' : ''}`}>
         <div className="nav-container">
           <div className="nav-logo" onClick={() => scrollToSection('home')} style={{ cursor: 'pointer' }}>
             <span className="logo-icon">CRM</span>
@@ -323,12 +341,20 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="#home" onClick={() => scrollToSection('home')}>Home</a>
-            <a href="#about" onClick={() => scrollToSection('about')}>About</a>
-            <a href="#services" onClick={() => scrollToSection('services')}>Services</a>
-            <a href="#features" onClick={() => scrollToSection('features')}>Features</a>
-            <a href="#analytics" onClick={() => scrollToSection('analytics')}>Analytics</a>
-            <a href="#contact" onClick={() => scrollToSection('contact')}>Contact</a>
+            <a href="#home" onClick={() => { setMobileMenuOpen(false); scrollToSection('home'); }}>Home</a>
+            <a href="#about" onClick={() => { setMobileMenuOpen(false); scrollToSection('about'); }}>About</a>
+            <a href="#services" onClick={() => { setMobileMenuOpen(false); scrollToSection('services'); }}>Services</a>
+            <a href="#features" onClick={() => { setMobileMenuOpen(false); scrollToSection('features'); }}>Features</a>
+            <a href="#analytics" onClick={() => { setMobileMenuOpen(false); scrollToSection('analytics'); }}>Analytics</a>
+            <a href="#contact" onClick={() => { setMobileMenuOpen(false); scrollToSection('contact'); }}>Contact</a>
+            <div className="mobile-nav-actions">
+              <button className="btn-secondary" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}>
+                Login
+              </button>
+              <button className="btn-primary" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}>
+                Get Started <ArrowRight size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="nav-actions">
@@ -347,6 +373,11 @@ export const LandingPage: React.FC = () => {
           </div>
         </div>
       </nav>
+
+      {/* Mobile Menu Dim Backdrop */}
+      {mobileMenuOpen && (
+        <div className="mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} />
+      )}
 
       {/* 1. Hero Section (#home) */}
       <section id="home" className="hero-section" ref={setHeroRef}>
@@ -504,29 +535,29 @@ export const LandingPage: React.FC = () => {
             <p>Our CRM unifies relational customer databases, lead processing pipelines, opportunity management, and real-time business intelligence into a seamless user experience.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
-            <div className="glass-panel" style={{ padding: '2rem', borderRadius: 16 }}>
-              <div style={{ background: 'var(--accent-dim)', color: 'var(--accent)', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+          <div className="about-cards-grid">
+            <div className="glass-panel about-card">
+              <div className="card-icon-box">
                 <Zap size={28} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Real-Time Operational Sync</h3>
-              <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>Direct EF Core database query binding ensures every deal update, lead qualification, or task completion instantly reflects across dashboards and analytics.</p>
+              <h3>Real-Time Operational Sync</h3>
+              <p>Direct EF Core database query binding ensures every deal update, lead qualification, or task completion instantly reflects across dashboards and analytics.</p>
             </div>
 
-            <div className="glass-panel" style={{ padding: '2rem', borderRadius: 16 }}>
-              <div style={{ background: 'var(--accent-dim)', color: 'var(--accent)', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+            <div className="glass-panel about-card">
+              <div className="card-icon-box">
                 <Shield size={28} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Enterprise Role Governance</h3>
-              <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>Strict role-based permissions safeguard customer contacts and corporate data, granting Admin, Manager, and SalesRep role boundaries.</p>
+              <h3>Enterprise Role Governance</h3>
+              <p>Strict role-based permissions safeguard customer contacts and corporate data, granting Admin, Manager, and SalesRep role boundaries.</p>
             </div>
 
-            <div className="glass-panel" style={{ padding: '2rem', borderRadius: 16 }}>
-              <div style={{ background: 'var(--accent-dim)', color: 'var(--accent)', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+            <div className="glass-panel about-card">
+              <div className="card-icon-box">
                 <TrendingUp size={28} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Pipeline Velocity</h3>
-              <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>Automate stage transitions, track deal age, and monitor win probability ratios to maximize sales revenue execution.</p>
+              <h3>Pipeline Velocity</h3>
+              <p>Automate stage transitions, track deal age, and monitor win probability ratios to maximize sales revenue execution.</p>
             </div>
           </div>
         </div>
@@ -541,21 +572,21 @@ export const LandingPage: React.FC = () => {
             <p>Every service needed to acquire prospects, manage accounts, track inventory, and close deals.</p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          <div className="services-grid">
             {services.map((srv, idx) => {
               const IconComponent = srv.icon;
               return (
-                <div key={idx} className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid var(--card-border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <div style={{ background: 'var(--accent-dim)', color: 'var(--accent)', padding: '0.625rem', borderRadius: 10 }}>
+                <div key={idx} className="glass-panel service-card">
+                  <div className="service-card-header">
+                    <div className="card-icon-box small">
                       <IconComponent size={22} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>{srv.title}</h3>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>{srv.stat}</span>
+                      <h3>{srv.title}</h3>
+                      <span className="service-stat">{srv.stat}</span>
                     </div>
                   </div>
-                  <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>{srv.description}</p>
+                  <p>{srv.description}</p>
                 </div>
               );
             })}
@@ -577,55 +608,55 @@ export const LandingPage: React.FC = () => {
               const IconComp = feat.icon;
               return (
                 <div key={idx} className="feature-card glass-panel">
-                  <div className="feature-icon" style={{ background: 'var(--accent-dim)', color: 'var(--accent)', padding: '0.75rem', borderRadius: 10, width: 'fit-content', marginBottom: '1rem' }}>
+                  <div className="feature-icon card-icon-box">
                     <IconComp size={24} />
                   </div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.35rem' }}>{feat.title}</h3>
-                  <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>{feat.description}</p>
+                  <h3>{feat.title}</h3>
+                  <p>{feat.description}</p>
                 </div>
               );
             })}
           </div>
 
           {/* Advanced Enterprise Modules Highlight Banner */}
-          <div style={{ marginTop: '3.5rem', paddingTop: '2.5rem', borderTop: '1px solid var(--card-border)' }}>
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div className="enterprise-banner">
+            <div className="enterprise-header">
               <span className="section-pill" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>⚡ High-Velocity Sales Engine</span>
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 800, marginTop: '0.5rem', marginBottom: '0.5rem' }}>Advanced Enterprise Modules</h3>
-              <p style={{ color: 'var(--fg-muted)', fontSize: '0.95rem', maxWidth: 650, margin: '0 auto' }}>Specialized built-in tools for AI predictions, online contract signing, Stripe payment gateways, and custom field customization.</p>
+              <h3>Advanced Enterprise Modules</h3>
+              <p>Specialized built-in tools for AI predictions, online contract signing, Stripe payment gateways, and custom field customization.</p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(99, 102, 241, 0.2)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), transparent)' }}>
-                <div style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+            <div className="enterprise-modules-grid">
+              <div className="glass-panel module-card card-ai">
+                <div className="card-icon-box module-icon-ai">
                   <Sparkles size={26} />
                 </div>
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>AI Lead Assistant & Scoring</h4>
-                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Automated 0-100 scoring based on interactions, SLA response breach alerts, and AI next-best-action email recommendations.</p>
+                <h4>AI Lead Assistant & Scoring</h4>
+                <p>Automated 0-100 scoring based on interactions, SLA response breach alerts, and AI next-best-action email recommendations.</p>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(16, 185, 129, 0.2)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent)' }}>
-                <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+              <div className="glass-panel module-card card-contract">
+                <div className="card-icon-box module-icon-contract">
                   <FileSignature size={26} />
                 </div>
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>E-Signatures & Contract PDFs</h4>
-                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Generate contract agreements, share public signing link tokens, capture client digital signatures online, and auto-export signed PDFs.</p>
+                <h4>E-Signatures & Contract PDFs</h4>
+                <p>Generate contract agreements, share public signing link tokens, capture client digital signatures online, and auto-export signed PDFs.</p>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(245, 158, 11, 0.2)', background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), transparent)' }}>
-                <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+              <div className="glass-panel module-card card-stripe">
+                <div className="card-icon-box module-icon-stripe">
                   <CreditCard size={26} />
                 </div>
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>Stripe Online Invoicing</h4>
-                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Direct credit card checkout integration via Stripe API. Invoices auto-update to Paid with client payment receipts.</p>
+                <h4>Stripe Online Invoicing</h4>
+                <p>Direct credit card checkout integration via Stripe API. Invoices auto-update to Paid with client payment receipts.</p>
               </div>
 
-              <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16, border: '1px solid rgba(14, 165, 233, 0.2)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), transparent)' }}>
-                <div style={{ background: 'rgba(14, 165, 233, 0.15)', color: '#0ea5e9', padding: '0.75rem', borderRadius: 12, width: 'fit-content', marginBottom: '1rem' }}>
+              <div className="glass-panel module-card card-custom">
+                <div className="card-icon-box module-icon-custom">
                   <Sliders size={26} />
                 </div>
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.5rem' }}>Custom Fields & Audit Log</h4>
-                <p style={{ color: 'var(--fg-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>Extend Leads, Customers, and Opportunities with custom fields while maintaining deep field-level audit trail history.</p>
+                <h4>Custom Fields & Audit Log</h4>
+                <p>Extend Leads, Customers, and Opportunities with custom fields while maintaining deep field-level audit trail history.</p>
               </div>
             </div>
           </div>
@@ -666,9 +697,9 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Analytics Visual Breakdown Panels */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
+          <div className="analytics-breakdown-grid">
             {/* Pipeline Stage Bar Graph */}
-            <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16 }}>
+            <div className="glass-panel breakdown-card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Opportunity Stage Distribution</h3>
                 <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>${(dashboardData?.pipelineValue ?? 0).toLocaleString()} Pipeline</span>
@@ -691,7 +722,7 @@ export const LandingPage: React.FC = () => {
             </div>
 
             {/* Task Operations Stats */}
-            <div className="glass-panel" style={{ padding: '1.75rem', borderRadius: 16 }}>
+            <div className="glass-panel breakdown-card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Task Completion Overview</h3>
                 <span style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>{dashboardData?.totalTasks ?? 0} Total Tasks</span>
@@ -752,8 +783,8 @@ export const LandingPage: React.FC = () => {
             <h2>Contact Sales & Support</h2>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-            <div className="glass-panel contact-card" style={{ padding: '2rem', borderRadius: 16 }}>
+          <div className="contact-grid">
+            <div className="glass-panel contact-card">
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem' }}>Contact Information</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -766,7 +797,7 @@ export const LandingPage: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <MapPin size={18} className="contact-icon" />
-                  <span>Hawassa, Ethiopia</ span>
+                  <span>Hawassa, Ethiopia</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <Clock size={18} className="contact-icon" />
@@ -793,7 +824,7 @@ export const LandingPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="glass-panel contact-card" style={{ padding: '2rem', borderRadius: 16 }}>
+            <div className="glass-panel contact-card">
               {formSubmitted ? (
                 <div className="form-success">
                   <CheckCircle2 size={48} />
@@ -849,7 +880,7 @@ export const LandingPage: React.FC = () => {
 
       {/* 8. Footer Section */}
       <footer className="landing-footer-section">
-        <div className="section-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+        <div className="section-container footer-grid">
           <div>
             <div className="nav-logo" style={{ marginBottom: '0.75rem' }}>
               <span className="logo-icon">CRM</span>
@@ -917,7 +948,7 @@ export const LandingPage: React.FC = () => {
       )}
 
       {/* Floating Public AI Product Assistant for Visitors */}
-      <PublicAiAssistant />
+      {!mobileMenuOpen && <PublicAiAssistant />}
     </div>
   );
 };

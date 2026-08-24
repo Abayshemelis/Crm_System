@@ -16,7 +16,7 @@ import { QuoteModal } from '../components/opportunities/QuoteModal';
 import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { EmailComposerModal } from '../components/email/EmailComposerModal';
 import { showToast } from '../lib/toast';
-import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send, Package, ShoppingBag, CheckCircle2, AlertTriangle, FileSignature, Receipt, Eye, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send, Package, ShoppingBag, CheckCircle2, AlertTriangle, FileSignature, Receipt, Eye, Link as LinkIcon, ExternalLink, Pencil, DollarSign, CreditCard, Clock } from 'lucide-react';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
@@ -107,6 +107,46 @@ export const OpportunityDetailScreen: React.FC = () => {
   const [newContractValue, setNewContractValue] = useState(0);
   const [newContractTerms, setNewContractTerms] = useState('Standard commercial terms apply. Payment Net 30 days.');
   const [creatingContract, setCreatingContract] = useState(false);
+
+  // Contract Edit State
+  const [editingContract, setEditingContract] = useState<ContractItem | null>(null);
+  const [editContractTitle, setEditContractTitle] = useState('');
+  const [editContractValue, setEditContractValue] = useState(0);
+  const [editContractStatus, setEditContractStatus] = useState('Draft');
+  const [editContractStartDate, setEditContractStartDate] = useState('');
+  const [editContractEndDate, setEditContractEndDate] = useState('');
+  const [editContractTerms, setEditContractTerms] = useState('');
+  const [editContractNotes, setEditContractNotes] = useState('');
+  const [savingContract, setSavingContract] = useState(false);
+
+  // Invoice Create Modal State
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+  const [newInvoiceAmount, setNewInvoiceAmount] = useState(0);
+  const [newInvoiceTaxRate, setNewInvoiceTaxRate] = useState(0);
+  const [newInvoiceContractId, setNewInvoiceContractId] = useState<number | null>(null);
+  const [newInvoiceIssueDate, setNewInvoiceIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newInvoiceDueDate, setNewInvoiceDueDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+  const [newInvoiceNotes, setNewInvoiceNotes] = useState('');
+  const [newInvoiceTerms, setNewInvoiceTerms] = useState('Payment due within 30 days of issue date.');
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+
+  // Invoice Edit Modal State
+  const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
+  const [editInvoiceAmount, setEditInvoiceAmount] = useState(0);
+  const [editInvoiceTaxRate, setEditInvoiceTaxRate] = useState(0);
+  const [editInvoiceStatus, setEditInvoiceStatus] = useState('Draft');
+  const [editInvoiceIssueDate, setEditInvoiceIssueDate] = useState('');
+  const [editInvoiceDueDate, setEditInvoiceDueDate] = useState('');
+  const [editInvoicePaymentMethod, setEditInvoicePaymentMethod] = useState('');
+  const [editInvoiceNotes, setEditInvoiceNotes] = useState('');
+  const [editInvoiceTerms, setEditInvoiceTerms] = useState('');
+  const [savingInvoice, setSavingInvoice] = useState(false);
+
+  // Invoice Pay Modal State
+  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   // Phase 4 states
   const [activities, setActivities] = useState<any[]>([]);
@@ -222,6 +262,8 @@ export const OpportunityDetailScreen: React.FC = () => {
         if (await confirmAction('Deal marked as Won 🎉! Would you like to create the commercial Contract for this deal now?')) {
           handleOpenCreateContract();
         }
+      } else {
+        showToast(`Deal marked as Won 🎉! Existing contract (${contracts[0].contractNumber}) is attached.`);
       }
     } catch (error) {
       console.error('Failed to mark as won:', error);
@@ -231,6 +273,14 @@ export const OpportunityDetailScreen: React.FC = () => {
 
   const handleOpenCreateContract = () => {
     if (!opportunity) return;
+    if (contracts.length > 0) {
+      // Reuse existing contract instead of creating duplicate
+      const existing = contracts[0];
+      setSelectedContractForModal(existing);
+      showToast(`Existing contract found (${existing.contractNumber}). Reusing existing contract.`);
+      setActiveTab('contracts');
+      return;
+    }
     const defaultValue = calculatedTotal > 0 ? calculatedTotal : opportunity.estimatedValue;
     setNewContractTitle(`Service Agreement: ${opportunity.title}`);
     setNewContractValue(defaultValue);
@@ -246,7 +296,7 @@ export const OpportunityDetailScreen: React.FC = () => {
     }
     setCreatingContract(true);
     try {
-      await api.post('/api/contracts', {
+      const res = await api.post<ContractItem>('/api/contracts', {
         customerId: opportunity.customerId,
         opportunityId: Number(id),
         title: newContractTitle.trim(),
@@ -255,10 +305,13 @@ export const OpportunityDetailScreen: React.FC = () => {
         endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         termsAndConditions: newContractTerms
       });
-      showToast('Contract created successfully! Ready for e-signature.');
+      showToast(contracts.length > 0 ? `Existing contract (${contracts[0].contractNumber}) updated successfully!` : 'Contract created successfully! Ready for e-signature.');
       setShowCreateContractModal(false);
       await loadData();
       setActiveTab('contracts');
+      if (res && res.contractId) {
+        setSelectedContractForModal(res);
+      }
     } catch (err: any) {
       showToast(err.message || 'Failed to create contract', 'error');
     } finally {
@@ -266,29 +319,211 @@ export const OpportunityDetailScreen: React.FC = () => {
     }
   };
 
-  const handleGenerateInvoiceFromContract = async (contract: ContractItem) => {
+  // --- CONTRACT CRUD HANDLERS ---
+  const handleOpenEditContract = (c: ContractItem) => {
+    setEditingContract(c);
+    setEditContractTitle(c.title || '');
+    setEditContractValue(c.contractValue || 0);
+    setEditContractStatus(c.status || 'Draft');
+    setEditContractStartDate(c.startDate ? c.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setEditContractEndDate(c.endDate ? c.endDate.slice(0, 10) : new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10));
+    setEditContractTerms(c.termsAndConditions || 'Standard commercial terms apply. Payment Net 30 days.');
+    setEditContractNotes(c.notes || '');
+  };
+
+  const handleEditContractSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContract) return;
+    if (!editContractTitle.trim()) {
+      showToast('Please enter a contract title', 'error');
+      return;
+    }
+    setSavingContract(true);
+    try {
+      await api.put(`/api/contracts/${editingContract.contractId}`, {
+        title: editContractTitle.trim(),
+        contractValue: editContractValue,
+        startDate: new Date(editContractStartDate).toISOString(),
+        endDate: new Date(editContractEndDate).toISOString(),
+        status: editContractStatus,
+        termsAndConditions: editContractTerms || null,
+        notes: editContractNotes || null,
+        opportunityId: Number(id),
+      });
+      showToast('Contract updated successfully!');
+      setEditingContract(null);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update contract', 'error');
+    } finally {
+      setSavingContract(false);
+    }
+  };
+
+  const handleDeleteContract = async (c: ContractItem) => {
+    if (!await confirmAction(`Are you sure you want to delete contract ${c.contractNumber} (${c.title})? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/api/contracts/${c.contractId}`);
+      showToast(`Contract ${c.contractNumber} deleted successfully`);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete contract', 'error');
+    }
+  };
+
+  // --- INVOICE CRUD HANDLERS ---
+  const handleOpenCreateInvoice = (contract?: ContractItem) => {
+    const defaultAmt = contract?.contractValue ?? (calculatedTotal > 0 ? calculatedTotal : opportunity?.estimatedValue ?? 0);
+    setNewInvoiceAmount(defaultAmt);
+    setNewInvoiceTaxRate(0);
+    setNewInvoiceContractId(contract?.contractId ?? (contracts.length > 0 ? contracts[0].contractId : null));
+    setNewInvoiceIssueDate(new Date().toISOString().slice(0, 10));
+    setNewInvoiceDueDate(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+    setNewInvoiceNotes(`Billing invoice for deal: ${opportunity?.title || ''}`);
+    setNewInvoiceTerms('Payment due within 30 days of issue date.');
+    setShowCreateInvoiceModal(true);
+  };
+
+  const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!opportunity || !id) return;
+    if (newInvoiceAmount <= 0) {
+      showToast('Invoice amount must be greater than $0', 'error');
+      return;
+    }
+    setCreatingInvoice(true);
     try {
       const res = await api.post<any>('/api/invoices', {
-        customerId: contract.customerId,
-        contractId: contract.contractId,
+        customerId: opportunity.customerId,
         opportunityId: Number(id),
-        amount: contract.contractValue,
-        taxRate: 0,
-        status: 'Draft',
-        issueDate: new Date().toISOString(),
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        notes: `Billing invoice for signed contract ${contract.contractNumber} (${contract.title})`
+        contractId: newInvoiceContractId || null,
+        amount: newInvoiceAmount,
+        taxRate: newInvoiceTaxRate,
+        issueDate: new Date(newInvoiceIssueDate).toISOString(),
+        dueDate: new Date(newInvoiceDueDate).toISOString(),
+        notes: newInvoiceNotes || null,
+        terms: newInvoiceTerms || null,
       });
       if (res?.invoiceNumber) {
         showToast(`Invoice #${res.invoiceNumber} ready!`);
       } else {
-        showToast('Invoice ready!');
+        showToast('Invoice saved & linked to deal!');
       }
+      setShowCreateInvoiceModal(false);
       await loadData();
       setActiveTab('contracts');
     } catch (err: any) {
-      showToast(err.message || 'Failed to generate invoice', 'error');
+      showToast(err?.message || 'Failed to create invoice', 'error');
+    } finally {
+      setCreatingInvoice(false);
     }
+  };
+
+  const handleOpenEditInvoice = (inv: any) => {
+    setEditingInvoice(inv);
+    setEditInvoiceAmount(inv.amount || 0);
+    setEditInvoiceTaxRate(inv.taxRate || 0);
+    setEditInvoiceStatus(inv.status || 'Draft');
+    setEditInvoiceIssueDate(inv.issueDate ? inv.issueDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setEditInvoiceDueDate(inv.dueDate ? inv.dueDate.slice(0, 10) : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+    setEditInvoicePaymentMethod(inv.paymentMethod || '');
+    setEditInvoiceNotes(inv.notes || '');
+    setEditInvoiceTerms(inv.terms || 'Payment due within 30 days of issue date.');
+  };
+
+  const handleEditInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInvoice) return;
+    if (editInvoiceAmount <= 0) {
+      showToast('Invoice amount must be greater than $0', 'error');
+      return;
+    }
+    setSavingInvoice(true);
+    try {
+      await api.put(`/api/invoices/${editingInvoice.invoiceId}`, {
+        amount: editInvoiceAmount,
+        taxRate: editInvoiceTaxRate,
+        status: editInvoiceStatus,
+        issueDate: new Date(editInvoiceIssueDate).toISOString(),
+        dueDate: new Date(editInvoiceDueDate).toISOString(),
+        paymentMethod: editInvoicePaymentMethod || null,
+        notes: editInvoiceNotes || null,
+        terms: editInvoiceTerms || null,
+      });
+      showToast('Invoice updated successfully!');
+      setEditingInvoice(null);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update invoice', 'error');
+    } finally {
+      setSavingInvoice(false);
+    }
+  };
+
+  const handleOpenPayInvoice = (inv: any) => {
+    setPayingInvoice(inv);
+    setPaymentMethod('Bank Transfer');
+    setPaymentNotes('');
+  };
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingInvoice) return;
+    setProcessingPayment(true);
+    try {
+      await api.post(`/api/invoices/${payingInvoice.invoiceId}/pay`, {
+        paymentMethod,
+        notes: paymentNotes || null,
+      });
+      showToast('Payment recorded successfully! Invoice marked as Paid.');
+      setPayingInvoice(null);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to record payment', 'error');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const handleSyncStripe = async (inv: any) => {
+    try {
+      showToast('Checking Stripe for payment...', 'info');
+      const res = await api.post<{ message: string; status: string }>(`/api/invoices/${inv.invoiceId}/sync-stripe`, {});
+      showToast(res.message);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync with Stripe', 'error');
+    }
+  };
+
+  const handleStripePay = async (inv: any) => {
+    try {
+      const successUrl = `${window.location.origin}/opportunities/${id}?paid_session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${window.location.origin}/opportunities/${id}?cancel_session_id=true`;
+      const res = await api.post<{ url: string }>(`/api/invoices/${inv.invoiceId}/stripe-checkout?successUrl=${encodeURIComponent(successUrl)}&cancelUrl=${encodeURIComponent(cancelUrl)}`, {});
+      window.location.href = res.url;
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to initiate Stripe checkout', 'error');
+    }
+  };
+
+  const handleDeleteInvoice = async (inv: any) => {
+    if (!await confirmAction(`Are you sure you want to delete invoice ${inv.invoiceNumber}? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/api/invoices/${inv.invoiceId}`);
+      showToast(`Invoice ${inv.invoiceNumber} deleted`);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete invoice', 'error');
+    }
+  };
+
+  const handleGenerateInvoiceFromContract = async (contract: ContractItem) => {
+    handleOpenCreateInvoice(contract);
   };
 
   const [sendingContractEmailId, setSendingContractEmailId] = useState<number | null>(null);
@@ -530,8 +765,9 @@ export const OpportunityDetailScreen: React.FC = () => {
             variant="secondary"
             onClick={handleOpenCreateContract}
             style={{ border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8' }}
+            title={contracts.length > 0 ? `View attached contract (${contracts[0].contractNumber})` : 'Create commercial contract for this deal'}
           >
-            <FileSignature size={16} style={{ marginRight: 4 }} /> Create Contract
+            <FileSignature size={16} style={{ marginRight: 4 }} /> {contracts.length > 0 ? 'View Contract' : 'Create Contract'}
           </Button>
           <Button variant="ghost" onClick={handleMarkAsWon} style={{ border: '1px solid var(--success)', color: 'var(--success)' }}>
             <Check size={16} style={{ marginRight: 4 }} /> Mark Won
@@ -983,8 +1219,8 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               {/* Contracts & Billing Tab */}
               {activeTab === 'contracts' && (
-                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {/* Section 1: Contracts */}
+                <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                  {/* Section 1: Contracts CRUD */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                       <div>
@@ -996,9 +1232,16 @@ export const OpportunityDetailScreen: React.FC = () => {
                         </p>
                       </div>
 
-                      <Button variant="primary" size="sm" onClick={handleOpenCreateContract}>
-                        <Plus size={14} style={{ marginRight: 4 }} /> Draft New Contract
-                      </Button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {contracts.length > 0 && (
+                          <span style={{ fontSize: '0.78rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.25rem 0.6rem', borderRadius: '6px', fontWeight: 600 }}>
+                            ✓ {contracts.length} Contract{contracts.length > 1 ? 's' : ''} Linked
+                          </span>
+                        )}
+                        <Button variant="primary" size="sm" onClick={handleOpenCreateContract}>
+                          <Plus size={14} style={{ marginRight: 4 }} /> Draft Contract
+                        </Button>
+                      </div>
                     </div>
 
                     {contracts.length === 0 ? (
@@ -1031,8 +1274,8 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 gap: '1rem'
                               }}
                             >
-                              <div style={{ minWidth: '220px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                              <div style={{ minWidth: '240px', flex: '1 1 auto' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                                   <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{contract.title}</strong>
                                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
                                     {contract.contractNumber}
@@ -1060,14 +1303,25 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setSelectedContractForModal(contract)}
                                   style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                  title="View agreement & e-signatures"
                                 >
-                                  <Eye size={14} style={{ marginRight: 4 }} /> View & Sign
+                                  <Eye size={13} style={{ marginRight: 4 }} /> View & Sign
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenEditContract(contract)}
+                                  style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                  title="Edit contract details"
+                                >
+                                  <Pencil size={13} style={{ marginRight: 4 }} /> Edit
                                 </Button>
 
                                 <Button
@@ -1075,9 +1329,9 @@ export const OpportunityDetailScreen: React.FC = () => {
                                   size="sm"
                                   onClick={() => handleCopySigningLink(contract)}
                                   style={{ border: '1px solid rgba(99, 102, 241, 0.3)', color: '#818cf8', fontSize: '0.8rem' }}
-                                  title="Copy public signing URL to send to client"
+                                  title="Copy public signing URL"
                                 >
-                                  <LinkIcon size={14} style={{ marginRight: 4 }} /> Copy E-Sign Link
+                                  <LinkIcon size={13} style={{ marginRight: 4 }} /> Copy Link
                                 </Button>
 
                                 <Button
@@ -1088,18 +1342,28 @@ export const OpportunityDetailScreen: React.FC = () => {
                                   style={{ border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.8rem' }}
                                   title="Email contract signing link directly to customer"
                                 >
-                                  <Mail size={14} style={{ marginRight: 4 }} />
-                                  {sendingContractEmailId === contract.contractId ? 'Sending…' : 'Email Contract'}
+                                  <Mail size={13} style={{ marginRight: 4 }} />
+                                  {sendingContractEmailId === contract.contractId ? 'Sending…' : 'Email'}
                                 </Button>
 
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  onClick={() => handleGenerateInvoiceFromContract(contract)}
+                                  onClick={() => handleOpenCreateInvoice(contract)}
                                   style={{ fontSize: '0.8rem' }}
-                                  title="Generate billing invoice from this contract"
+                                  title="Generate or update billing invoice"
                                 >
-                                  <Receipt size={14} style={{ marginRight: 4 }} /> Generate Invoice
+                                  <Receipt size={13} style={{ marginRight: 4 }} /> Invoice
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteContract(contract)}
+                                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '0.35rem 0.5rem' }}
+                                  title="Delete contract"
+                                >
+                                  <Trash2 size={14} />
                                 </Button>
                               </div>
                             </div>
@@ -1109,35 +1373,47 @@ export const OpportunityDetailScreen: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Section 2: Invoices */}
+                  {/* Section 2: Invoices CRUD */}
                   <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                       <div>
                         <h3 style={{ margin: '0 0 0.2rem 0', fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <Receipt size={18} style={{ color: '#10b981' }} /> Billing Invoices & Stripe ({invoices.length})
+                          <Receipt size={18} style={{ color: '#10b981' }} /> Billing Invoices & Payments ({invoices.length})
                         </h3>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           Financial invoices and payment collections for this opportunity.
                         </p>
                       </div>
+
+                      <Button variant="primary" size="sm" onClick={() => handleOpenCreateInvoice()} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                        <Plus size={14} style={{ marginRight: 4 }} /> Draft Invoice
+                      </Button>
                     </div>
 
                     {invoices.length === 0 ? (
-                      <div style={{ padding: '1.5rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px dashed var(--border-color)' }}>
-                        <Receipt size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                          No invoices generated yet. Once a contract is drafted or signed, click <strong>"Generate Invoice"</strong> above to collect payment.
+                      <div style={{ padding: '1.75rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '0.75rem', border: '1px dashed var(--border-color)' }}>
+                        <Receipt size={34} style={{ color: 'var(--text-muted)', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                        <h4 style={{ margin: '0 0 0.25rem 0', color: 'var(--text-primary)', fontSize: '0.95rem' }}>No Invoices Generated Yet</h4>
+                        <p style={{ margin: '0 auto 1rem auto', maxWidth: '420px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          Generate an invoice from this deal or contract to collect client payments via Stripe or manual recording.
                         </p>
+                        <Button variant="secondary" size="sm" onClick={() => handleOpenCreateInvoice()}>
+                          <Plus size={14} style={{ marginRight: 4 }} /> Create Invoice for ${calculatedTotal > 0 ? calculatedTotal.toLocaleString() : opportunity.estimatedValue.toLocaleString()}
+                        </Button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         {invoices.map((inv: any) => {
                           const isPaid = inv.status?.toLowerCase() === 'paid';
+                          const statusBg = isPaid ? 'rgba(16, 185, 129, 0.15)' : inv.status === 'Sent' ? 'rgba(99, 102, 241, 0.15)' : inv.status === 'Overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+                          const statusColor = isPaid ? '#10b981' : inv.status === 'Sent' ? '#818cf8' : inv.status === 'Overdue' ? '#ef4444' : '#f59e0b';
+                          const statusBorder = isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : inv.status === 'Sent' ? '1px solid rgba(99, 102, 241, 0.3)' : inv.status === 'Overdue' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)';
+
                           return (
                             <div
                               key={inv.invoiceId}
                               style={{
-                                padding: '0.85rem 1.15rem',
+                                padding: '1rem 1.25rem',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: '0.75rem',
                                 border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
@@ -1148,29 +1424,38 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 gap: '1rem'
                               }}
                             >
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{inv.invoiceNumber}</strong>
+                              <div style={{ minWidth: '240px', flex: '1 1 auto' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
+                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{inv.invoiceNumber}</strong>
                                   <span
                                     style={{
-                                      padding: '0.12rem 0.45rem',
+                                      padding: '0.12rem 0.5rem',
                                       borderRadius: '1rem',
-                                      fontSize: '0.7rem',
+                                      fontSize: '0.72rem',
                                       fontWeight: 700,
-                                      background: isPaid ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                                      color: isPaid ? '#10b981' : '#818cf8',
-                                      border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(99, 102, 241, 0.3)'
+                                      background: statusBg,
+                                      color: statusColor,
+                                      border: statusBorder
                                     }}
                                   >
                                     {inv.status}
                                   </span>
+                                  {inv.contract?.contractNumber && (
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                      Contract: {inv.contract.contractNumber}
+                                    </span>
+                                  )}
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                  Amount: <strong style={{ color: '#10b981' }}>${(inv.totalAmount ?? inv.amount)?.toLocaleString()}</strong> · Due Date: {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                  <span>Total: <strong style={{ color: '#10b981', fontSize: '0.9rem' }}>${(inv.totalAmount ?? inv.amount)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                  {inv.taxAmount > 0 && <span>(Tax: ${inv.taxAmount.toLocaleString()})</span>}
+                                  <span>Issue: {inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '—'}</span>
+                                  <span>Due: {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}</span>
+                                  {isPaid && inv.paymentMethod && <span>Paid via: <strong>{inv.paymentMethod}</strong></span>}
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                                 {inv.paymentUrl && !isPaid && (
                                   <a
                                     href={inv.paymentUrl}
@@ -1179,7 +1464,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                                     style={{
                                       padding: '0.35rem 0.75rem',
                                       borderRadius: '6px',
-                                      fontSize: '0.8rem',
+                                      fontSize: '0.78rem',
                                       fontWeight: 600,
                                       background: '#6366f1',
                                       color: '#ffffff',
@@ -1189,22 +1474,51 @@ export const OpportunityDetailScreen: React.FC = () => {
                                       gap: '0.35rem'
                                     }}
                                   >
-                                    💳 Pay Online <ExternalLink size={12} />
+                                    <CreditCard size={13} /> Pay Online <ExternalLink size={11} />
                                   </a>
                                 )}
-                                <Link
-                                  to="/invoices"
-                                  style={{
-                                    padding: '0.35rem 0.65rem',
-                                    borderRadius: '6px',
-                                    fontSize: '0.78rem',
-                                    border: '1px solid var(--border-color)',
-                                    color: 'var(--text-secondary)',
-                                    textDecoration: 'none'
-                                  }}
+
+                                {!isPaid && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleOpenPayInvoice(inv)}
+                                    style={{ border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.8rem' }}
+                                    title="Record payment received"
+                                  >
+                                    <DollarSign size={13} style={{ marginRight: 3 }} /> Pay
+                                  </Button>
+                                )}
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleSyncStripe(inv)}
+                                  style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                  title="Sync payment with Stripe"
                                 >
-                                  View Invoices Screen
-                                </Link>
+                                  <RefreshCw size={13} style={{ marginRight: 3 }} /> Sync
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenEditInvoice(inv)}
+                                  style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                  title="Edit invoice details"
+                                >
+                                  <Pencil size={13} style={{ marginRight: 3 }} /> Edit
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteInvoice(inv)}
+                                  style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '0.35rem 0.5rem' }}
+                                  title="Delete invoice"
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
                               </div>
                             </div>
                           );
@@ -1308,7 +1622,7 @@ export const OpportunityDetailScreen: React.FC = () => {
         />
       )}
 
-      {/* Create Contract from Deal Modal */}
+      {/* Create Contract Modal */}
       {showCreateContractModal && opportunity && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
@@ -1321,7 +1635,7 @@ export const OpportunityDetailScreen: React.FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <FileSignature size={18} style={{ color: '#818cf8' }} /> Create Commercial Contract
+                <FileSignature size={18} style={{ color: '#818cf8' }} /> {contracts.length > 0 ? 'Edit Commercial Contract' : 'Create Commercial Contract'}
               </h3>
               <button
                 type="button"
@@ -1331,6 +1645,11 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
+            {contracts.length > 0 && (
+              <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '6px', fontSize: '0.78rem', color: '#818cf8', marginBottom: '1rem' }}>
+                ℹ️ Contract <strong>{contracts[0].contractNumber}</strong> is already attached to this deal. Submitting will update the existing contract.
+              </div>
+            )}
 
             <form onSubmit={handleCreateContractSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
@@ -1395,6 +1714,461 @@ export const OpportunityDetailScreen: React.FC = () => {
         </div>
       )}
 
+      {/* Edit Contract Modal */}
+      {editingContract && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
+            width: '100%', maxWidth: '540px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Pencil size={18} style={{ color: '#818cf8' }} /> Edit Contract ({editingContract.contractNumber})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingContract(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditContractSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Contract Title *
+                </label>
+                <Input
+                  value={editContractTitle}
+                  onChange={e => setEditContractTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Contract Value ($) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editContractValue}
+                    onChange={e => setEditContractValue(Number(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Contract Status
+                  </label>
+                  <SelectDown
+                    value={editContractStatus}
+                    onChange={val => setEditContractStatus(String(val))}
+                    options={[
+                      { value: 'Draft', label: 'Draft' },
+                      { value: 'SentForSignature', label: 'Sent For Signature' },
+                      { value: 'Signed', label: 'Signed' },
+                      { value: 'Active', label: 'Active' },
+                      { value: 'Terminated', label: 'Terminated' }
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Start Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={editContractStartDate}
+                    onChange={e => setEditContractStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    End Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={editContractEndDate}
+                    onChange={e => setEditContractEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Terms & Conditions
+                </label>
+                <textarea
+                  value={editContractTerms}
+                  onChange={e => setEditContractTerms(e.target.value)}
+                  rows={2}
+                  className="input-field"
+                  style={{ width: '100%', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Internal Notes
+                </label>
+                <Input
+                  value={editContractNotes}
+                  onChange={e => setEditContractNotes(e.target.value)}
+                  placeholder="Optional internal notes..."
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setEditingContract(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingContract}>
+                  {savingContract ? 'Saving…' : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Invoice Modal */}
+      {showCreateInvoiceModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
+            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Receipt size={18} style={{ color: '#10b981' }} /> Create Billing Invoice
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateInvoiceModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Invoice Amount ($) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={newInvoiceAmount}
+                    onChange={e => setNewInvoiceAmount(Number(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Tax Rate (%)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={newInvoiceTaxRate}
+                    onChange={e => setNewInvoiceTaxRate(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              {contracts.length > 0 && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Link to Legal Contract
+                  </label>
+                  <SelectDown
+                    value={newInvoiceContractId ? String(newInvoiceContractId) : '0'}
+                    onChange={val => setNewInvoiceContractId(Number(val) > 0 ? Number(val) : null)}
+                    options={[
+                      { value: '0', label: '— No linked contract —' },
+                      ...contracts.map(c => ({ value: String(c.contractId), label: `${c.contractNumber} (${c.title}) - $${c.contractValue?.toLocaleString()}` }))
+                    ]}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Issue Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={newInvoiceIssueDate}
+                    onChange={e => setNewInvoiceIssueDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Due Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={newInvoiceDueDate}
+                    onChange={e => setNewInvoiceDueDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Notes
+                </label>
+                <Input
+                  value={newInvoiceNotes}
+                  onChange={e => setNewInvoiceNotes(e.target.value)}
+                  placeholder="Notes shown on invoice..."
+                />
+              </div>
+
+              <div style={{ padding: '0.6rem 0.85rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.82rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', border: '1px solid #334155' }}>
+                <span>Grand Total (incl. Tax):</span>
+                <strong style={{ color: '#10b981', fontSize: '0.95rem' }}>
+                  ${(newInvoiceAmount + (newInvoiceAmount * (newInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setShowCreateInvoiceModal(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={creatingInvoice} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                  {creatingInvoice ? 'Generating…' : 'Generate Invoice'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Invoice Modal */}
+      {editingInvoice && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
+            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Pencil size={18} style={{ color: '#10b981' }} /> Edit Invoice ({editingInvoice.invoiceNumber})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingInvoice(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Invoice Amount ($) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={editInvoiceAmount}
+                    onChange={e => setEditInvoiceAmount(Number(e.target.value))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Tax Rate (%)
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={editInvoiceTaxRate}
+                    onChange={e => setEditInvoiceTaxRate(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Invoice Status
+                </label>
+                <SelectDown
+                  value={editInvoiceStatus}
+                  onChange={val => setEditInvoiceStatus(String(val))}
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Sent', label: 'Sent / Issued' },
+                    { value: 'Paid', label: 'Paid' },
+                    { value: 'Overdue', label: 'Overdue' },
+                    { value: 'Void', label: 'Void' }
+                  ]}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Issue Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={editInvoiceIssueDate}
+                    onChange={e => setEditInvoiceIssueDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Due Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={editInvoiceDueDate}
+                    onChange={e => setEditInvoiceDueDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Notes
+                </label>
+                <Input
+                  value={editInvoiceNotes}
+                  onChange={e => setEditInvoiceNotes(e.target.value)}
+                  placeholder="Notes shown on invoice..."
+                />
+              </div>
+
+              <div style={{ padding: '0.6rem 0.85rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.82rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', border: '1px solid #334155' }}>
+                <span>Calculated Total (incl. Tax):</span>
+                <strong style={{ color: '#10b981', fontSize: '0.95rem' }}>
+                  ${(editInvoiceAmount + (editInvoiceAmount * (editInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setEditingInvoice(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingInvoice}>
+                  {savingInvoice ? 'Saving…' : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {payingInvoice && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div style={{
+            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
+            width: '100%', maxWidth: '480px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <DollarSign size={18} style={{ color: '#10b981' }} /> Record Payment for {payingInvoice.invoiceNumber}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPayingInvoice(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '0.75rem 1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Payment Amount:</span>
+              <strong style={{ fontSize: '1.15rem', color: '#10b981' }}>
+                ${(payingInvoice.totalAmount ?? payingInvoice.amount)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </strong>
+            </div>
+
+            <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Payment Method *
+                </label>
+                <SelectDown
+                  value={paymentMethod}
+                  onChange={val => setPaymentMethod(String(val))}
+                  options={[
+                    { value: 'Bank Transfer', label: 'Bank Transfer (Wire / ACH)' },
+                    { value: 'Credit Card', label: 'Credit Card' },
+                    { value: 'Check', label: 'Check' },
+                    { value: 'Cash', label: 'Cash' },
+                    { value: 'Stripe', label: 'Stripe' },
+                    { value: 'Other', label: 'Other' }
+                  ]}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Payment Notes / Reference
+                </label>
+                <Input
+                  value={paymentNotes}
+                  onChange={e => setPaymentNotes(e.target.value)}
+                  placeholder="e.g. Check #4021 or Transfer Ref 8847"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <Button type="button" variant="ghost" onClick={() => setPayingInvoice(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={processingPayment} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                  {processingPayment ? 'Recording…' : 'Confirm & Mark Paid'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Contract View & E-Signature Modal */}
       {selectedContractForModal && (
         <ContractModal
@@ -1405,7 +2179,7 @@ export const OpportunityDetailScreen: React.FC = () => {
             setSelectedContractForModal(null);
           }}
           onInvoice={(contract) => {
-            handleGenerateInvoiceFromContract(contract);
+            handleOpenCreateInvoice(contract);
             setSelectedContractForModal(null);
           }}
         />

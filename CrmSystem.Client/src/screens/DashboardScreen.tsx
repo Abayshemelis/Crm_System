@@ -789,7 +789,7 @@ export const DashboardScreen: React.FC = () => {
                 )}
             </div>
 
-            {/* Standard Detail Modal Popup */}
+            {/* Standard Detail Modal Popup for all KPI Cards */}
             {selectedKpiCard && (
                 <div className="modal-overlay" onClick={() => setSelectedKpiCard(null)}>
                     <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '340px' }}>
@@ -813,51 +813,20 @@ export const DashboardScreen: React.FC = () => {
                             </p>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
-                                {selectedKpiCard.title === 'Total Leads' ? (
-                                    <>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active Prospects</span>
-                                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f59e0b' }}>
-                                                {filteredStats?.totalLeads ?? stats?.activeLeads ?? 0}
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Converted to Customers</span>
-                                            <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#10b981' }}>
-                                                {filteredStats?.convertedLeadsCount ?? 0}
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total Historical Portfolio</span>
-                                            <span style={{ fontSize: '0.92rem', fontWeight: 600 }}>
-                                                {filteredStats?.totalLeadsAll ?? ((filteredStats?.totalLeads ?? 0) + (filteredStats?.convertedLeadsCount ?? 0))}
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Conversion Rate</span>
-                                            <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#3b82f6' }}>
-                                                {filteredStats?.conversionRate ? formatPercentage(filteredStats.conversionRate) : '0.0%'}
-                                            </span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Metric Value</span>
-                                            <span style={{ fontSize: '1rem', fontWeight: 700, color: selectedKpiCard.color }}>
-                                                {isLoading ? '—' : selectedKpiCard.format === 'currency' ? formatCurrency(selectedKpiCard.value) : selectedKpiCard.format === 'percentage' ? formatPercentage(selectedKpiCard.value) : selectedKpiCard.value}
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</span>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)' }}>Active Sync</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Data Scope</span>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{selectedRole === 'SalesRep' ? 'Assigned' : 'Organization'}</span>
-                                        </div>
-                                    </>
-                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Metric Value</span>
+                                    <span style={{ fontSize: '1rem', fontWeight: 700, color: selectedKpiCard.color }}>
+                                        {isLoading ? '—' : selectedKpiCard.format === 'currency' ? formatCurrency(selectedKpiCard.value) : selectedKpiCard.format === 'percentage' ? formatPercentage(selectedKpiCard.value) : selectedKpiCard.value}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Status</span>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--success)' }}>Active Sync</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Data Scope</span>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{selectedRole === 'SalesRep' ? 'Assigned' : 'Organization'}</span>
+                                </div>
                             </div>
                         </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
@@ -9,10 +9,11 @@ import {
 } from 'recharts';
 import {
   TrendingUp, Clock, Target, DollarSign, Download, RefreshCw,
-  BarChart2, Activity, Layers, Zap, ChevronRight,
+  BarChart2, Activity, Layers, Zap, ChevronRight, ChevronDown,
   ArrowUpRight, ArrowDownRight, Users, UserCheck,
   CheckCircle2, AlertCircle, Medal, Trophy, ShieldAlert, Calendar,
-  Search, LayoutGrid, List, Crown, Award, FileText, Printer, UploadCloud
+  Search, LayoutGrid, List, Crown, Award, FileText, Printer, UploadCloud,
+  X, Sparkles, SlidersHorizontal, Check
 } from 'lucide-react';
 import './reports.css';
 
@@ -714,20 +715,30 @@ const HeadlineStat: React.FC<{ label:string; value:string; color?:string }> =
     </div>
   );
 
-// ─── Nav Items ────────────────────────────────────────────────────────────────
-const NAV_ITEMS: { id: Section; label: string; icon: React.ReactNode; group: string }[] = [
-  { id:'overview',  label:'Executive Overview',  icon:<BarChart2 size={15}/>,    group:'Summary' },
-  { id:'invoices',  label:'Invoice & Cash Revenue', icon:<DollarSign size={15}/>, group:'Financial' },
-  { id:'contracts', label:'Contract Analytics',  icon:<FileText size={15}/>,     group:'Financial' },
-  { id:'pipeline',  label:'Pipeline Stage Analysis', icon:<DollarSign size={15}/>, group:'Sales' },
-  { id:'winrate',   label:'Win Rate Trends',     icon:<Target size={15}/>,       group:'Sales' },
-  { id:'velocity',  label:'Sales Velocity',      icon:<Zap size={15}/>,          group:'Sales' },
-  { id:'repperf',   label:'Rep Leaderboard',     icon:<Trophy size={15}/>,       group:'Team' },
-  { id:'funnel',    label:'Lead Funnel',         icon:<Layers size={15}/>,       group:'Leads' },
-  { id:'sources',   label:'Acquisition Channels',icon:<TrendingUp size={15}/>,   group:'Leads' },
-  { id:'priority',  label:'Priority & SLA Health',icon:<ShieldAlert size={15}/>, group:'Leads' },
-  { id:'activity',  label:'Task & Activity Log', icon:<Activity size={15}/>,     group:'Execution' },
-  { id:'import',    label:'Data Import History', icon:<UploadCloud size={15}/>,  group:'Execution' },
+// ─── Nav Items with Rich Categorization & Descriptions ──────────────────────────
+export interface NavItem {
+  id: Section;
+  label: string;
+  shortLabel: string;
+  icon: React.ReactNode;
+  group: string;
+  desc: string;
+  color: string;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id:'overview',  label:'Executive Overview',  shortLabel: 'Overview',   icon:<BarChart2 size={15}/>,    group:'Summary',    desc: 'High-level business KPIs, conversion rates, and revenue pipeline snapshot', color: '#6366f1' },
+  { id:'invoices',  label:'Invoice & Cash Revenue', shortLabel: 'Invoices', icon:<DollarSign size={15}/>, group:'Financial',  desc: 'Collected cash, pending payments, invoice schedules, and billing metrics', color: '#10b981' },
+  { id:'contracts', label:'Contract Analytics',  shortLabel: 'Contracts', icon:<FileText size={15}/>,     group:'Financial',  desc: 'Active agreements, execution values, draft pipeline, and expiration risks', color: '#8b5cf6' },
+  { id:'pipeline',  label:'Pipeline Stage Analysis', shortLabel: 'Pipeline', icon:<Layers size={15}/>,   group:'Sales',      desc: 'Stage-by-stage deal volume, bottleneck analysis, and open pipeline valuation', color: '#3b82f6' },
+  { id:'winrate',   label:'Win Rate Trends',     shortLabel: 'Win Rate',  icon:<Target size={15}/>,       group:'Sales',      desc: 'Historical closed-deal win/loss performance, monthly trends, and conversion ratios', color: '#f59e0b' },
+  { id:'velocity',  label:'Sales Velocity',      shortLabel: 'Velocity',  icon:<Zap size={15}/>,          group:'Sales',      desc: 'Average days spent per deal stage and sales cycle duration analytics', color: '#ec4899' },
+  { id:'repperf',   label:'Rep Leaderboard',     shortLabel: 'Leaderboard', icon:<Trophy size={15}/>,     group:'Team',       desc: 'Sales rep rankings, revenue won, deal win rates, and pipeline health', color: '#eab308' },
+  { id:'funnel',    label:'Lead Funnel',         shortLabel: 'Funnel',    icon:<TrendingUp size={15}/>,   group:'Leads',      desc: 'End-to-end lead journey from acquisition to qualification and customer conversion', color: '#06b6d4' },
+  { id:'sources',   label:'Acquisition Channels',shortLabel: 'Channels',  icon:<Users size={15}/>,        group:'Leads',      desc: 'Lead generation attribution, channel breakdown, and marketing source ROI', color: '#14b8a6' },
+  { id:'priority',  label:'Priority & SLA Health',shortLabel: 'SLA Health',icon:<ShieldAlert size={15}/>, group:'Leads',     desc: 'Lead tier distribution, urgent follow-up deadlines, and SLA execution rate', color: '#ef4444' },
+  { id:'activity',  label:'Task & Activity Log', shortLabel: 'Activity',  icon:<Activity size={15}/>,     group:'Execution',  desc: 'Calls, meetings, emails, task completion rates, and team workload', color: '#84cc16' },
+  { id:'import',    label:'Data Import History', shortLabel: 'Imports',   icon:<UploadCloud size={15}/>,  group:'Execution',  desc: 'Data import history, batch logs, record counts, and data sync audit', color: '#64748b' },
 ];
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
@@ -760,6 +771,28 @@ export const ReportsScreen: React.FC = () => {
   const [section,      setSectionState]  = useState<Section>(getInitialSection);
   const [dataScope,    setDataScope]    = useState<'personal' | 'team'>(isManagerOrAbove ? 'team' : 'personal');
   const [loading,      setLoading]      = useState(true);
+
+  const currentNav = useMemo(() => NAV_ITEMS.find(n => n.id === section) || NAV_ITEMS[0], [section]);
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => currentNav.group);
+
+  useEffect(() => {
+    if (currentNav.group !== selectedCategory) {
+      setSelectedCategory(currentNav.group);
+    }
+  }, [currentNav.group]);
+
+  const categoryGroups = useMemo(() => [
+    { key: 'Summary', label: '📊 Summary', count: 1 },
+    { key: 'Financial', label: '💰 Financial', count: 2 },
+    { key: 'Sales', label: '🎯 Sales', count: 3 },
+    { key: 'Team', label: '🏆 Team', count: 1 },
+    { key: 'Leads', label: '⚡ Leads', count: 3 },
+    { key: 'Execution', label: '📋 Execution', count: 2 },
+  ], []);
+
+  const currentCategoryItems = useMemo(() => {
+    return NAV_ITEMS.filter(item => item.group === selectedCategory);
+  }, [selectedCategory]);
 
   const setSection = useCallback((s: Section) => {
     setSectionState(s);
@@ -1005,19 +1038,62 @@ export const ReportsScreen: React.FC = () => {
           </div>
         </div>
 
+        {/* ── Mobile & Tablet Clean Categorized Dropdown Selector ── */}
+        <div className="rpt-mobile-selector-bar">
+          <div className="rpt-mobile-select-wrap">
+            <span className="rpt-mobile-select-icon" style={{ background: `${currentNav.color}22`, color: currentNav.color }}>
+              {currentNav.icon}
+            </span>
+            <select
+              className="rpt-mobile-select"
+              value={section}
+              onChange={e => setSection(e.target.value as Section)}
+            >
+              <optgroup label="Executive Summary">
+                <option value="overview">📊 Executive Overview</option>
+              </optgroup>
+              <optgroup label="Financial & Revenue">
+                <option value="invoices">💰 Invoice & Cash Revenue</option>
+                <option value="contracts">📑 Contract Analytics</option>
+              </optgroup>
+              <optgroup label="Sales & Pipeline">
+                <option value="pipeline">📈 Pipeline Stage Analysis</option>
+                <option value="winrate">🎯 Win Rate Trends</option>
+                <option value="velocity">⚡ Sales Velocity (Time in Stage)</option>
+              </optgroup>
+              <optgroup label="Team Performance">
+                <option value="repperf">🏆 Rep Leaderboard</option>
+              </optgroup>
+              <optgroup label="Leads & Funnel">
+                <option value="priority">🛡️ Priority & SLA Health</option>
+              </optgroup>
+              <optgroup label="Execution & Logs">
+                <option value="activity">📋 Task & Activity Log</option>
+                <option value="import">📦 Data Import History</option>
+              </optgroup>
+            </select>
+            <ChevronDown size={18} className="rpt-mobile-select-chevron" />
+          </div>
+        </div>
+
         {/* ── Main Dashboard Layout ── */}
         <div className="rpt-body">
-          {/* Sidebar Nav */}
-          <div className="rpt-nav">
+          {/* Desktop Left Sidebar Nav */}
+          <div className="rpt-nav rpt-desktop-nav">
             {Object.entries(groupedNav).map(([grp, items]) => (
-              <div key={grp} style={{ marginBottom: '0.75rem' }}>
+              <div key={grp} className="rpt-nav-group-section">
                 <div className="rpt-nav-heading">{grp}</div>
                 {items.map(item => (
-                  <button key={item.id}
+                  <button
+                    key={item.id}
                     className={`rpt-nav-btn ${section === item.id ? 'active' : ''}`}
-                    onClick={() => setSection(item.id)}>
-                    {item.icon}
-                    <span>{item.label}</span>
+                    onClick={() => setSection(item.id)}
+                  >
+                    <span className="rpt-nav-btn-icon" style={section === item.id ? { color: item.color } : {}}>
+                      {item.icon}
+                    </span>
+                    <span className="rpt-nav-btn-label">{item.label}</span>
+                    {section === item.id && <span className="rpt-nav-active-dot" style={{ background: item.color }} />}
                   </button>
                 ))}
               </div>
@@ -3619,7 +3695,7 @@ export const ReportsScreen: React.FC = () => {
                                     {p.total} Total Leads
                                   </h4>
                                   <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                    Avg Lead Score: <strong style={{ color }}>{p.avgScore} pts</strong>
+                                    Avg Lead Score: <strong style={{ color }}>{p.avgScore}%</strong>
                                   </div>
                                 </div>
                                 <div className="rpt-mini-bar-track">
@@ -3683,7 +3759,7 @@ export const ReportsScreen: React.FC = () => {
                                           </div>
                                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                                             <span style={{ color: 'var(--text-muted)' }}>Avg Score:</span>
-                                            <strong>{data.avgScore} pts</strong>
+                                            <strong>{data.avgScore}%</strong>
                                           </div>
                                         </div>
                                       </div>

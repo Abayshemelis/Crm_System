@@ -10,6 +10,7 @@
 // ==============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { buildUrl } from '../lib/api';
 
 // ── 1. TYPES & INTERFACES ─────────────────────────────────────────────────────
 interface User {
@@ -164,9 +165,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!storedRefresh) return false;
 
     try {
-      const res = await fetch('/api/auth/refresh', {
+      const res = await fetch(buildUrl('/api/auth/refresh'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ refreshToken: storedRefresh }),
       });
       if (!res.ok) {

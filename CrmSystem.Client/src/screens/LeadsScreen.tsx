@@ -9,10 +9,11 @@ import { DateRangePicker } from '../components/ui/DateRangePicker';
 import { api } from '../lib/api';
 import {
     Plus, Search, UserPlus, Calendar, Clock, AlertTriangle,
-    Users, Target, UserCheck, Award, Mail, Phone, CheckCircle, LayoutGrid, List, Eye, ArrowRight, ChevronRight
+    Users, Target, UserCheck, Award, Mail, Phone, CheckCircle, LayoutGrid, List, Eye, ArrowRight, ChevronRight, Filter, Info, X
 } from 'lucide-react';
 import { LeadConvertModal } from '../components/ui/LeadConvertModal';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { LeadSectionModal, LeadSectionType } from '../components/leads/LeadSectionModal';
 import './screens.css';
 
 interface LeadSummary {
@@ -64,8 +65,66 @@ export const LeadsScreen: React.FC = () => {
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
 
+    // Dashboard Section State & Modal
+    const [selectedSectionModal, setSelectedSectionModal] = useState<LeadSectionType | null>(null);
+    const [activeDashboardSection, setActiveDashboardSection] = useState<LeadSectionType | null>(null);
+
     const navigate = useNavigate();
     const location = useLocation();
+
+    const handleApplySection = (section: LeadSectionType) => {
+        setActiveDashboardSection(section);
+        if (section === 'active') {
+            setSelectedStatusId('');
+            setSelectedRating('');
+            setSelectedFollowUpFilter('');
+            setShowConverted(false);
+        } else if (section === 'hot') {
+            setSelectedRating('Hot');
+            setSelectedStatusId('');
+            setSelectedFollowUpFilter('');
+            setShowConverted(false);
+        } else if (section === 'due') {
+            setSelectedFollowUpFilter('today');
+            setSelectedRating('');
+            setSelectedStatusId('');
+            setShowConverted(false);
+        } else if (section === 'converted') {
+            setShowConverted(true);
+            setSelectedRating('');
+            setSelectedFollowUpFilter('');
+            setSelectedStatusId('');
+        }
+    };
+
+    const handleClearSectionFilter = () => {
+        setActiveDashboardSection(null);
+        setSelectedStatusId('');
+        setSelectedRating('');
+        setSelectedFollowUpFilter('');
+        setShowConverted(false);
+    };
+
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const sectionParam = queryParams.get('section') as LeadSectionType | null;
+        const ratingParam = queryParams.get('rating');
+        const followUpParam = queryParams.get('followUpFilter') || queryParams.get('followUp');
+        const showConvertedParam = queryParams.get('showConverted');
+
+        if (sectionParam && ['active', 'hot', 'due', 'converted'].includes(sectionParam)) {
+            handleApplySection(sectionParam);
+        } else if (ratingParam === 'Hot') {
+            setActiveDashboardSection('hot');
+            setSelectedRating('Hot');
+        } else if (followUpParam) {
+            setActiveDashboardSection('due');
+            setSelectedFollowUpFilter(followUpParam);
+        } else if (showConvertedParam === 'true') {
+            setActiveDashboardSection('converted');
+            setShowConverted(true);
+        }
+    }, [location.search]);
 
     const getLeadRating = (score: number) => {
         if (score >= 70) return { label: '🔥 Hot', rating: 'Hot', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.25)' };
@@ -204,126 +263,363 @@ export const LeadsScreen: React.FC = () => {
             )}
 
             {/* Leads Dashboard KPI Summary Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+                {/* 1. Active Leads Card */}
                 <div
                     className="glass-panel animate-fade-in"
                     style={{
                         padding: '1.15rem 1.25rem',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
                         cursor: 'pointer',
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-color)',
+                        background: activeDashboardSection === 'active' 
+                            ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.05) 100%)' 
+                            : 'var(--bg-card)',
+                        border: activeDashboardSection === 'active' 
+                            ? '1.5px solid #f59e0b' 
+                            : '1px solid var(--border-color)',
                         transition: 'all 0.2s ease',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                        boxShadow: activeDashboardSection === 'active' 
+                            ? '0 6px 20px rgba(245, 158, 11, 0.22)' 
+                            : '0 4px 10px rgba(0, 0, 0, 0.03)',
+                        position: 'relative'
                     }}
-                    onClick={() => {
-                        setSelectedStatusId('');
-                        setSelectedRating('');
-                        setSelectedFollowUpFilter('');
-                        setShowConverted(false);
-                    }}
+                    onClick={() => handleApplySection('active')}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Active Leads</span>
-                        <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Target size={18} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeDashboardSection === 'active' ? '#f59e0b' : 'var(--text-primary)' }}>
+                                Active Leads
+                            </span>
+                            {activeDashboardSection === 'active' && (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: '#f59e0b', color: '#ffffff' }}>
+                                    VIEWING
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <button
+                                type="button"
+                                title="Open Active Leads Section Popup"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSectionModal('active');
+                                }}
+                                style={{
+                                    border: 'none',
+                                    background: 'rgba(245, 158, 11, 0.15)',
+                                    color: '#f59e0b',
+                                    borderRadius: '6px',
+                                    padding: '0.2rem 0.45rem',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                }}
+                            >
+                                <Eye size={12} /> Popup
+                            </button>
+                            <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Target size={16} />
+                            </div>
                         </div>
                     </div>
-                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.4rem' }}>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '0.35rem' }}>
                         {leads.filter(l => l.leadStatusName !== 'Converted').length}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#f59e0b', marginTop: '0.2rem', fontWeight: 500 }}>
-                        Pipeline prospects
+                    <div style={{ fontSize: '0.76rem', color: '#f59e0b', marginTop: '0.15rem', fontWeight: 600 }}>
+                        Pipeline prospects (Active)
                     </div>
                 </div>
 
+                {/* 2. Hot Prospects Card */}
                 <div
                     className="glass-panel animate-fade-in"
                     style={{
                         padding: '1.15rem 1.25rem',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
                         cursor: 'pointer',
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-color)',
+                        background: activeDashboardSection === 'hot' 
+                            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(220, 38, 38, 0.05) 100%)' 
+                            : 'var(--bg-card)',
+                        border: activeDashboardSection === 'hot' 
+                            ? '1.5px solid #ef4444' 
+                            : '1px solid var(--border-color)',
                         transition: 'all 0.2s ease',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                        boxShadow: activeDashboardSection === 'hot' 
+                            ? '0 6px 20px rgba(239, 68, 68, 0.22)' 
+                            : '0 4px 10px rgba(0, 0, 0, 0.03)',
+                        position: 'relative'
                     }}
-                    onClick={() => {
-                        setSelectedRating('Hot');
-                    }}
+                    onClick={() => handleApplySection('hot')}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>🔥 Hot Prospects</span>
-                        <div style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Award size={18} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeDashboardSection === 'hot' ? '#ef4444' : 'var(--text-primary)' }}>
+                                🔥 Hot Prospects
+                            </span>
+                            {activeDashboardSection === 'hot' && (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: '#ef4444', color: '#ffffff' }}>
+                                    VIEWING
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <button
+                                type="button"
+                                title="Open Hot Prospects Section Popup"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSectionModal('hot');
+                                }}
+                                style={{
+                                    border: 'none',
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    color: '#ef4444',
+                                    borderRadius: '6px',
+                                    padding: '0.2rem 0.45rem',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                }}
+                            >
+                                <Eye size={12} /> Popup
+                            </button>
+                            <div style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Award size={16} />
+                            </div>
                         </div>
                     </div>
-                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#ef4444', marginTop: '0.4rem' }}>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ef4444', marginTop: '0.35rem' }}>
                         {leads.filter(l => (l.leadScore ?? 0) >= 70).length}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#ef4444', marginTop: '0.2rem', fontWeight: 500 }}>
-                        Score 70+ (Ready to close)
+                    <div style={{ fontSize: '0.76rem', color: '#ef4444', marginTop: '0.15rem', fontWeight: 600 }}>
+                        Score ≥ 70% (Ready to close)
                     </div>
                 </div>
 
+                {/* 3. Due / Overdue Card */}
                 <div
                     className="glass-panel animate-fade-in"
                     style={{
                         padding: '1.15rem 1.25rem',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
                         cursor: 'pointer',
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-color)',
+                        background: activeDashboardSection === 'due' 
+                            ? 'linear-gradient(135deg, rgba(217, 119, 6, 0.16) 0%, rgba(180, 83, 9, 0.05) 100%)' 
+                            : 'var(--bg-card)',
+                        border: activeDashboardSection === 'due' 
+                            ? '1.5px solid #d97706' 
+                            : '1px solid var(--border-color)',
                         transition: 'all 0.2s ease',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                        boxShadow: activeDashboardSection === 'due' 
+                            ? '0 6px 20px rgba(217, 119, 6, 0.22)' 
+                            : '0 4px 10px rgba(0, 0, 0, 0.03)',
+                        position: 'relative'
                     }}
-                    onClick={() => {
-                        setSelectedFollowUpFilter('today');
-                    }}
+                    onClick={() => handleApplySection('due')}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>⏰ Due / Overdue</span>
-                        <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Clock size={18} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeDashboardSection === 'due' ? '#d97706' : 'var(--text-primary)' }}>
+                                ⏰ Due / Overdue
+                            </span>
+                            {activeDashboardSection === 'due' && (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: '#d97706', color: '#ffffff' }}>
+                                    VIEWING
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <button
+                                type="button"
+                                title="Open Due & Overdue Section Popup"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSectionModal('due');
+                                }}
+                                style={{
+                                    border: 'none',
+                                    background: 'rgba(245, 158, 11, 0.15)',
+                                    color: '#d97706',
+                                    borderRadius: '6px',
+                                    padding: '0.2rem 0.45rem',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                }}
+                            >
+                                <Eye size={12} /> Popup
+                            </button>
+                            <div style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Clock size={16} />
+                            </div>
                         </div>
                     </div>
-                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#d97706', marginTop: '0.4rem' }}>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#d97706', marginTop: '0.35rem' }}>
                         {leads.filter(l => isOverdue(l.nextFollowUpDate, l.leadStatusName) || isToday(l.nextFollowUpDate)).length}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#d97706', marginTop: '0.2rem', fontWeight: 500 }}>
+                    <div style={{ fontSize: '0.76rem', color: '#d97706', marginTop: '0.15rem', fontWeight: 600 }}>
                         Follow-ups needing action
                     </div>
                 </div>
 
+                {/* 4. Converted Leads Card */}
                 <div
                     className="glass-panel animate-fade-in"
                     style={{
                         padding: '1.15rem 1.25rem',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
                         cursor: 'pointer',
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-color)',
+                        background: activeDashboardSection === 'converted' 
+                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.05) 100%)' 
+                            : 'var(--bg-card)',
+                        border: activeDashboardSection === 'converted' 
+                            ? '1.5px solid #10b981' 
+                            : '1px solid var(--border-color)',
                         transition: 'all 0.2s ease',
-                        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.03)'
+                        boxShadow: activeDashboardSection === 'converted' 
+                            ? '0 6px 20px rgba(16, 185, 129, 0.22)' 
+                            : '0 4px 10px rgba(0, 0, 0, 0.03)',
+                        position: 'relative'
                     }}
-                    onClick={() => {
-                        setShowConverted(true);
-                    }}
+                    onClick={() => handleApplySection('converted')}
                 >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>✅ Converted</span>
-                        <div style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <UserCheck size={18} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeDashboardSection === 'converted' ? '#10b981' : 'var(--text-primary)' }}>
+                                ✅ Converted Leads
+                            </span>
+                            {activeDashboardSection === 'converted' && (
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', background: '#10b981', color: '#ffffff' }}>
+                                    VIEWING
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <button
+                                type="button"
+                                title="Open Converted Leads Section Popup"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSectionModal('converted');
+                                }}
+                                style={{
+                                    border: 'none',
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    color: '#10b981',
+                                    borderRadius: '6px',
+                                    padding: '0.2rem 0.45rem',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                }}
+                            >
+                                <Eye size={12} /> Popup
+                            </button>
+                            <div style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <UserCheck size={16} />
+                            </div>
                         </div>
                     </div>
-                    <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#10b981', marginTop: '0.4rem' }}>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#10b981', marginTop: '0.35rem' }}>
                         {leads.filter(l => l.leadStatusName === 'Converted').length}
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#10b981', marginTop: '0.2rem', fontWeight: 500 }}>
-                        Sales conversions
+                    <div style={{ fontSize: '0.76rem', color: '#10b981', marginTop: '0.15rem', fontWeight: 600 }}>
+                        Sales conversions (Won)
                     </div>
                 </div>
             </div>
+
+            {/* Active Section Filter Indicator Banner */}
+            {activeDashboardSection && (
+                <div
+                    className="glass-panel animate-fade-in"
+                    style={{
+                        marginBottom: '1.25rem',
+                        padding: '0.75rem 1.25rem',
+                        borderRadius: '12px',
+                        background: activeDashboardSection === 'hot' 
+                            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(220, 38, 38, 0.04) 100%)'
+                            : activeDashboardSection === 'due'
+                            ? 'linear-gradient(135deg, rgba(217, 119, 6, 0.12) 0%, rgba(180, 83, 9, 0.04) 100%)'
+                            : activeDashboardSection === 'converted'
+                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.04) 100%)'
+                            : 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.04) 100%)',
+                        border: `1px solid ${
+                            activeDashboardSection === 'hot' ? 'rgba(239, 68, 68, 0.35)'
+                            : activeDashboardSection === 'due' ? 'rgba(217, 119, 6, 0.35)'
+                            : activeDashboardSection === 'converted' ? 'rgba(16, 185, 129, 0.35)'
+                            : 'rgba(245, 158, 11, 0.35)'
+                        }`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem'
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '6px',
+                            background: activeDashboardSection === 'hot' ? '#ef4444' : activeDashboardSection === 'due' ? '#d97706' : activeDashboardSection === 'converted' ? '#10b981' : '#f59e0b',
+                            color: '#ffffff'
+                        }}>
+                            Active Section
+                        </span>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            {activeDashboardSection === 'hot' ? '🔥 Hot Prospects (Score 70%+)' 
+                             : activeDashboardSection === 'due' ? '⏰ Due & Overdue Follow-Ups'
+                             : activeDashboardSection === 'converted' ? '✅ Converted Customers'
+                             : '🎯 Active Pipeline Leads'}
+                        </span>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                            · {leads.length} matching leads shown
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setSelectedSectionModal(activeDashboardSection)}
+                            style={{
+                                fontSize: '0.78rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                borderColor: activeDashboardSection === 'hot' ? '#ef4444' : activeDashboardSection === 'due' ? '#d97706' : activeDashboardSection === 'converted' ? '#10b981' : '#f59e0b',
+                                color: activeDashboardSection === 'hot' ? '#ef4444' : activeDashboardSection === 'due' ? '#d97706' : activeDashboardSection === 'converted' ? '#10b981' : '#f59e0b'
+                            }}
+                        >
+                            <Eye size={13} /> View Section Details Popup
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleClearSectionFilter}
+                            style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}
+                        >
+                            <X size={13} style={{ marginRight: 3 }} /> Clear Filter
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* Standard CRM Search and Filters Bar */}
             <div className="filters-bar glass-panel" style={{ padding: '1rem', borderRadius: '1rem', marginBottom: '1.5rem' }}>
@@ -369,9 +665,9 @@ export const LeadsScreen: React.FC = () => {
                         value={selectedRating}
                         options={[
                             { value: '', label: 'All Score Ratings' },
-                            { value: 'Hot', label: '🔥 Hot Prospect (70+)' },
-                            { value: 'Warm', label: '⚡ Warm Lead (40-69)' },
-                            { value: 'Cold', label: '❄️ Cold Lead (0-39)' }
+                            { value: 'Hot', label: '🔥 Hot Prospect (≥ 70%)' },
+                            { value: 'Warm', label: '⚡ Warm Lead (40% - 69%)' },
+                            { value: 'Cold', label: '❄️ Cold Lead (< 40%)' }
                         ]}
                         onChange={val => setSelectedRating(String(val))}
                         placeholder="All Score Ratings"
@@ -511,7 +807,7 @@ export const LeadsScreen: React.FC = () => {
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem' }}>
                                             <span style={{ padding: '0.15rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.7rem', fontWeight: 700, background: rating.bg, color: rating.color, border: `1px solid ${rating.border}` }}>
-                                                {rating.label} ({lead.leadScore ?? 0})
+                                                {rating.label} ({lead.leadScore ?? 0}%)
                                             </span>
                                         </td>
                                         <td style={{ padding: '0.85rem 1rem' }}>
@@ -633,7 +929,7 @@ export const LeadsScreen: React.FC = () => {
                                             fontWeight: 700,
                                             color: rating.color
                                         }}>
-                                            {rating.label} ({lead.leadScore ?? 0})
+                                            {rating.label} ({lead.leadScore ?? 0}%)
                                         </span>
                                         <span style={{
                                             fontSize: '0.72rem',
@@ -762,6 +1058,22 @@ export const LeadsScreen: React.FC = () => {
                     }}
                 />
             )}
+
+            {/* Leads Dashboard Section Detail Popup Modal */}
+            <LeadSectionModal
+                isOpen={!!selectedSectionModal}
+                initialSection={selectedSectionModal || 'active'}
+                leads={leads}
+                onClose={() => setSelectedSectionModal(null)}
+                onApplyFilter={(sec) => {
+                    handleApplySection(sec);
+                    setSelectedSectionModal(null);
+                }}
+                onNavigateToLead={(id) => {
+                    setSelectedSectionModal(null);
+                    navigate(`/leads/${id}`);
+                }}
+            />
         </Layout>
     );
 };

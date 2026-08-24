@@ -222,7 +222,7 @@ export const PipelineScreen: React.FC = () => {
                     <h1>Pipeline</h1>
                     <p>{filteredOpportunities.length} {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'}</p>
                 </div>
-                <Button onClick={() => setIsCreateModalOpen(true)}>
+                <Button onClick={() => navigate('/pipeline/new')}>
                     <Plus size={16} style={{ marginRight: 6 }} /> New Opportunity
                 </Button>
             </div>

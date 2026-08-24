@@ -263,3 +263,32 @@
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
+
+/* ── Mobile Responsive Overrides ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .gs-root {
+    width: 100%;
+    max-width: 220px;
+  }
+
+  .gs-kbd {
+    display: none;
+  }
+
+  .gs-dropdown {
+    position: fixed !important;
+    top: 60px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 75px) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4) !important;
+    z-index: 99999 !important;
+  }
+
+  .gs-footer {
+    display: none !important;
+  }
+}

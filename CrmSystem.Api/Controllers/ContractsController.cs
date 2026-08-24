@@ -112,9 +112,51 @@ public class ContractsController : ControllerBase
         if (!_currentUser.UserId.HasValue)
             return Unauthorized();
 
+        var userId = _currentUser.UserId.Value;
+
         var customer = await _db.Customers.FindAsync(dto.CustomerId);
         if (customer == null)
             return BadRequest(new { message = "Invalid Customer ID." });
+
+        // Check if an existing contract is already linked to this Opportunity/Deal to prevent duplicates and reuse it
+        if (dto.OpportunityId.HasValue && dto.OpportunityId.Value > 0)
+        {
+            var existingContract = await _db.Contracts
+                .Where(c => !c.IsDeleted && c.OpportunityId == dto.OpportunityId.Value)
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (existingContract != null)
+            {
+                // Reuse and update the existing contract
+                if (!string.IsNullOrWhiteSpace(dto.Title))
+                    existingContract.Title = dto.Title.Trim();
+
+                if (dto.ContractValue > 0 || existingContract.ContractValue <= 0)
+                    existingContract.ContractValue = dto.ContractValue;
+
+                existingContract.StartDate = dto.StartDate;
+                existingContract.EndDate = dto.EndDate;
+
+                if (!string.IsNullOrWhiteSpace(dto.TermsAndConditions))
+                    existingContract.TermsAndConditions = dto.TermsAndConditions;
+
+                if (!string.IsNullOrWhiteSpace(dto.Notes))
+                    existingContract.Notes = dto.Notes;
+
+                existingContract.CustomerId = dto.CustomerId;
+                existingContract.UpdatedAt = DateTime.UtcNow;
+
+                if (string.IsNullOrEmpty(existingContract.SigningToken))
+                {
+                    existingContract.SigningToken = Guid.NewGuid().ToString("N");
+                    existingContract.TokenExpiresAt = DateTime.UtcNow.AddDays(90);
+                }
+
+                await _db.SaveChangesAsync();
+                return Ok(MapToReadDto(existingContract));
+            }
+        }
 
         var contractNumber = $"CTR-{DateTime.UtcNow:yyyyMM}-{String.Format("{0:D5}", await _db.Contracts.CountAsync() + 1)}";
 
@@ -291,6 +333,9 @@ public class ContractsController : ControllerBase
             contract.TokenExpiresAt ?? DateTime.UtcNow.AddDays(90)
         );
 
+        bool emailSent = false;
+        string? emailWarning = null;
+
         try
         {
             await _emailSender.SendEmailAsync(
@@ -298,20 +343,62 @@ public class ContractsController : ControllerBase
                 $"Contract Signature Request: {contract.Title} ({contract.ContractNumber})",
                 html
             );
-
-            if (contract.Status == "Draft")
-            {
-                contract.Status = !string.IsNullOrEmpty(contract.CompanySignatureDataUrl) ? "PendingCustomer" : "SentForSignature";
-            }
-            contract.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            return Ok(new { message = $"Contract signing invitation emailed to {recipientEmail}" });
+            emailSent = true;
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Failed to send email: {ex.Message}" });
+            emailWarning = ex.Message;
+            Console.WriteLine($"[ContractsController] SMTP delivery warning to {recipientEmail}: {ex.Message}");
         }
+
+        if (contract.Status == "Draft")
+        {
+            contract.Status = !string.IsNullOrEmpty(contract.CompanySignatureDataUrl) ? "PendingCustomer" : "SentForSignature";
+        }
+        contract.UpdatedAt = DateTime.UtcNow;
+
+        // Log an Activity to the CRM timeline so reps can track that the contract email was sent
+        try
+        {
+            var emailType = await _db.ActivityTypes.FirstOrDefaultAsync(at => at.Name.ToLower() == "email")
+                ?? await _db.ActivityTypes.FirstOrDefaultAsync();
+
+            var currentUserId = _currentUser.UserId ?? contract.CreatedById;
+            var activity = new Activity
+            {
+                ActivityTypeId = emailType?.ActivityTypeId ?? 2,
+                Subject = $"[Contract Email Sent] E-Sign Request: {contract.Title} ({contract.ContractNumber})",
+                Description = $"Sent to: {recipientEmail}\nStatus: {(emailSent ? "Dispatched successfully via SMTP" : $"Failed ({emailWarning})")}\nSigning Link: {signUrl}",
+                ActivityDate = DateTime.UtcNow,
+                CustomerId = contract.CustomerId,
+                OpportunityId = contract.OpportunityId,
+                CreatedById = currentUserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Activities.Add(activity);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ContractsController] Note: Could not record timeline activity: {ex.Message}");
+        }
+
+        await _db.SaveChangesAsync();
+
+        if (!emailSent && emailWarning != null)
+        {
+            return Ok(new { 
+                success = false, 
+                signUrl,
+                warning = emailWarning,
+                message = $"Failed to dispatch email to {recipientEmail} ({emailWarning}). You can copy and share the direct e-sign link: {signUrl}" 
+            });
+        }
+
+        return Ok(new { 
+            success = true, 
+            signUrl,
+            message = $"Contract signing invitation successfully emailed to {recipientEmail}!" 
+        });
     }
 
     [HttpDelete("{id:int}")]

@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { showToast } from '../lib/toast';
+import { buildUrl } from '../lib/api';
 import './screens.css';
 
 export const ResetPasswordScreen: React.FC = () => {
@@ -34,9 +35,12 @@ export const ResetPasswordScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(buildUrl('/api/auth/reset-password'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ token, newPassword }),
       });
       if (!response.ok) {

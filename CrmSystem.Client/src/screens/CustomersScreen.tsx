@@ -125,8 +125,11 @@ export const CustomersScreen: React.FC = () => {
       setSources(otherSource ? [...nonOtherSources, otherSource] : nonOtherSources);
       setTags(tagData ?? []);
       setReps((userData ?? []).map(u => ({ id: u.id, name: u.name, role: u.role })));
-    } catch {
-      setError('Failed to load customers. Please try again.');
+    } catch (err) {
+      // Capture specific error message for debugging
+      const errMsg = (err as any)?.message ?? 'Failed to load customers. Please try again.';
+      console.error('Customers load error:', err);
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
