@@ -27,14 +27,20 @@ public class UsersController : ControllerBase
 
     private int GetCurrentUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
-        return int.Parse(claim!.Value);
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub") ?? User.FindFirst("nameid");
+        if (claim != null && int.TryParse(claim.Value, out var id))
+        {
+            return id;
+        }
+        return 0;
     }
 
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentUserProfile()
     {
         var userId = GetCurrentUserId();
+        if (userId <= 0) return Unauthorized(new { message = "Invalid user identity." });
+
         var identity = await _db.Identities
             .Include(i => i.Role)
             .Include(i => i.IdentityRoles)
@@ -57,9 +63,14 @@ public class UsersController : ControllerBase
     }
 
     [HttpPut("me/profile-image")]
+    [HttpPost("me/profile-image")]
+    [HttpPut("me/avatar")]
+    [HttpPost("me/avatar")]
     public async Task<IActionResult> UpdateProfileImage([FromBody] UpdateProfileImageRequest request)
     {
         var userId = GetCurrentUserId();
+        if (userId <= 0) return Unauthorized(new { message = "Invalid user identity." });
+
         var identity = await _db.Identities.FindAsync(userId);
         if (identity == null) return NotFound(new { message = "User not found." });
 

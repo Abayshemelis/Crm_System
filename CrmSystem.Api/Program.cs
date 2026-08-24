@@ -307,6 +307,10 @@ using (var scope = app.Services.CreateScope())
                 BEGIN
                     ALTER TABLE [Contracts] ADD [CustomerSignedByName] NVARCHAR(200) NULL;
                 END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Identities') AND name = 'ProfileImage')
+                BEGIN
+                    ALTER TABLE [Identities] ADD [ProfileImage] NVARCHAR(MAX) NULL;
+                END
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CustomerSignedAt')
                 BEGIN
                     ALTER TABLE [Contracts] ADD [CustomerSignedAt] DATETIME2 NULL;
