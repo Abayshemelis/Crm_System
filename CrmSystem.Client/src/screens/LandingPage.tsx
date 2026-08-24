@@ -389,25 +389,35 @@ export const LandingPage: React.FC = () => {
         aria-hidden={!mobileMenuOpen}
       />
 
-      {/* Mobile Navigation Sidebar Drawer */}
+      {/* Mobile Navigation Sidebar Drawer (Left Slide-in) */}
       <aside 
         className={`mobile-sidebar-drawer ${mobileMenuOpen ? 'open' : ''}`}
         aria-label="Mobile Navigation Sidebar"
         aria-hidden={!mobileMenuOpen}
       >
-        {/* Sidebar Top Header */}
+        {/* Sidebar Top Header with Logo, Theme Icon Button, and Close Button */}
         <div className="mobile-sidebar-header">
           <div className="nav-logo" onClick={() => { setMobileMenuOpen(false); scrollToSection('home'); }} style={{ cursor: 'pointer' }}>
             <span className="logo-icon">CRM</span>
             <span className="logo-text">System</span>
           </div>
-          <button 
-            className="mobile-sidebar-close-btn" 
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close navigation sidebar"
-          >
-            <X size={20} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button 
+              className="mobile-sidebar-icon-btn" 
+              onClick={toggleTheme} 
+              aria-label="Toggle theme"
+              title="Toggle theme"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button 
+              className="mobile-sidebar-close-btn" 
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="Close navigation sidebar"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Sidebar Nav Links with Icons */}
@@ -462,35 +472,20 @@ export const LandingPage: React.FC = () => {
           </a>
         </nav>
 
-        {/* Sidebar Footer Theme Toggle & Actions */}
+        {/* Sidebar Footer with Side-by-Side Actions */}
         <div className="mobile-sidebar-footer">
-          <div className="mobile-sidebar-theme-row">
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--fg-muted)' }}>Theme</span>
-            <button className="theme-toggle-sidebar" onClick={toggleTheme} aria-label="Toggle theme">
-              {isDarkMode ? (
-                <>
-                  <Sun size={16} /> <span>Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <Moon size={16} /> <span>Dark Mode</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="mobile-sidebar-actions">
+          <div className="mobile-sidebar-actions-grid">
             <button 
               className="btn-secondary mobile-sidebar-btn" 
               onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
             >
-              <LogIn size={16} /> Login
+              <LogIn size={15} /> Login
             </button>
             <button 
               className="btn-primary mobile-sidebar-btn" 
               onClick={() => { setMobileMenuOpen(false); navigate('/login'); }}
             >
-              Get Started <ArrowRight size={16} />
+              Get Started <ArrowRight size={15} />
             </button>
           </div>
         </div>

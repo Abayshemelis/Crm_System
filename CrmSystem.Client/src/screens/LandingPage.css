@@ -327,22 +327,24 @@ a.btn-secondary {
 .mobile-sidebar-drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
+  right: auto;
   bottom: 0;
   width: 300px;
   max-width: 86vw;
   height: 100vh;
   height: 100dvh;
   background: var(--card-bg, #ffffff);
-  border-left: 1px solid var(--card-border);
+  border-right: 1px solid var(--card-border);
+  border-left: none;
   z-index: 9999;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 1.25rem 1rem 1.5rem;
-  transform: translateX(100%);
+  transform: translateX(-100%);
   transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.35);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
@@ -350,8 +352,9 @@ a.btn-secondary {
 
 html[data-theme="dark"] .mobile-sidebar-drawer {
   background: #0c1222;
-  border-left-color: rgba(129, 140, 248, 0.2);
-  box-shadow: -10px 0 45px rgba(0, 0, 0, 0.6);
+  border-right-color: rgba(129, 140, 248, 0.2);
+  border-left: none;
+  box-shadow: 10px 0 45px rgba(0, 0, 0, 0.6);
 }
 
 .mobile-sidebar-drawer.open {
@@ -367,6 +370,7 @@ html[data-theme="dark"] .mobile-sidebar-drawer {
   margin-bottom: 1rem;
 }
 
+.mobile-sidebar-icon-btn,
 .mobile-sidebar-close-btn {
   width: 36px;
   height: 36px;
@@ -381,6 +385,7 @@ html[data-theme="dark"] .mobile-sidebar-drawer {
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
+.mobile-sidebar-icon-btn:hover,
 .mobile-sidebar-close-btn:hover {
   background: var(--accent-dim);
   border-color: var(--accent);
@@ -424,54 +429,25 @@ html[data-theme="dark"] .mobile-sidebar-drawer {
 .mobile-sidebar-footer {
   padding-top: 1rem;
   border-top: 1px solid var(--card-border);
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
   margin-top: auto;
 }
 
-.mobile-sidebar-theme-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 0.25rem;
-}
-
-.theme-toggle-sidebar {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--card-border);
-  background: var(--bg-alt);
-  color: var(--fg);
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: all 0.15s ease;
-}
-
-.theme-toggle-sidebar:hover {
-  background: var(--accent-dim);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.mobile-sidebar-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+.mobile-sidebar-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
   width: 100%;
 }
 
 .mobile-sidebar-btn {
   width: 100%;
   justify-content: center;
-  padding: 0.75rem 1rem;
-  font-size: 0.92rem;
+  padding: 0.75rem 0.45rem;
+  font-size: 0.85rem;
   font-weight: 700;
   border-radius: 10px;
+  white-space: nowrap;
+  gap: 0.35rem;
 }
 
 /* ── Mobile Navigation & Responsiveness (<= 900px) ─────────────────────────── */
