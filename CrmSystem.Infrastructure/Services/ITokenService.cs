@@ -46,6 +46,9 @@ public class JwtTokenService : ITokenService
         {
             new(JwtRegisteredClaimNames.Sub, identity.IdentityId.ToString()),
             new(ClaimTypes.Email, identity.Email),
+            new(ClaimTypes.Name, string.IsNullOrWhiteSpace(identity.Name) ? identity.Email : identity.Name),
+            new(JwtRegisteredClaimNames.Name, string.IsNullOrWhiteSpace(identity.Name) ? identity.Email : identity.Name),
+            new(JwtRegisteredClaimNames.Email, identity.Email),
             new(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)

@@ -105,10 +105,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userId = Number(payload?.['sub'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? 0);
     const cachedAvatar = userId ? localStorage.getItem(`crm_user_avatar_${userId}`) : null;
 
+    const email =
+      payload?.['email'] ??
+      payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ??
+      payload?.['http://schemas.microsoft.com/ws/2008/06/identity/claims/emailaddress'] ??
+      '';
+
+    const name =
+      payload?.['name'] ??
+      payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ??
+      payload?.['unique_name'] ??
+      (email ? email.split('@')[0] : 'User');
+
     setUser({
       userId,
-      name: payload?.['name'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ?? 'User',
-      email: payload?.['email'] ?? payload?.['http://schemas.microsoft.com/ws/2005/05/identity/claims/emailaddress'] ?? '',
+      name,
+      email,
       roles: roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'],
       profileImage: cachedAvatar || null,
     });

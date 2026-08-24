@@ -115,7 +115,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
 
         {/* Body */}
         <div className="profile-modal-body">
-          {/* Avatar Upload Section */}
+          {/* Avatar & Hero Identity Section */}
           <div className="profile-avatar-section">
             <div className="profile-avatar-wrapper">
               {previewImage ? (
@@ -142,6 +142,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
               </button>
             </div>
 
+            {/* Prominent Name, Email & Role Header */}
+            <div className="profile-hero-identity">
+              <h3 className="profile-hero-name">{user.name}</h3>
+              <div className="profile-hero-email">
+                <Mail size={14} />
+                <span>{user.email}</span>
+              </div>
+              <div className="profile-hero-role-badge">
+                <Shield size={13} />
+                <span>
+                  {selectedRole === 'Admin'
+                    ? '👑 Administrator'
+                    : selectedRole === 'Manager'
+                    ? '👔 Manager'
+                    : '💼 Sales Representative'}
+                </span>
+              </div>
+            </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -156,8 +175,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                 className="profile-upload-btn"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <UploadCloud size={16} />
-                <span>{previewImage ? 'Change Image' : 'Upload Image'}</span>
+                <UploadCloud size={15} />
+                <span>{previewImage ? 'Change Photo' : 'Upload Photo'}</span>
               </button>
 
               {previewImage && (
@@ -165,7 +184,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   type="button"
                   className="profile-remove-btn"
                   onClick={handleRemoveAvatar}
-                  title="Remove Image"
+                  title="Remove Photo"
                 >
                   <Trash2 size={15} />
                   <span>Remove</span>
@@ -198,7 +217,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             <div className="profile-info-item">
               <div className="profile-info-label">
                 <Shield size={14} />
-                <span>Account Role</span>
+                <span>Assigned Role</span>
               </div>
               <div className="profile-info-value" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {user.roles.map((r) => (
