@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using CrmSystem.Api.Dtos;
 using CrmSystem.Domain.Entities;
@@ -28,7 +29,7 @@ public class AiCopilotService : IAiCopilotService
         var suggestedActions = new List<CopilotActionDto>();
         string contextSummary = "Global AI Copilot";
 
-        // 1. Full Project Database Snapshot Gathering
+        // 1. Database Metrics & Snapshot Extraction
         int totalCustomers = 0, totalLeads = 0, hotLeadsCount = 0, totalCompanies = 0, totalProducts = 0, totalContracts = 0, totalInvoices = 0, totalTasks = 0, totalActivities = 0;
         decimal totalPipelineVal = 0m, totalSignedContractsVal = 0m, totalPaidInvoicesVal = 0m, totalOverdueInvoicesVal = 0m;
         int pendingTasksCount = 0, overdueTasksCount = 0, unpaidInvoicesCount = 0, signedContractsCount = 0;
@@ -38,7 +39,6 @@ public class AiCopilotService : IAiCopilotService
         List<string> oppStageSummaryList = new();
         List<string> searchMatchesList = new();
 
-        // Safe DB Metrics Extraction
         try { totalCustomers = await _db.Customers.CountAsync(); } catch { }
         try { totalLeads = await _db.Leads.CountAsync(l => !l.IsDeleted); } catch { }
         try { hotLeadsCount = await _db.Leads.CountAsync(l => !l.IsDeleted && l.LeadScore >= 70); } catch { }
@@ -68,23 +68,20 @@ public class AiCopilotService : IAiCopilotService
         }
         catch { }
 
-        // Products Catalog Overview
         try
         {
-            var prods = await _db.Products.Take(5).ToListAsync();
+            var prods = await _db.Products.Take(6).ToListAsync();
             productSummaryList = prods.Select(p => $"{p.Name} (SKU: {p.SKU ?? "N/A"}, Price: {p.Price:C})").ToList();
         }
         catch { }
 
-        // Companies Portfolio Overview
         try
         {
-            var comps = await _db.Companies.Take(5).ToListAsync();
-            companySummaryList = comps.Select(c => $"{c.Name} (Industry: {c.Industry ?? "General"})").ToList();
+            var comps = await _db.Companies.Take(6).ToListAsync();
+            companySummaryList = comps.Select(c => $"{c.Name} ({c.Industry ?? "General"})").ToList();
         }
         catch { }
 
-        // Opportunity Pipeline Breakdown by Stage
         try
         {
             var opps = await _db.Opportunities.Include(o => o.OpportunityStage).ToListAsync();
@@ -98,31 +95,30 @@ public class AiCopilotService : IAiCopilotService
         }
         catch { }
 
-        // 2. Dynamic Search Across Database Tables for User Keywords
+        // Dynamic Entity Keyword Search
         if (!string.IsNullOrWhiteSpace(userMsg) && userMsg.Length > 2)
         {
             var terms = userMsg.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(t => t.Length > 2 && !new[] { "what", "show", "tell", "list", "have", "with", "from", "about", "this", "that", "does", "where", "whom", "much", "many", "does", "have", "your", "name", "hello", "hi", "how" }.Contains(t.ToLower()))
+                .Where(t => t.Length > 2 && !new[] { "what", "show", "tell", "list", "have", "with", "from", "about", "this", "that", "does", "where", "whom", "much", "many", "your", "name", "hello", "hi", "how", "good", "morning", "afternoon", "evening", "thanks", "thank" }.Contains(t.ToLower()))
                 .ToList();
 
             foreach (var term in terms.Take(3))
             {
                 var termLower = term.ToLower();
 
-                // Search Leads
                 try
                 {
                     var matchingLeads = await _db.Leads
+                        .Include(l => l.LeadStatus)
                         .Where(l => !l.IsDeleted && (l.FirstName.ToLower().Contains(termLower) || l.LastName.ToLower().Contains(termLower) || (l.CompanyName != null && l.CompanyName.ToLower().Contains(termLower))))
                         .Take(3).ToListAsync();
                     foreach (var l in matchingLeads)
                     {
-                        searchMatchesList.Add($"[Lead] #{l.LeadId} {l.FirstName} {l.LastName} - Company: {l.CompanyName ?? "N/A"}, Score: {l.LeadScore}, Phone: {l.Phone ?? "N/A"}");
+                        searchMatchesList.Add($"[Lead] #{l.LeadId} {l.FirstName} {l.LastName} - Company: {l.CompanyName ?? "N/A"}, Score: {l.LeadScore}, Status: {l.LeadStatus?.Name ?? "Active"}");
                     }
                 }
                 catch { }
 
-                // Search Customers
                 try
                 {
                     var matchingCustomers = await _db.Customers
@@ -135,7 +131,6 @@ public class AiCopilotService : IAiCopilotService
                 }
                 catch { }
 
-                // Search Products
                 try
                 {
                     var matchingProds = await _db.Products
@@ -148,7 +143,6 @@ public class AiCopilotService : IAiCopilotService
                 }
                 catch { }
 
-                // Search Companies
                 try
                 {
                     var matchingComps = await _db.Companies
@@ -163,38 +157,62 @@ public class AiCopilotService : IAiCopilotService
             }
         }
 
-        // 3. Build Detailed Project-Wide Context Prompt
+        // Build Real-Time CRM Knowledge Base
         var contextSb = new StringBuilder();
-        contextSb.AppendLine("=== CRM SYSTEM DATABASE REPOSITORY SNAPSHOT ===");
-        contextSb.AppendLine($"Metrics: {totalCustomers} Customers | {totalLeads} Leads ({hotLeadsCount} Hot) | {totalCompanies} Companies | {totalProducts} Products | {totalContracts} Contracts ({signedContractsCount} Signed, ${totalSignedContractsVal:N0}) | {totalInvoices} Invoices (${totalPaidInvoicesVal:N0} Paid, ${totalOverdueInvoicesVal:N0} Overdue) | {totalTasks} Tasks ({overdueTasksCount} Overdue) | {totalActivities} Logged Activities.");
-        contextSb.AppendLine($"Sales Pipeline Value: ${totalPipelineVal:N0}");
-
+        contextSb.AppendLine("=== LIVE CRM DATABASE SUMMARY ===");
+        contextSb.AppendLine($"- Customers: {totalCustomers} registered accounts");
+        contextSb.AppendLine($"- Leads: {totalLeads} total prospects ({hotLeadsCount} Hot leads with score >= 70)");
+        contextSb.AppendLine($"- Companies: {totalCompanies} linked corporate accounts");
+        contextSb.AppendLine($"- Products: {totalProducts} items in catalog");
+        contextSb.AppendLine($"- Pipeline Value: ${totalPipelineVal:N0} total across stages");
         if (oppStageSummaryList.Count > 0)
         {
-            contextSb.AppendLine("Pipeline Stages: " + string.Join(" | ", oppStageSummaryList));
+            contextSb.AppendLine($"- Stage Breakdown: {string.Join(" | ", oppStageSummaryList)}");
         }
+        contextSb.AppendLine($"- Contracts: {totalContracts} total ({signedContractsCount} Signed, ${totalSignedContractsVal:N0} signed value)");
+        contextSb.AppendLine($"- Invoices: {totalInvoices} total (${totalPaidInvoicesVal:N0} Paid, ${totalOverdueInvoicesVal:N0} Overdue, {unpaidInvoicesCount} unpaid)");
+        contextSb.AppendLine($"- Tasks & Activities: {totalTasks} tasks ({overdueTasksCount} overdue), {totalActivities} touchpoint activities logged.");
 
         if (productSummaryList.Count > 0)
         {
-            contextSb.AppendLine("Product Catalog Sample: " + string.Join(" ; ", productSummaryList));
+            contextSb.AppendLine("- Catalog Sample: " + string.Join(" ; ", productSummaryList));
         }
 
         if (companySummaryList.Count > 0)
         {
-            contextSb.AppendLine("Companies Portfolio Sample: " + string.Join(" ; ", companySummaryList));
+            contextSb.AppendLine("- Companies Sample: " + string.Join(" ; ", companySummaryList));
         }
 
         if (searchMatchesList.Count > 0)
         {
-            contextSb.AppendLine("=== DYNAMIC CRM SEARCH MATCHES FOR USER QUERY ===");
+            contextSb.AppendLine("=== RELEVANT DATABASE MATCHES ===");
             contextSb.AppendLine(string.Join("\n", searchMatchesList.Distinct()));
         }
 
-        // Action links
-        suggestedActions.Add(new CopilotActionDto { Label = "View Products", ActionType = "navigate", TargetUrl = "/products" });
-        suggestedActions.Add(new CopilotActionDto { Label = "View Pipeline", ActionType = "navigate", TargetUrl = "/opportunities" });
+        // Context-driven suggested quick actions
+        if (userMsg.Contains("lead", StringComparison.OrdinalIgnoreCase) || userMsg.Contains("prospect", StringComparison.OrdinalIgnoreCase))
+        {
+            suggestedActions.Add(new CopilotActionDto { Label = "View Leads", ActionType = "navigate", TargetUrl = "/leads" });
+        }
+        else if (userMsg.Contains("pipeline", StringComparison.OrdinalIgnoreCase) || userMsg.Contains("deal", StringComparison.OrdinalIgnoreCase) || userMsg.Contains("stage", StringComparison.OrdinalIgnoreCase))
+        {
+            suggestedActions.Add(new CopilotActionDto { Label = "Open Pipeline", ActionType = "navigate", TargetUrl = "/pipeline" });
+        }
+        else if (userMsg.Contains("invoice", StringComparison.OrdinalIgnoreCase) || userMsg.Contains("payment", StringComparison.OrdinalIgnoreCase))
+        {
+            suggestedActions.Add(new CopilotActionDto { Label = "View Invoices", ActionType = "navigate", TargetUrl = "/invoices" });
+        }
+        else if (userMsg.Contains("contract", StringComparison.OrdinalIgnoreCase))
+        {
+            suggestedActions.Add(new CopilotActionDto { Label = "View Contracts", ActionType = "navigate", TargetUrl = "/contracts" });
+        }
+        else
+        {
+            suggestedActions.Add(new CopilotActionDto { Label = "Dashboard", ActionType = "navigate", TargetUrl = "/dashboard" });
+            suggestedActions.Add(new CopilotActionDto { Label = "Pipeline", ActionType = "navigate", TargetUrl = "/pipeline" });
+        }
 
-        // 4. Universal LLM Prompt (Handles BOTH CRM & General Non-CRM Questions)
+        // 2. Online Intelligence Engine (Google Gemini with Dynamic Intent Prompting)
         if (_geminiService.IsConfigured)
         {
             try
@@ -202,33 +220,50 @@ public class AiCopilotService : IAiCopilotService
                 var historyText = string.Empty;
                 if (request.History != null && request.History.Count > 0)
                 {
-                    var lastHistory = request.History.TakeLast(4);
+                    var lastHistory = request.History.TakeLast(6);
                     historyText = string.Join("\n", lastHistory.Select(h => $"{h.Role.ToUpper()}: {h.Message}"));
                 }
 
-                var universalPrompt = $"""
-                    You are an intelligent, friendly, universal AI Assistant and Executive Copilot.
+                var dynamicPrompt = $"""
+                    You are an intelligent, natural, context-aware AI Executive Copilot for this enterprise CRM application.
 
-                    YOUR CAPABILITIES:
-                    1. GENERAL & WORLD KNOWLEDGE QUESTIONS (Non-CRM): You can answer ANY question about general science, technology, coding, language, math, business advice, history, or general knowledge. If the user asks a question not related to CRM data, answer it directly, accurately, and comprehensively!
-                    2. CRM & PROJECT QUESTIONS: If the user asks about CRM records, customers, leads, sales, products, contracts, invoices, or pipeline data, use the real-time CRM database snapshot provided below to give precise numbers and answers.
+                    CORE BEHAVIOR RULES (CRITICAL):
+                    1. GREETINGS & PLEASANTRIES:
+                       - If the user simply says "Hello", "Hi", "Good morning", "Hey", "How are you?", etc., respond with a warm, natural, CONCISE greeting in 1-2 sentences.
+                       - NEVER dump a long feature list or database manifesto in response to a simple greeting.
+                       - Example: "Hello! How can I help you today with your CRM data, sales pipeline, or any other questions?"
 
-                    REAL-TIME CRM DATABASE SNAPSHOT (Use when user asks CRM-related questions):
+                    2. APPRECIATIONS & FAREWELLS:
+                       - If the user says "Thank you", "Thanks", "Goodbye", "Bye", respond warmly and concisely.
+
+                    3. CRM QUESTIONS (Customers, Leads, Deals, Revenue, Products, Invoices, Contracts, Tasks):
+                       - Answer accurately and directly using the real-time CRM database facts provided below.
+                       - Quote exact numbers, names, and stage values when relevant.
+
+                    4. GENERAL QUESTIONS (Coding, Math, Science, Business Strategy, General Knowledge, Writing):
+                       - Answer thoroughly, accurately, and naturally.
+                       - Do NOT force CRM facts into a non-CRM question.
+
+                    5. HYBRID QUESTIONS (CRM + General Strategy, e.g. "How can I improve my pipeline conversion?"):
+                       - Combine proven business strategies with current CRM numbers from this system.
+
+                    6. CONVERSATION CONTEXT & FOLLOW-UPS:
+                       - Use the conversation history to understand follow-up questions (e.g. "What about them?", "How much is that in total?").
+
+                    7. AMBIGUOUS QUESTIONS:
+                       - If a query is unclear or single-word (e.g. "Status?"), ask a polite clarifying question offering options.
+
+                    LIVE CRM DATABASE FACTS:
                     {contextSb}
 
                     CONVERSATION HISTORY:
-                    {historyText}
+                    {(string.IsNullOrWhiteSpace(historyText) ? "None" : historyText)}
 
-                    USER QUESTION:
+                    CURRENT USER MESSAGE:
                     {userMsg}
-
-                    INSTRUCTIONS:
-                    - Be helpful, conversational, and direct.
-                    - Use GitHub Markdown (bold headers, bullet points, code blocks if writing code).
-                    - If the user asks a general question, answer it fully. Do not force CRM data into a non-CRM question.
                     """;
 
-                var geminiReply = await _geminiService.GenerateTextAsync(universalPrompt, request.Attachment);
+                var geminiReply = await _geminiService.GenerateTextAsync(dynamicPrompt, request.Attachment);
                 if (!string.IsNullOrWhiteSpace(geminiReply))
                 {
                     return new CopilotChatResponse
@@ -242,64 +277,69 @@ public class AiCopilotService : IAiCopilotService
             }
             catch
             {
-                // Fall through cleanly to local intent processor
+                // Fall through cleanly to local intent engine
             }
         }
 
-        // 5. Intelligent Local Intent Processor (Handles CRM + Common General Questions Offline)
-        var msgLower = userMsg.ToLower();
+        // 3. Built-in Local Intelligence Engine (Offline Context-Aware Reasoning)
+        var msgLower = userMsg.ToLower().Trim();
         string fallbackReply;
 
-        // DYNAMIC DATABASE KEYWORD SEARCH RESULTS (Priority #1 for database queries)
-        if (searchMatchesList.Count > 0)
+        // Intent A: Simple Greetings (Short, natural, conversational)
+        if (IsSimpleGreeting(msgLower))
         {
-            fallbackReply = $"**CRM Database Matches for '{userMsg}'**\n\n" + string.Join("\n", searchMatchesList.Select(m => $"- {m}"));
+            var greetings = new[]
+            {
+                "Hello! How can I help you today? Feel free to ask about your CRM data, sales pipeline, or any general questions.",
+                "Hi there! What can I assist you with today?",
+                "Hello! How are things going? Let me know if you need any insights on your leads, deals, or customer accounts.",
+                "Good day! How can I help you in your workspace today?"
+            };
+            var randIndex = Math.Abs(userMsg.GetHashCode()) % greetings.Length;
+            fallbackReply = greetings[randIndex];
         }
-        // GREETINGS / WHO ARE YOU / GENERAL INTRO
-        else if (msgLower.Contains("who are you") || msgLower.Contains("what can you do") || msgLower.Contains("hello") || msgLower.Contains("hi ") || msgLower == "hi" || msgLower.Contains("help"))
+        // Intent B: Pleasantries & Appreciation
+        else if (msgLower == "how are you" || msgLower == "how are you?" || msgLower == "how are you doing" || msgLower == "how are you doing?")
         {
-            fallbackReply = "Hello! I am your **Universal AI Executive Copilot**.\n\nI can answer **both general questions** and **CRM project questions**!\n\n- 🌍 **General Questions:** Ask me anything about programming, technology, business strategies, math, or world knowledge.\n- 📊 **CRM Database:** Ask about your customers, hot leads, products, pipeline revenue, signed contracts, or unpaid invoices!";
+            fallbackReply = "I'm doing great, thank you for asking! Ready to help you with your CRM records, pipeline analytics, or any other questions. What's on your mind?";
         }
-        // CUSTOMERS / CLIENTS QUERY
-        else if (msgLower.Contains("customer") || msgLower.Contains("client"))
+        else if (msgLower.StartsWith("thank") || msgLower == "thanks" || msgLower == "thx" || msgLower == "great thanks")
+        {
+            fallbackReply = "You're very welcome! Let me know whenever you need more help or insights.";
+        }
+        else if (msgLower == "bye" || msgLower == "goodbye" || msgLower == "see you" || msgLower.StartsWith("see you later"))
+        {
+            fallbackReply = "Goodbye! Have a productive day ahead, and feel free to reach out whenever you need assistance.";
+        }
+        // Intent C: Capabilities / Help Question
+        else if (msgLower.Contains("who are you") || msgLower == "what can you do" || msgLower == "what can you do?" || msgLower == "help" || msgLower == "help me")
+        {
+            fallbackReply = "I am your **AI Executive Copilot** for this CRM platform.\n\nHere is how I can help:\n- 📊 **CRM Analytics:** Query real-time metrics on customers, hot leads, pipeline stages, and revenue.\n- 💳 **Sales & Invoicing:** Check signed contracts, unpaid invoices, and Stripe payments.\n- 🔍 **Search & Lookup:** Find specific customers, companies, leads, or products.\n- 💡 **General Knowledge & Strategy:** Ask about sales strategies, email drafts, coding, or general questions.\n\nWhat would you like to explore?";
+        }
+        // Intent D: Ambiguous Queries (Prompt for clarification)
+        else if (msgLower == "status" || msgLower == "status?" || msgLower == "what is the status" || msgLower == "what is the status?")
+        {
+            fallbackReply = "Could you please specify which status you would like to check?\n\n- 🎯 **Lead Pipeline Status** (New, Contacted, Qualified)\n- 📈 **Opportunity Deal Stages** (Discovery, Proposal, Won/Lost)\n- 💳 **Invoice Status** (Paid, Overdue, Pending)\n- 📝 **Contract Status** (Draft, Sent, Signed)";
+        }
+        // Intent E: Exact Keyword Database Matches Found
+        else if (searchMatchesList.Count > 0 && !msgLower.Contains("how") && !msgLower.Contains("why"))
+        {
+            fallbackReply = $"**Here are the records matching '{userMsg}':**\n\n" + string.Join("\n", searchMatchesList.Select(m => $"- {m}")) + "\n\n*Click on the relevant section in the navigation to view the complete details.*";
+        }
+        // Intent F: Customer Accounts Questions
+        else if (msgLower.Contains("customer") || msgLower.Contains("client") || msgLower.Contains("buyer"))
         {
             List<Customer> topCustomers = new();
-            try
-            {
-                topCustomers = await _db.Customers.Include(c => c.Company).Take(4).ToListAsync();
-            }
-            catch { }
+            try { topCustomers = await _db.Customers.Include(c => c.Company).Take(4).ToListAsync(); } catch { }
 
             var cList = topCustomers.Count > 0
-                ? "\n\n**Sample Active Customers:**\n" + string.Join("\n", topCustomers.Select(c => $"- **{c.FirstName} {c.LastName}** ({c.Company?.Name ?? "Individual Account"}) · {c.Email ?? "No Email"}"))
+                ? "\n\n**Recent Accounts:**\n" + string.Join("\n", topCustomers.Select(c => $"- **{c.FirstName} {c.LastName}** ({c.Company?.Name ?? "Individual"}) · {c.Email ?? "No Email"}"))
                 : string.Empty;
 
-            fallbackReply = $"**Customer Accounts Intelligence**\n\nYou currently have **{totalCustomers} active customer profiles** registered in your CRM system.{cList}\n\n*Tip: Navigate to Customers to view complete details, activity logs, and account histories.*";
+            fallbackReply = $"You currently have **{totalCustomers} registered customer accounts** in the system.{cList}\n\n*Would you like to search for a specific customer name or view account histories?*";
         }
-        // PRODUCTS QUERY
-        else if (msgLower.Contains("product") || msgLower.Contains("sku") || msgLower.Contains("item") || msgLower.Contains("catalog") || msgLower.Contains("price") || msgLower.Contains("sell") || msgLower.Contains("offer"))
-        {
-            var pList = productSummaryList.Count > 0 ? string.Join("\n", productSummaryList.Select(p => $"- **{p}**")) : "No active products registered in catalog.";
-            fallbackReply = $"**Product Catalog Overview ({totalProducts} Active Products)**\n\n{pList}\n\n*Tip: Click 'View Products' to manage catalog items and SKUs.*";
-        }
-        // COMPANIES QUERY
-        else if (msgLower.Contains("company") || msgLower.Contains("companies") || msgLower.Contains("corporate") || msgLower.Contains("account"))
-        {
-            var cList = companySummaryList.Count > 0 ? string.Join("\n", companySummaryList.Select(c => $"- **{c}**")) : "No corporate accounts registered.";
-            fallbackReply = $"**Corporate Accounts Overview ({totalCompanies} Linked Companies)**\n\n{cList}\n\n*Tip: Navigate to Companies to view corporate account portfolios.*";
-        }
-        // CONTRACTS QUERY
-        else if (msgLower.Contains("contract") || msgLower.Contains("signed") || msgLower.Contains("esign") || msgLower.Contains("agreement"))
-        {
-            fallbackReply = $"**Contracts & E-Signatures Overview**\n\n- **Total Contracts:** {totalContracts}\n- **Signed/Active Contracts:** {signedContractsCount} (${totalSignedContractsVal:N0} total value)\n\n*Tip: Share public e-signature links for instant online contract signing.*";
-        }
-        // INVOICES QUERY
-        else if (msgLower.Contains("invoice") || msgLower.Contains("paid") || msgLower.Contains("billing") || msgLower.Contains("stripe") || msgLower.Contains("unpaid") || msgLower.Contains("overdue"))
-        {
-            fallbackReply = $"**Invoices & Stripe Payment Tallies**\n\n- **Total Invoices:** {totalInvoices}\n- **Paid Revenue:** ${totalPaidInvoicesVal:N0}\n- **Overdue Payments:** ${totalOverdueInvoicesVal:N0} ({unpaidInvoicesCount} unpaid invoices)\n\n*Tip: Clients can complete live credit card checkout via Stripe.*";
-        }
-        // LEADS QUERY
-        else if (msgLower.Contains("hot") || msgLower.Contains("lead") || msgLower.Contains("prospect"))
+        // Intent G: Leads & Hot Prospects Questions
+        else if (msgLower.Contains("lead") || msgLower.Contains("prospect") || msgLower.Contains("hot"))
         {
             List<Lead> topHotLeads = new();
             try
@@ -314,29 +354,50 @@ public class AiCopilotService : IAiCopilotService
 
             if (topHotLeads.Count > 0)
             {
-                var leadList = string.Join("\n", topHotLeads.Select(l => $"- **{l.FirstName} {l.LastName}** ({l.CompanyName ?? "Individual"}) · Score: {l.LeadScore} 🔥"));
-                fallbackReply = $"**Top Hot Prospects ({hotLeadsCount} Total Hot Leads out of {totalLeads} Leads)**\n\n{leadList}\n\n*Recommendation: Execute fast outreach to lock in demos.*";
+                var leadList = string.Join("\n", topHotLeads.Select(l => $"- **{l.FirstName} {l.LastName}** ({l.CompanyName ?? "Individual"}) · Score: **{l.LeadScore}** 🔥"));
+                fallbackReply = $"You currently have **{totalLeads} total leads**, including **{hotLeadsCount} Hot Leads** (score ≥ 70):\n\n{leadList}\n\n*Tip: Prioritize fast follow-ups on high-scoring prospects to boost conversion rates.*";
             }
             else
             {
-                fallbackReply = $"You currently have **{totalLeads} managed leads** ({hotLeadsCount} classified as Hot with score >= 70).";
+                fallbackReply = $"You currently have **{totalLeads} total leads** ({hotLeadsCount} classified as Hot with score ≥ 70). No urgent hot leads currently flagged.";
             }
         }
-        // PIPELINE / REVENUE QUERY
-        else if (msgLower.Contains("pipeline") || msgLower.Contains("revenue") || msgLower.Contains("deal") || msgLower.Contains("forecast") || msgLower.Contains("stage"))
+        // Intent H: Sales Pipeline & Deal Revenue Questions
+        else if (msgLower.Contains("pipeline") || msgLower.Contains("deal") || msgLower.Contains("revenue") || msgLower.Contains("forecast") || msgLower.Contains("stage"))
         {
-            var stgText = oppStageSummaryList.Count > 0 ? string.Join("\n", oppStageSummaryList.Select(s => $"- **{s}**")) : $"Total Pipeline Value: ${totalPipelineVal:N0}";
-            fallbackReply = $"**Sales Pipeline & Stage Breakdown**\n\n- **Total Pipeline Value:** ${totalPipelineVal:N0}\n\n**Stage Metrics:**\n{stgText}";
+            var stgText = oppStageSummaryList.Count > 0 ? string.Join("\n", oppStageSummaryList.Select(s => $"- {s}")) : "No active pipeline deals recorded.";
+            fallbackReply = $"**Opportunity Pipeline Breakdown**\n\n- **Total Pipeline Revenue:** **${totalPipelineVal:N0}**\n\n**Deals by Stage:**\n{stgText}\n\n*Tip: View the interactive Pipeline Kanban board to move deals across stages.*";
         }
-        // TASKS / ACTIVITIES QUERY
-        else if (msgLower.Contains("task") || msgLower.Contains("todo") || msgLower.Contains("calendar") || msgLower.Contains("activity") || msgLower.Contains("history"))
+        // Intent I: Products & Pricing Catalog Questions
+        else if (msgLower.Contains("product") || msgLower.Contains("sku") || msgLower.Contains("price") || msgLower.Contains("pricing") || msgLower.Contains("catalog") || msgLower.Contains("inventory"))
         {
-            fallbackReply = $"**Operations & Activity Touchpoints**\n\n- **Total Logged Activities:** {totalActivities} (Calls, Emails, Meetings)\n- **Pending Tasks:** {pendingTasksCount}\n- **Overdue Action Items:** {overdueTasksCount}";
+            var pList = productSummaryList.Count > 0 ? string.Join("\n", productSummaryList.Select(p => $"- **{p}**")) : "No active products registered.";
+            fallbackReply = $"**Product Catalog ({totalProducts} Items)**\n\n{pList}\n\n*Tip: You can attach product line items directly to opportunity proposals and quotes.*";
         }
-        // DYNAMIC QUESTION ADVISOR (Distinct reply for any custom question)
+        // Intent J: Invoices & Payment Questions
+        else if (msgLower.Contains("invoice") || msgLower.Contains("billing") || msgLower.Contains("stripe") || msgLower.Contains("paid") || msgLower.Contains("unpaid") || msgLower.Contains("overdue"))
+        {
+            fallbackReply = $"**Invoicing & Financial Summary**\n\n- **Total Invoices:** {totalInvoices}\n- **Collected Revenue (Paid):** **${totalPaidInvoicesVal:N0}**\n- **Overdue Invoices:** **${totalOverdueInvoicesVal:N0}** ({unpaidInvoicesCount} invoices pending payment)\n\n*Clients can pay directly online using the integrated Stripe credit card checkout.*";
+        }
+        // Intent K: Contracts & Agreements Questions
+        else if (msgLower.Contains("contract") || msgLower.Contains("agreement") || msgLower.Contains("esign") || msgLower.Contains("signature"))
+        {
+            fallbackReply = $"**Contracts & Digital Signatures**\n\n- **Total Contracts:** {totalContracts}\n- **Active / Signed:** **{signedContractsCount}** (${totalSignedContractsVal:N0} total signed value)\n\n*Tip: You can send tokenized public signing links for fast digital client signatures.*";
+        }
+        // Intent L: Tasks & Schedule Questions
+        else if (msgLower.Contains("task") || msgLower.Contains("todo") || msgLower.Contains("activity") || msgLower.Contains("calendar") || msgLower.Contains("schedule"))
+        {
+            fallbackReply = $"**Operations & Tasks Summary**\n\n- **Pending Tasks:** **{pendingTasksCount}**\n- **Overdue Items:** **{overdueTasksCount}** ⚠️\n- **Total Logged Touchpoints:** {totalActivities} (Calls, Meetings, Emails)\n\n*Check the Tasks section to prioritize overdue action items.*";
+        }
+        // Intent M: General Business Strategy / Best Practice Advice
+        else if (msgLower.StartsWith("how to") || msgLower.Contains("improve") || msgLower.Contains("strategy") || msgLower.Contains("best practice") || msgLower.Contains("tip"))
+        {
+            fallbackReply = $"**Sales & Operations Strategy Advice**\n\nHere are actionable best practices based on your current workspace:\n1. ⚡ **Lead Response Time:** Contact leads with scores above 70 within 15 minutes to increase win rates by up to 3x.\n2. 📈 **Pipeline Velocity:** Keep deals moving by establishing clear next steps after each client call (current pipeline: **${totalPipelineVal:N0}**).\n3. 💳 **Automated Follow-ups:** Send friendly payment reminders for pending invoices (currently **${totalOverdueInvoicesVal:N0}** overdue).\n4. ✍️ **Streamlined E-Signing:** Send contracts right after proposal acceptance to shorten sales cycles.";
+        }
+        // Intent N: General / Dynamic Fallback
         else
         {
-            fallbackReply = $"**AI Advisor Response for: '{userMsg}'**\n\n- 🎯 **Target Workspace:** {contextSummary}\n- 📊 **Current Database Snapshot:** {totalCustomers} Customers | {totalLeads} Leads ({hotLeadsCount} Hot) | {totalProducts} Products | ${totalPipelineVal:N0} Pipeline Value\n- 💡 **Need specific information?** Try asking: *'What products do we sell?'*, *'List hot prospects'*, or search for any name or keyword!";
+            fallbackReply = $"I understand you are asking about: **\"{userMsg}\"**.\n\n- 📊 **Current Workspace Status:** {totalCustomers} Customers | {totalLeads} Leads ({hotLeadsCount} Hot) | ${totalPipelineVal:N0} Pipeline Value\n\nCould you please provide a little more detail or specify what you'd like to check? For example:\n- *\"Show me our hot leads\"*\n- *\"What is our pipeline value?\"*\n- *\"List products in the catalog\"*\n- *\"Check unpaid invoices\"*";
         }
 
         return new CopilotChatResponse
@@ -351,9 +412,30 @@ public class AiCopilotService : IAiCopilotService
     public async Task<CopilotChatResponse> ProcessPublicVisitorChatAsync(CopilotChatRequest request)
     {
         var msg = request?.Message?.Trim() ?? string.Empty;
-        var msgLower = msg.ToLower();
+        var msgLower = msg.ToLower().Trim();
 
-        // Format history text if present
+        // 1. Natural greeting for public visitors
+        if (IsSimpleGreeting(msgLower))
+        {
+            return new CopilotChatResponse
+            {
+                Reply = "Hello! 👋 Welcome to our CRM platform. How can I help you today? Feel free to ask about our features, pricing, pipeline management, or demo access.",
+                IsGeminiPowered = false,
+                CurrentContextSummary = "Public Product Assistant"
+            };
+        }
+
+        if (msgLower == "how are you" || msgLower == "how are you?")
+        {
+            return new CopilotChatResponse
+            {
+                Reply = "I'm doing great! Thank you for visiting. How can I assist you with exploring our CRM features today?",
+                IsGeminiPowered = false,
+                CurrentContextSummary = "Public Product Assistant"
+            };
+        }
+
+        // Format history text
         var historyText = string.Empty;
         if (request?.History != null && request.History.Count > 0)
         {
@@ -361,86 +443,90 @@ public class AiCopilotService : IAiCopilotService
             historyText = string.Join("\n", lastHistory.Select(h => $"{h.Role.ToUpper()}: {h.Message}"));
         }
 
-        // 1. Try Gemini LLM Product Specialist Prompt
+        // 2. Gemini LLM Product Specialist
         if (_geminiService.IsConfigured)
         {
             try
             {
                 var systemPrompt = $"""
-                    You are the Official Public Product AI Specialist & CRM Advisor for this Enterprise SaaS CRM application.
-                    You are speaking to a prospective customer or website visitor on the public landing page.
+                    You are the friendly, intelligent Public Product Specialist for this Enterprise CRM platform.
 
-                    CRM PRODUCT CAPABILITIES & SYSTEM ARCHITECTURE:
-                    1. Customer & Company Management: 360-degree account records, B2B corporate structures, multiple contact links per company, custom tags.
-                    2. Lead Acquisition & Conversion: Multi-channel lead tracking, Hot/Warm/Cold AI lead scoring (0-100), SLA response tracking, 1-click lead conversion into Customer, Company, and Opportunity.
-                    3. Opportunity Pipeline Kanban: Visual drag-and-drop deal board, customizable stage probabilities, win/loss forecasting.
-                    4. Digital Contracts & E-Signatures: Contract creation, shareable public e-signature link tokens, online digital signature capture, auto PDF exports.
-                    5. Invoices & Stripe Payments: Issue invoices, process instant credit card payments via Stripe integration, automated payment status updates to Paid.
-                    6. Product Catalog: SKU management, stock tracking, custom line-item quotes attached to deal proposals.
-                    7. Task Calendar & Activity Logs: Priorities, overdue alerts, phone calls, email, and meeting touchpoints.
-                    8. Custom Fields Engine: Extend Leads, Customers, and Opportunities with text, date, dropdown, or number fields.
-                    9. Field-Level Audit Trail: Complete governance tracking every field edit with old/new values, user ID, and timestamp.
-                    10. Security & Governance: Role-based permissions (Admin, Manager, SalesRep).
+                    BEHAVIOR RULES:
+                    1. If the visitor says a greeting ("hi", "hello"), give a warm, natural 1-sentence greeting.
+                    2. If they ask a CRM product question, answer clearly, concisely, and persuasively.
+                    3. If they ask a general question, answer helpfully and accurately.
+                    4. Keep responses structured and pleasant.
+
+                    CRM PRODUCT HIGHLIGHTS:
+                    - Customer & Corporate Account Management
+                    - Automated AI Lead Scoring & 1-Click Conversion
+                    - Drag-and-Drop Kanban Opportunity Pipeline
+                    - Digital Contracts & Online E-Signatures
+                    - Invoices with Stripe Credit Card Checkout
+                    - Custom Fields & Field-Level Audit Trail
+                    - Task Scheduling & Activity Timelines
 
                     CONVERSATION HISTORY:
                     {(string.IsNullOrWhiteSpace(historyText) ? "None" : historyText)}
 
                     CURRENT VISITOR QUESTION:
                     {msg}
-
-                    INSTRUCTIONS:
-                    - If the visitor asks a CRM product question: Answer concisely, warmly, and persuasively using GitHub Markdown.
-                    - If the visitor asks a GENERAL non-CRM question: Answer it directly and helpfully!
-                    - Keep answers within 2-3 structured bullet points or short paragraphs.
                     """;
 
-                var reply = await _geminiService.GenerateTextAsync(systemPrompt, request.Attachment);
+                var reply = await _geminiService.GenerateTextAsync(systemPrompt, request?.Attachment);
                 if (!string.IsNullOrWhiteSpace(reply))
                 {
                     return new CopilotChatResponse
                     {
                         Reply = reply,
                         IsGeminiPowered = true,
-                        CurrentContextSummary = "Public Product AI Assistant"
+                        CurrentContextSummary = "Public Product Assistant"
                     };
                 }
             }
             catch { }
         }
 
-        // 2. Fallback Product Knowledge Engine
+        // 3. Fallback Product Answers
         string fallbackReply;
-
-        if (msgLower.Contains("stripe") || msgLower.Contains("payment") || msgLower.Contains("invoice") || msgLower.Contains("credit card"))
+        if (msgLower.Contains("pricing") || msgLower.Contains("cost") || msgLower.Contains("price") || msgLower.Contains("plan"))
         {
-            fallbackReply = "**Invoicing & Stripe Payment Gateway**\n\n- **Live Online Checkout:** Clients can pay invoices directly online using credit cards via Stripe.\n- **Auto-Sync:** Invoice statuses update automatically to **Paid** upon successful transaction.\n- **Receipts:** Client payment receipts are generated and stored automatically in the system.";
+            fallbackReply = "**Flexible Pricing Plans**\n\nWe offer Starter, Professional, and Enterprise tiers tailored to your team size. All plans include full CRM pipelines, lead scoring, and invoicing.\n\n*Click **'Get Started'** at the top right to test the live demo!*";
         }
-        else if (msgLower.Contains("contract") || msgLower.Contains("esign") || msgLower.Contains("signature") || msgLower.Contains("pdf"))
+        else if (msgLower.Contains("stripe") || msgLower.Contains("payment") || msgLower.Contains("invoice"))
         {
-            fallbackReply = "**Digital Contracts & Public E-Signatures**\n\n- **E-Signing Portal:** Generate contracts and share secure public signing links with clients.\n- **Digital Signature:** Clients sign online directly from their phone or desktop browser.\n- **PDF Exports:** Signed agreements automatically export to PDF with instant invoice generation.";
+            fallbackReply = "**Online Invoicing & Stripe Integration**\n\n- **Instant Checkout:** Clients can pay invoices online using credit cards via Stripe.\n- **Real-Time Sync:** Payment status updates automatically upon completed checkout.\n- **Automated Receipts:** Receipts and payment confirmations are generated instantly.";
         }
-        else if (msgLower.Contains("lead") || msgLower.Contains("score") || msgLower.Contains("convert") || msgLower.Contains("ai"))
+        else if (msgLower.Contains("contract") || msgLower.Contains("esign") || msgLower.Contains("sign"))
         {
-            fallbackReply = "**AI Lead Scoring & Fast Conversion**\n\n- **Predictive Scoring:** Prospects receive a 0–100 Hot/Warm/Cold rating based on domain quality and engagement.\n- **SLA Breach Alerts:** Tracks uncontacted leads and notifies sales reps before leads go cold.\n- **1-Click Conversion:** Active leads convert directly into linked Customer, Company, and Deal records with full history preservation.";
+            fallbackReply = "**Digital Contracts & E-Signatures**\n\n- **Shareable Links:** Send secure signing tokens directly to clients.\n- **Mobile-Friendly:** Clients can sign agreements online from any phone or browser.\n- **PDF Records:** Executed agreements export to PDF with complete audit timestamps.";
         }
-        else if (msgLower.Contains("custom field") || msgLower.Contains("customize") || msgLower.Contains("extend"))
+        else if (msgLower.Contains("lead") || msgLower.Contains("score") || msgLower.Contains("convert"))
         {
-            fallbackReply = "**Custom Fields & Audit Trail Engine**\n\n- **Flexible Entity Schema:** Define custom text, number, date, or dropdown fields for Leads, Customers, and Deals.\n- **Deep Governance:** Field-level audit trail logs every single modification with old and new values.";
-        }
-        else if (msgLower.Contains("pricing") || msgLower.Contains("cost") || msgLower.Contains("sign up") || msgLower.Contains("demo") || msgLower.Contains("start"))
-        {
-            fallbackReply = "**Get Started & Demo Access**\n\n- Click the **'Get Started'** button at the top right of the landing page to log into the demo portal.\n- You can also submit the Contact Form below to request an enterprise walkthrough!";
+            fallbackReply = "**AI Lead Scoring & Conversion**\n\n- **Predictive Scoring:** Prospects receive automatic Hot/Warm/Cold ratings (0–100).\n- **SLA Alerts:** Get notified before uncontacted leads go cold.\n- **1-Click Conversion:** Turn active leads into Customers, Companies, and Deals instantly.";
         }
         else
         {
-            fallbackReply = $"**CRM Product Advisor Response for: '{msg}'**\n\nOur CRM platform includes:\n- 🎯 **Lead Intelligence & AI Scoring**\n- 📈 **Opportunity Pipeline Kanban Board**\n- ✍️ **Digital Contracts & E-Signatures**\n- 💳 **Invoices & Stripe Payment Checkout**\n- ⚙️ **Custom Fields & Complete Audit Logs**\n- 📅 **Task Scheduling & Activity Timelines**\n\n*Click 'Get Started' to test the application live!*";
+            fallbackReply = $"Thank you for asking about **\"{msg}\"**!\n\nOur platform provides end-to-end customer management, Kanban sales pipelines, digital contracts, and Stripe billing.\n\n*Would you like to try out a live demo or learn more about specific features?*";
         }
 
         return new CopilotChatResponse
         {
             Reply = fallbackReply,
             IsGeminiPowered = false,
-            CurrentContextSummary = "Public Product AI Assistant"
+            CurrentContextSummary = "Public Product Assistant"
         };
+    }
+
+    private static bool IsSimpleGreeting(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var clean = Regex.Replace(text.ToLower().Trim(), @"[^\w\s]", "");
+        var simpleGreetings = new HashSet<string>
+        {
+            "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+            "howdy", "sup", "greetings", "yo", "hola", "hi there", "hello there", "hey there"
+        };
+        return simpleGreetings.Contains(clean);
     }
 }

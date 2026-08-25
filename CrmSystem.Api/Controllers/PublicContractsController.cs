@@ -42,7 +42,7 @@ public class PublicContractsController : ControllerBase
             return BadRequest(new { message = "Invalid signing token." });
 
         var contract = await _db.Contracts
-            .Where(c => !c.IsDeleted && (c.SigningToken == token || c.ContractNumber == token || c.ContractId.ToString() == token))
+            .Where(c => !c.IsDeleted && (c.SigningToken == token || c.ContractNumber == token))
             .Include(c => c.Customer)
                 .ThenInclude(cust => cust.Company)
             .Include(c => c.Opportunity)
@@ -52,9 +52,14 @@ public class PublicContractsController : ControllerBase
         if (contract == null)
             return NotFound(new { message = "Contract not found or invalid link." });
 
+        if (contract.TokenExpiresAt.HasValue && contract.TokenExpiresAt.Value < DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "This signing link has expired. Please request a new link from your representative." });
+        }
+
         if (string.IsNullOrEmpty(contract.SigningToken))
         {
-            contract.SigningToken = token;
+            contract.SigningToken = Guid.NewGuid().ToString("N");
             await _db.SaveChangesAsync();
         }
 
@@ -70,10 +75,15 @@ public class PublicContractsController : ControllerBase
         var contract = await _db.Contracts
             .Include(c => c.Customer)
             .Include(c => c.CreatedBy)
-            .FirstOrDefaultAsync(c => !c.IsDeleted && (c.SigningToken == token || c.ContractNumber == token || c.ContractId.ToString() == token));
+            .FirstOrDefaultAsync(c => !c.IsDeleted && (c.SigningToken == token || c.ContractNumber == token));
 
         if (contract == null)
             return NotFound(new { message = "Contract not found or invalid link." });
+
+        if (contract.TokenExpiresAt.HasValue && contract.TokenExpiresAt.Value < DateTime.UtcNow)
+        {
+            return BadRequest(new { message = "This signing link has expired. Please request a new link from your representative." });
+        }
 
         if (!string.IsNullOrEmpty(contract.CustomerSignatureDataUrl))
             return BadRequest(new { message = "The customer signature has already been submitted for this contract." });

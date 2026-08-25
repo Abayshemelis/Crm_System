@@ -69,6 +69,16 @@ public class OpportunitiesController : ControllerBase
     {
         var opp = await _service.GetByIdAsync(id);
         if (opp == null) return NotFound();
+
+        if (!_currentUser.CanAccessOwnedRecord(opp.OwnerId))
+        {
+            var customer = opp.CustomerId > 0 ? await _db.Customers.FindAsync(opp.CustomerId) : null;
+            if (customer == null || !_currentUser.CanAccessOwnedRecord(customer.AssignedRepId))
+            {
+                return Forbid();
+            }
+        }
+
         return Ok(opp);
     }
 
@@ -79,6 +89,11 @@ public class OpportunitiesController : ControllerBase
         if (dto.OwnerId == 0 && _currentUser.UserId.HasValue)
         {
             dto.OwnerId = _currentUser.UserId.Value;
+        }
+
+        if (!_currentUser.IsManagerOrAbove && dto.OwnerId != _currentUser.UserId)
+        {
+            dto.OwnerId = _currentUser.UserId ?? 0;
         }
 
         var created = await _service.CreateAsync(dto);
@@ -93,6 +108,11 @@ public class OpportunitiesController : ControllerBase
             .FirstOrDefaultAsync(o => o.OpportunityId == id);
 
         if (opp == null) return NotFound();
+
+        if (!_currentUser.CanAccessOwnedRecord(opp.OwnerId) && !_currentUser.CanAccessOwnedRecord(opp.Customer?.AssignedRepId))
+        {
+            return Forbid();
+        }
 
         // Capture old values for audit logging BEFORE the update
         var oldOwnerId           = opp.OwnerId;
@@ -229,6 +249,7 @@ public class OpportunitiesController : ControllerBase
         return Ok(auditLogs);
     }
 
+    [Authorize(Policy = "AdminOnly")]
     [HttpDelete("{id}/audit")]
     public async Task<IActionResult> ClearHistory(int id)
     {
@@ -257,6 +278,7 @@ public class OpportunitiesController : ControllerBase
     {
         var opp = await _db.Opportunities
             .Include(o => o.OpportunityStage)
+            .Include(o => o.Customer)
             .SingleOrDefaultAsync(o => o.OpportunityId == id);
 
         if (opp == null)
@@ -267,6 +289,11 @@ public class OpportunitiesController : ControllerBase
         if (_currentUser.UserId is null)
         {
             return Unauthorized();
+        }
+
+        if (!_currentUser.CanAccessOwnedRecord(opp.OwnerId) && !_currentUser.CanAccessOwnedRecord(opp.Customer?.AssignedRepId))
+        {
+            return Forbid();
         }
 
         // If opportunity is unassigned, assign to user taking action

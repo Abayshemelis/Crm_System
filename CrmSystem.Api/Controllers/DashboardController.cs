@@ -52,44 +52,50 @@ public class DashboardController : ControllerBase
     {
         var today = DateTime.UtcNow.Date;
 
-        var totalCustomers = await _db.Customers.Where(c => !c.IsDeleted).CountAsync();
-        var totalLeads = await _db.Leads.Where(l => !l.IsDeleted).CountAsync();
-        var totalCompanies = await _db.Companies.Where(c => !c.IsDeleted).CountAsync();
-        var totalProducts = await _db.Products.CountAsync();
-        var totalActivities = await _db.Activities.CountAsync();
+        var totalCustomers = await _db.Customers.AsNoTracking().Where(c => !c.IsDeleted).CountAsync();
+        var totalLeads = await _db.Leads.AsNoTracking().Where(l => !l.IsDeleted).CountAsync();
+        var totalCompanies = await _db.Companies.AsNoTracking().Where(c => !c.IsDeleted).CountAsync();
+        var totalProducts = await _db.Products.AsNoTracking().CountAsync();
+        var totalActivities = await _db.Activities.AsNoTracking().CountAsync();
 
         var openOpportunities = await _db.Opportunities
+            .AsNoTracking()
             .Include(o => o.OpportunityStage)
             .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost && !o.ActualCloseDate.HasValue)))
             .CountAsync();
 
         var wonOpportunities = await _db.Opportunities
+            .AsNoTracking()
             .Include(o => o.OpportunityStage)
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon)
             .CountAsync();
 
         var lostOpportunities = await _db.Opportunities
+            .AsNoTracking()
             .Include(o => o.OpportunityStage)
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsLost)
             .CountAsync();
 
         var totalRevenue = await _db.Opportunities
+            .AsNoTracking()
             .Include(o => o.OpportunityStage)
             .Where(o => !o.Customer.IsDeleted && o.OpportunityStage != null && o.OpportunityStage.IsWon)
             .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
         var pipelineValue = await _db.Opportunities
+            .AsNoTracking()
             .Include(o => o.OpportunityStage)
             .Where(o => !o.Customer.IsDeleted && (o.OpportunityStage == null || (!o.OpportunityStage.IsWon && !o.OpportunityStage.IsLost)))
             .SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
 
         var pipelineStages = await _db.OpportunityStages
+            .AsNoTracking()
             .OrderBy(s => s.SortOrder)
             .Select(s => new
             {
                 Name = s.Name,
-                Count = _db.Opportunities.Count(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId),
-                Value = _db.Opportunities.Where(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId).Sum(o => (double?)o.EstimatedValue) ?? 0.0
+                Count = _db.Opportunities.AsNoTracking().Count(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId),
+                Value = _db.Opportunities.AsNoTracking().Where(o => !o.Customer.IsDeleted && o.OpportunityStageId == s.OpportunityStageId).Sum(o => (double?)o.EstimatedValue) ?? 0.0
             })
             .ToListAsync();
 
@@ -202,12 +208,12 @@ public class DashboardController : ControllerBase
         var userId = GetCurrentUserId();
         var today = DateTime.UtcNow.Date;
 
-        IQueryable<Customer> customersQuery = _db.Customers;
-        IQueryable<Lead> leadsQuery = _db.Leads.Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null));
-        IQueryable<Opportunity> opportunitiesQuery = _db.Opportunities.Where(o => (o.CustomerId == null || o.Customer != null));
-        IQueryable<CrmTask> tasksQuery = _db.CrmTasks.Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || (t.Lead != null && (t.Lead.ConvertedCustomerId == null || t.Lead.ConvertedCustomer != null))) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null))));
-        IQueryable<Activity> activitiesQuery = _db.Activities.Where(a => (a.CustomerId == null || a.Customer != null) && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null))) && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null))));
-        IQueryable<Product> productsQuery = _db.Products;
+        IQueryable<Customer> customersQuery = _db.Customers.AsNoTracking();
+        IQueryable<Lead> leadsQuery = _db.Leads.AsNoTracking().Where(l => (l.ConvertedCustomerId == null || l.ConvertedCustomer != null));
+        IQueryable<Opportunity> opportunitiesQuery = _db.Opportunities.AsNoTracking().Where(o => (o.CustomerId == null || o.Customer != null));
+        IQueryable<CrmTask> tasksQuery = _db.CrmTasks.AsNoTracking().Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || (t.Lead != null && (t.Lead.ConvertedCustomerId == null || t.Lead.ConvertedCustomer != null))) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null))));
+        IQueryable<Activity> activitiesQuery = _db.Activities.AsNoTracking().Where(a => (a.CustomerId == null || a.Customer != null) && (a.LeadId == null || (a.Lead != null && (a.Lead.ConvertedCustomerId == null || a.Lead.ConvertedCustomer != null))) && (a.OpportunityId == null || (a.Opportunity != null && (a.Opportunity.CustomerId == null || a.Opportunity.Customer != null))));
+        IQueryable<Product> productsQuery = _db.Products.AsNoTracking();
 
         // Apply Role-Based Data Isolation: SalesReps only see records assigned to their user ID
         if (IsSalesRep())

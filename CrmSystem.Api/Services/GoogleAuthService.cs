@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace CrmSystem.Api.Services;
@@ -7,11 +8,13 @@ public class GoogleAuthService : IGoogleAuthService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<GoogleAuthService> _logger;
+    private readonly string? _expectedClientId;
 
-    public GoogleAuthService(HttpClient httpClient, ILogger<GoogleAuthService> logger)
+    public GoogleAuthService(HttpClient httpClient, ILogger<GoogleAuthService> logger, IConfiguration? configuration = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _expectedClientId = configuration?["Google:ClientId"] ?? configuration?["Authentication:Google:ClientId"];
     }
 
     public async Task<GoogleUserInfo?> ValidateIdTokenAsync(string idToken, CancellationToken cancellationToken = default)
@@ -75,6 +78,26 @@ public class GoogleAuthService : IGoogleAuthService
             {
                 _logger.LogWarning("Google ID Token email {Email} is not verified.", email);
                 return null;
+            }
+
+            // Validate Audience / Client ID if configured
+            if (!string.IsNullOrWhiteSpace(_expectedClientId))
+            {
+                var audMatches = false;
+                if (root.TryGetProperty("aud", out var audProp) && string.Equals(audProp.GetString(), _expectedClientId, StringComparison.Ordinal))
+                {
+                    audMatches = true;
+                }
+                else if (root.TryGetProperty("azp", out var azpProp) && string.Equals(azpProp.GetString(), _expectedClientId, StringComparison.Ordinal))
+                {
+                    audMatches = true;
+                }
+
+                if (!audMatches)
+                {
+                    _logger.LogWarning("Google token audience mismatch for email {Email}", email);
+                    return null;
+                }
             }
 
             string name = root.TryGetProperty("name", out var nameProp) && !string.IsNullOrWhiteSpace(nameProp.GetString())

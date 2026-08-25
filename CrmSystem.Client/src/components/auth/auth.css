@@ -608,7 +608,7 @@
 
 .auth-demo-chips-grid {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
   width: 100%;
   justify-content: center;
   flex-wrap: wrap;
@@ -617,23 +617,25 @@
 .auth-demo-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 99px;
+  gap: 0.45rem;
+  padding: 0.4rem 0.95rem;
+  border-radius: 8px;
   background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
   color: var(--text-secondary, #a0a5b8);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .auth-demo-chip:hover {
-  background: var(--border-highlight, rgba(245, 158, 11, 0.2));
+  background: var(--border-highlight, rgba(245, 158, 11, 0.15));
   border-color: var(--accent-primary, #f59e0b);
   color: var(--accent-primary, #f59e0b);
-  transform: translateY(-1px);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
 }
 
 /* ── Registration / Help Note ── */

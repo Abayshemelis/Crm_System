@@ -46,6 +46,11 @@ if (builder.Environment.IsEnvironment("Test"))
 
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR(); // Registers SignalR for real-time WebSocket notifications
+builder.Services.AddMemoryCache(); // High-performance In-Memory cache for lookups and stats
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
 
 // ── 2. CROSS-ORIGIN RESOURCE SHARING (CORS) ───────────────────────────────────
 // Allows our React frontend (running on Vite http://localhost:5173, etc.) to communicate
@@ -147,6 +152,12 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 var jwtSigningKey = builder.Configuration["Jwt:SigningKey"] ?? "development-signing-key-1234567890";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CrmSystem.Api";
 
+// Production Security Validation: Ensure strong secret key is used in production
+if (builder.Environment.IsProduction() && (string.IsNullOrWhiteSpace(jwtSigningKey) || jwtSigningKey.Contains("development-signing-key") || jwtSigningKey.Contains("your-secret-key")))
+{
+    throw new InvalidOperationException("CRITICAL SECURITY CONFIGURATION: A secure, custom 'Jwt:SigningKey' (at least 32 characters) must be configured in environment variables for Production.");
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -213,6 +224,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseResponseCompression();
 app.UseCors("AllowFrontend");
 
 // ── 7. STATIC FILE SERVING WITH EMBED & CORS HEADERS ──────────────────────────

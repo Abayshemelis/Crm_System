@@ -231,6 +231,7 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(c => c.CreatedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(c => new { c.IsDeleted, c.AssignedRepId });
             e.HasQueryFilter(c => !c.IsDeleted);
         });
 
@@ -267,6 +268,9 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(c => c.CompanyId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(c => new { c.IsDeleted, c.CompanyId });
+            e.HasIndex(c => new { c.IsDeleted, c.AssignedRepId });
+            e.HasIndex(c => c.CreatedAt);
             e.HasQueryFilter(c => !c.IsDeleted);
             e.HasMany(c => c.Tags)
              .WithMany(t => t.Customers)
@@ -318,6 +322,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(l => l.ConvertedById)
              .OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(l => new { l.IsDeleted, l.AssignedRepId });
+            e.HasIndex(l => new { l.IsDeleted, l.LeadScore });
+            e.HasIndex(l => new { l.IsDeleted, l.LeadStatusId });
+            e.HasIndex(l => l.CreatedAt);
             e.HasQueryFilter(l => !l.IsDeleted);
         });
 
@@ -341,6 +349,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(o => o.OwnerId)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(o => new { o.OpportunityStageId, o.OwnerId });
+            e.HasIndex(o => o.CustomerId);
+            e.HasIndex(o => o.CreatedAt);
+            e.HasIndex(o => o.ExpectedCloseDate);
         });
 
         // ── OpportunityLineItem ───────────────────────────────────────────
@@ -409,6 +421,9 @@ public class AppDbContext : DbContext
              .WithOne(t => t.Activity)
              .HasForeignKey(t => t.ActivityId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(a => new { a.CustomerId, a.CreatedAt });
+            e.HasIndex(a => new { a.LeadId, a.CreatedAt });
+            e.HasIndex(a => a.CreatedAt);
         });
 
         // ── CrmTask ───────────────────────────────────────────────────────
@@ -445,6 +460,8 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(t => t.CreatedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(t => new { t.AssignedToId, t.DueDate, t.CrmTaskStatusId });
+            e.HasIndex(t => t.DueDate);
         });
 
         // ── StageHistory ──────────────────────────────────────────────────
@@ -515,6 +532,7 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(n => n.RelatedOpportunityId)
              .OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(n => new { n.IdentityId, n.IsRead, n.CreatedAt });
         });
 
         // ── AuditLog ──────────────────────────────────────────────────────
@@ -536,6 +554,7 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(al => al.ChangedById)
              .OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(al => new { al.EntityTypeId, al.EntityId, al.ChangedAt });
             e.HasQueryFilter(al => !al.IsDeleted);
         });
 
@@ -547,7 +566,9 @@ public class AppDbContext : DbContext
             e.Property(c => c.Title).HasMaxLength(200).IsRequired();
             e.Property(c => c.Status).HasMaxLength(30).IsRequired();
             e.Property(c => c.SigningToken).HasMaxLength(100);
+            e.HasIndex(c => c.ContractNumber).IsUnique();
             e.HasIndex(c => c.SigningToken);
+            e.HasIndex(c => new { c.IsDeleted, c.Status });
             e.Property(c => c.ContractValue).HasColumnType("decimal(18,2)");
             e.HasQueryFilter(c => !c.IsDeleted);
         });
@@ -586,6 +607,9 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.CreatedById)
              .OnDelete(DeleteBehavior.Restrict);
 
+            e.HasIndex(i => i.InvoiceNumber).IsUnique();
+            e.HasIndex(i => new { i.IsDeleted, i.Status, i.DueDate });
+            e.HasIndex(i => i.CustomerId);
             e.HasQueryFilter(i => !i.IsDeleted);
         });
     }

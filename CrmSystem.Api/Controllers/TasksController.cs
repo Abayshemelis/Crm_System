@@ -36,22 +36,35 @@ public class TasksController : ControllerBase
         return Ok(await _service.GetCompletedAsync(_currentUser.UserId.Value, take));
     }
 
-    /// <summary>GET /api/tasks/all/completed  — completed tasks for all team members</summary>
+    /// <summary>GET /api/tasks/all/completed  — completed tasks for team members</summary>
     [HttpGet("all/completed")]
     public async Task<ActionResult<IReadOnlyList<TaskReadDto>>> GetAllCompleted([FromQuery] int take = 50)
     {
-        return Ok(await _service.GetCompletedAsync(null, take));
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        var targetUserId = _currentUser.IsManagerOrAbove ? (int?)null : _currentUser.UserId.Value;
+        return Ok(await _service.GetCompletedAsync(targetUserId, take));
     }
 
-    /// <summary>GET /api/tasks/all  — grouped tasks for all team members</summary>
+    /// <summary>GET /api/tasks/all  — grouped tasks for team members</summary>
     [HttpGet("all")]
     public async Task<ActionResult<TaskGroupedDto>> GetAllTasks([FromQuery] int? assigneeId = null)
-        => Ok(await _service.GetAllTasksGroupedAsync(assigneeId));
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        var effectiveAssignee = _currentUser.IsManagerOrAbove ? assigneeId : _currentUser.UserId.Value;
+        return Ok(await _service.GetAllTasksGroupedAsync(effectiveAssignee));
+    }
 
     /// <summary>GET /api/tasks/assignee/{id}  — grouped tasks for any user</summary>
     [HttpGet("assignee/{assigneeId:int}")]
     public async Task<ActionResult<TaskGroupedDto>> GetByAssignee(int assigneeId)
-        => Ok(await _service.GetByAssigneeAsync(assigneeId));
+    {
+        if (!_currentUser.UserId.HasValue) return Unauthorized();
+        if (!_currentUser.IsManagerOrAbove && assigneeId != _currentUser.UserId.Value)
+        {
+            return Forbid();
+        }
+        return Ok(await _service.GetByAssigneeAsync(assigneeId));
+    }
 
     /// <summary>GET /api/tasks/calendar?year=&month=&assignedToId=</summary>
     [HttpGet("calendar")]

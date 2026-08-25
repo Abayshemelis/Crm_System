@@ -136,6 +136,13 @@ public class AttachmentsController : ControllerBase
             return BadRequest(new { message = "File upload is required." });
         }
 
+        // 1. Enforce Maximum File Size (15 MB)
+        const long maxFileSizeBytes = 15 * 1024 * 1024;
+        if (request.File.Length > maxFileSizeBytes)
+        {
+            return BadRequest(new { message = "File size exceeds the maximum allowed limit of 15 MB." });
+        }
+
         if (!request.CustomerId.HasValue && !request.CompanyId.HasValue && !request.OpportunityId.HasValue && !request.LeadId.HasValue)
         {
             return BadRequest(new { message = "CustomerId, CompanyId, OpportunityId, or LeadId is required." });
@@ -165,11 +172,60 @@ public class AttachmentsController : ControllerBase
             }
         }
 
+        var originalFileName = Path.GetFileName(request.File.FileName) ?? "upload";
+        var fileExtension = (Path.GetExtension(originalFileName) ?? string.Empty).ToLowerInvariant();
+
+        // 2. Allowed Safe File Extensions Whitelist
+        var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif",
+            ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt"
+        };
+
+        if (!allowedExtensions.Contains(fileExtension))
+        {
+            return BadRequest(new { message = $"File type '{fileExtension}' is not permitted. Allowed formats: PDF, PNG, JPG, WEBP, DOC, DOCX, XLS, XLSX, CSV, TXT." });
+        }
+
+        // 3. Binary Magic Byte Header Inspection to prevent disguised malicious files
+        using (var headerStream = request.File.OpenReadStream())
+        {
+            var headerBytes = new byte[8];
+            var bytesRead = await headerStream.ReadAsync(headerBytes, 0, headerBytes.Length);
+            if (bytesRead >= 4)
+            {
+                bool isValid = true;
+                if (fileExtension == ".pdf" && (headerBytes[0] != 0x25 || headerBytes[1] != 0x50 || headerBytes[2] != 0x44 || headerBytes[3] != 0x46))
+                {
+                    isValid = false;
+                }
+                else if (fileExtension == ".png" && (headerBytes[0] != 0x89 || headerBytes[1] != 0x50 || headerBytes[2] != 0x4E || headerBytes[3] != 0x47))
+                {
+                    isValid = false;
+                }
+                else if ((fileExtension == ".jpg" || fileExtension == ".jpeg") && (headerBytes[0] != 0xFF || headerBytes[1] != 0xD8 || headerBytes[2] != 0xFF))
+                {
+                    isValid = false;
+                }
+                else if (fileExtension == ".gif" && (headerBytes[0] != 0x47 || headerBytes[1] != 0x49 || headerBytes[2] != 0x46 || headerBytes[3] != 0x38))
+                {
+                    isValid = false;
+                }
+                else if ((fileExtension == ".docx" || fileExtension == ".xlsx") && (headerBytes[0] != 0x50 || headerBytes[1] != 0x4B || headerBytes[2] != 0x03 || headerBytes[3] != 0x04))
+                {
+                    isValid = false;
+                }
+
+                if (!isValid)
+                {
+                    return BadRequest(new { message = "File content signature does not match its declared extension." });
+                }
+            }
+        }
+
         var uploadDir = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads");
         Directory.CreateDirectory(uploadDir);
 
-        var originalFileName = Path.GetFileName(request.File.FileName) ?? "upload";
-        var fileExtension = Path.GetExtension(originalFileName);
         var savedFileName = $"{Guid.NewGuid()}{fileExtension}";
         var savedPath = Path.Combine(uploadDir, savedFileName);
 

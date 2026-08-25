@@ -112,147 +112,101 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     };
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {label && (
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Calendar size={14} /> {label}
-                </span>
-            )}
+        <div className="date-range-picker-container">
+            <span className="date-range-label">
+                <Calendar size={15} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                <span>{label || 'Filter by Date:'}</span>
+            </span>
             
             {showPresets && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                <div className="date-range-presets">
                     <button
                         type="button"
-                        className={`btn-preset ${activePreset === 'all' || (!startDate && !endDate) ? 'active' : ''}`}
+                        className={`date-range-preset-btn ${activePreset === 'all' || (!startDate && !endDate) ? 'active' : ''}`}
                         onClick={() => applyPreset('all')}
-                        style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.78rem',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-color)',
-                            background: activePreset === 'all' || (!startDate && !endDate) ? 'var(--primary-color)' : 'transparent',
-                            color: activePreset === 'all' || (!startDate && !endDate) ? '#fff' : 'var(--text-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                        }}
+                        title="Show all dates"
                     >
                         All
                     </button>
                     <button
                         type="button"
-                        className={`btn-preset ${activePreset === 'today' ? 'active' : ''}`}
+                        className={`date-range-preset-btn ${activePreset === 'today' ? 'active' : ''}`}
                         onClick={() => applyPreset('today')}
-                        style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.78rem',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-color)',
-                            background: activePreset === 'today' ? 'var(--primary-color)' : 'transparent',
-                            color: activePreset === 'today' ? '#fff' : 'var(--text-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                        }}
+                        title="Filter to today"
                     >
                         Today
                     </button>
                     <button
                         type="button"
-                        className={`btn-preset ${activePreset === 'month' ? 'active' : ''}`}
+                        className={`date-range-preset-btn ${activePreset === 'month' ? 'active' : ''}`}
                         onClick={() => applyPreset('month')}
-                        style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.78rem',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-color)',
-                            background: activePreset === 'month' ? 'var(--primary-color)' : 'transparent',
-                            color: activePreset === 'month' ? '#fff' : 'var(--text-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                        }}
+                        title="Filter to this month"
                     >
                         This Month
                     </button>
                     <button
                         type="button"
-                        className={`btn-preset ${activePreset === 'last30' ? 'active' : ''}`}
+                        className={`date-range-preset-btn ${activePreset === 'last30' ? 'active' : ''}`}
                         onClick={() => applyPreset('last30')}
-                        style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.78rem',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-color)',
-                            background: activePreset === 'last30' ? 'var(--primary-color)' : 'transparent',
-                            color: activePreset === 'last30' ? '#fff' : 'var(--text-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                        }}
+                        title="Filter to last 30 days"
                     >
                         Last 30 Days
                     </button>
                 </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <div className="date-range-inputs-group">
                 <input
                     type="date"
-                    className="form-input"
+                    className="date-range-input"
                     value={localStart}
+                    aria-label="Start date"
                     onChange={(e) => {
                         const val = e.target.value;
                         setLocalStart(val);
                         setActivePreset('');
                         handleApply(val, localEnd, '');
                     }}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.82rem', borderRadius: '6px' }}
                 />
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>to</span>
+                <span className="date-range-to-text">to</span>
                 <input
                     type="date"
-                    className="form-input"
+                    className="date-range-input"
                     value={localEnd}
+                    aria-label="End date"
                     onChange={(e) => {
                         const val = e.target.value;
                         setLocalEnd(val);
                         setActivePreset('');
                         handleApply(localStart, val, '');
                     }}
-                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.82rem', borderRadius: '6px' }}
                 />
             </div>
 
-            <Button
-                variant="primary"
+            <button
+                type="button"
+                className="date-range-apply-btn"
                 onClick={() => handleApply(localStart, localEnd, '')}
                 disabled={!isValid || (localStart === startDate && localEnd === endDate)}
-                style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem', borderRadius: '6px' }}
+                title="Apply date range filter"
             >
                 Apply
-            </Button>
-
+            </button>
 
             {(startDate || endDate) && (
                 <button
                     type="button"
+                    className="date-range-clear-btn"
                     onClick={handleClear}
                     title="Clear date filter"
-                    style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.2rem',
-                        fontSize: '0.8rem',
-                        padding: '0.2rem 0.4rem'
-                    }}
                 >
-                    <RotateCcw size={13} /> Clear
+                    <RotateCcw size={12} />
+                    <span>Clear</span>
                 </button>
             )}
 
             {!isValid && (
-                <span style={{ color: 'var(--status-lost-text, #ef4444)', fontSize: '0.78rem' }}>
+                <span style={{ color: 'var(--status-lost-text, #ef4444)', fontSize: '0.78rem', fontWeight: 600 }}>
                     Invalid range
                 </span>
             )}

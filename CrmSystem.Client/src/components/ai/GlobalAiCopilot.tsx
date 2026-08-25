@@ -47,7 +47,7 @@ export interface AiPermissions {
 
 export type AiThemeOption = 'dark' | 'light' | 'emerald' | 'violet';
 
-const STORAGE_KEY = 'crm_global_ai_sessions_v1';
+const STORAGE_KEY = 'crm_global_ai_sessions_v2';
 const THEME_STORAGE_KEY = 'crm_ai_theme_preference';
 const PERMISSIONS_STORAGE_KEY = 'crm_ai_permissions_preference';
 
@@ -62,7 +62,7 @@ const createDefaultSession = (contextLabel: string): GlobalChatSession => {
       {
         id: 'msg_g_welcome_' + Date.now(),
         role: 'assistant',
-        message: `Hello! 👋 I am your **CRM Executive AI Copilot**.\n\nAsk me anything about:\n- 📊 **Pipeline Forecast & Sales Revenue**\n- 🔥 **Hot Leads Needing SLA Contact**\n- 📦 **Products & Custom Field Records**\n- 💳 **Unpaid Invoices & E-Sign Contracts**\n- 📎 **Upload PDFs, Documents or Photos** for fast AI analysis\n\n*Current Location:* \`${contextLabel}\``,
+        message: `Hello! 👋 How can I help you today? Feel free to ask about your CRM data, sales pipeline, customer accounts, or any general questions.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         contextSummary: contextLabel
       }
@@ -494,6 +494,15 @@ export const GlobalAiCopilot: React.FC = () => {
     }
   };
 
+  const escapeHtml = (unsafe: string) => {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
+
   const renderFormattedText = (text: string) => {
     if (!text) return null;
 
@@ -505,16 +514,17 @@ export const GlobalAiCopilot: React.FC = () => {
       if (currentList.length > 0) {
         elements.push(
           <ul key={`${keyPrefix}-ul`} className="copilot-formatted-list">
-            {currentList.map((item, i) => (
-              <li
-                key={i}
-                dangerouslySetInnerHTML={{
-                  __html: item
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>')
-                }}
-              />
-            ))}
+            {currentList.map((item, i) => {
+              const safeHtml = escapeHtml(item)
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
+              return (
+                <li
+                  key={i}
+                  dangerouslySetInnerHTML={{ __html: safeHtml }}
+                />
+              );
+            })}
           </ul>
         );
         currentList = [];
@@ -530,7 +540,7 @@ export const GlobalAiCopilot: React.FC = () => {
       } else {
         flushList(`line-${idx}`);
         if (trimmed) {
-          const formattedLine = trimmed
+          const safeFormattedLine = escapeHtml(trimmed)
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
 
@@ -538,7 +548,7 @@ export const GlobalAiCopilot: React.FC = () => {
             <p
               key={`p-${idx}`}
               className="copilot-formatted-p"
-              dangerouslySetInnerHTML={{ __html: formattedLine }}
+              dangerouslySetInnerHTML={{ __html: safeFormattedLine }}
             />
           );
         }

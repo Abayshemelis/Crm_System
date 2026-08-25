@@ -51,6 +51,8 @@ public class InvoicesController : ControllerBase
         [FromQuery] int? contractId,
         [FromQuery] string? status)
     {
+        if (_currentUser.UserId == null) return Unauthorized();
+
         var query = _db.Invoices
             .Where(i => !i.IsDeleted)
             .Include(i => i.Customer)
@@ -59,8 +61,31 @@ public class InvoicesController : ControllerBase
                 .ThenInclude(cust => cust.AssignedRep)
             .Include(i => i.Contract)
             .Include(i => i.Opportunity)
+                .ThenInclude(opp => opp.Owner)
             .Include(i => i.CreatedBy)
             .AsNoTracking();
+
+        // RBAC & IDOR scoped filtering:
+        if (!_currentUser.IsAdmin)
+        {
+            var userId = _currentUser.UserId.Value;
+            if (_currentUser.IsManagerOrAbove)
+            {
+                query = query.Where(i =>
+                    i.CreatedById == userId ||
+                    (i.Customer != null && (i.Customer.AssignedRepId == userId || (i.Customer.AssignedRep != null && i.Customer.AssignedRep.ManagerId == userId))) ||
+                    (i.Opportunity != null && (i.Opportunity.OwnerId == userId || (i.Opportunity.Owner != null && i.Opportunity.Owner.ManagerId == userId)))
+                );
+            }
+            else
+            {
+                query = query.Where(i =>
+                    i.CreatedById == userId ||
+                    (i.Customer != null && i.Customer.AssignedRepId == userId) ||
+                    (i.Opportunity != null && i.Opportunity.OwnerId == userId)
+                );
+            }
+        }
 
         if (customerId.HasValue)
             query = query.Where(i => i.CustomerId == customerId.Value);
@@ -89,6 +114,8 @@ public class InvoicesController : ControllerBase
             .Where(i => !i.IsDeleted && i.InvoiceId == id)
             .Include(i => i.Customer)
                 .ThenInclude(cust => cust.Company)
+            .Include(i => i.Customer)
+                .ThenInclude(cust => cust.AssignedRep)
             .Include(i => i.Contract)
             .Include(i => i.Opportunity)
             .Include(i => i.CreatedBy)
@@ -96,6 +123,15 @@ public class InvoicesController : ControllerBase
             .FirstOrDefaultAsync();
 
         if (invoice == null) return NotFound();
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
+
         return Ok(MapToReadDto(invoice));
     }
 
@@ -246,8 +282,19 @@ public class InvoicesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateInvoiceDto dto)
     {
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+            .Include(i => i.Opportunity)
+            .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
         if (invoice == null) return NotFound();
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
 
         if (invoice.Status == "Paid")
             return BadRequest(new { message = "Paid invoices cannot be edited." });
@@ -278,9 +325,18 @@ public class InvoicesController : ControllerBase
     {
         var invoice = await _db.Invoices
             .Include(i => i.Customer)
+            .Include(i => i.Opportunity)
             .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
 
         if (invoice == null) return NotFound();
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
 
         invoice.Status = "Paid";
         invoice.PaidAt = DateTime.UtcNow;
@@ -339,8 +395,19 @@ public class InvoicesController : ControllerBase
     [HttpPost("{id:int}/stripe-checkout")]
     public async Task<IActionResult> GenerateStripeCheckout(int id, [FromQuery] string successUrl, [FromQuery] string cancelUrl)
     {
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+            .Include(i => i.Opportunity)
+            .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
         if (invoice == null) return NotFound();
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
 
         if (invoice.Status == "Paid")
             return BadRequest(new { message = "Invoice is already paid." });
@@ -351,7 +418,7 @@ public class InvoicesController : ControllerBase
         try
         {
             var paymentUrl = await _stripePaymentService.CreateCheckoutSessionAsync(invoice, successUrl, cancelUrl);
-            invoice.StripeSessionId = "session_created"; // We can't get the actual ID easily without changing the return type of CreateCheckoutSessionAsync, but URL is enough
+            invoice.StripeSessionId = "session_created";
             invoice.PaymentUrl = paymentUrl;
             invoice.UpdatedAt = DateTime.UtcNow;
 
@@ -535,8 +602,19 @@ public class InvoicesController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+            .Include(i => i.Opportunity)
+            .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
         if (invoice == null) return NotFound();
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
 
         invoice.IsDeleted = true;
         invoice.UpdatedAt = DateTime.UtcNow;

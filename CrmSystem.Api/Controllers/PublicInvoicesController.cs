@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using CrmSystem.Api.Hubs;
+using CrmSystem.Api.Services;
 using CrmSystem.Domain.Entities;
 using CrmSystem.Infrastructure;
 using CrmSystem.Infrastructure.Services;
@@ -16,6 +17,7 @@ namespace CrmSystem.Api.Controllers
     {
         public string CardHolderName { get; set; } = string.Empty;
         public string PaymentMethod { get; set; } = "Stripe Credit Card";
+        public string? StripeSessionId { get; set; }
     }
 
     [AllowAnonymous]
@@ -26,36 +28,42 @@ namespace CrmSystem.Api.Controllers
         private readonly AppDbContext _db;
         private readonly IAuditService _auditService;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IStripePaymentService _stripePaymentService;
 
         public PublicInvoicesController(
             AppDbContext db,
             IAuditService auditService,
-            IHubContext<NotificationHub> hubContext)
+            IHubContext<NotificationHub> hubContext,
+            IStripePaymentService stripePaymentService)
         {
             _db = db;
             _auditService = auditService;
             _hubContext = hubContext;
+            _stripePaymentService = stripePaymentService;
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetPublicInvoice(string id)
         {
-            Invoice? invoice = null;
-
-            if (int.TryParse(id, out var invoiceId))
+            if (string.IsNullOrWhiteSpace(id))
             {
-                invoice = await _db.Invoices
-                    .Include(i => i.Customer)
-                    .Include(i => i.CreatedBy)
-                    .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId && !i.IsDeleted);
+                return BadRequest(new { message = "Invoice identifier is required." });
             }
 
-            if (invoice == null)
+            var query = _db.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.CreatedBy)
+                .Where(i => !i.IsDeleted);
+
+            // Match by Invoice Number (e.g. INV-20260825-0001) or explicit ID
+            Invoice? invoice = null;
+            if (id.StartsWith("INV-", StringComparison.OrdinalIgnoreCase) || id.Contains('-'))
             {
-                invoice = await _db.Invoices
-                    .Include(i => i.Customer)
-                    .Include(i => i.CreatedBy)
-                    .FirstOrDefaultAsync(i => i.InvoiceNumber.ToLower() == id.ToLower() && !i.IsDeleted);
+                invoice = await query.FirstOrDefaultAsync(i => i.InvoiceNumber.ToLower() == id.ToLower());
+            }
+            else if (int.TryParse(id, out var invoiceId))
+            {
+                invoice = await query.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
             }
 
             if (invoice == null)
@@ -91,20 +99,23 @@ namespace CrmSystem.Api.Controllers
         [HttpPost("{id}/pay")]
         public async Task<IActionResult> ProcessOnlinePayment(string id, [FromBody] OnlinePaymentRequestDto dto)
         {
-            Invoice? invoice = null;
-
-            if (int.TryParse(id, out var invoiceId))
+            if (string.IsNullOrWhiteSpace(id))
             {
-                invoice = await _db.Invoices
-                    .Include(i => i.Customer)
-                    .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId && !i.IsDeleted);
+                return BadRequest(new { message = "Invoice identifier is required." });
             }
 
-            if (invoice == null)
+            var query = _db.Invoices
+                .Include(i => i.Customer)
+                .Where(i => !i.IsDeleted);
+
+            Invoice? invoice = null;
+            if (id.StartsWith("INV-", StringComparison.OrdinalIgnoreCase) || id.Contains('-'))
             {
-                invoice = await _db.Invoices
-                    .Include(i => i.Customer)
-                    .FirstOrDefaultAsync(i => i.InvoiceNumber.ToLower() == id.ToLower() && !i.IsDeleted);
+                invoice = await query.FirstOrDefaultAsync(i => i.InvoiceNumber.ToLower() == id.ToLower());
+            }
+            else if (int.TryParse(id, out var invoiceId))
+            {
+                invoice = await query.FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
             }
 
             if (invoice == null)
@@ -115,6 +126,17 @@ namespace CrmSystem.Api.Controllers
             if (invoice.Status == "Paid")
             {
                 return BadRequest(new { message = "This invoice is already marked as Paid." });
+            }
+
+            // Server-side verification if Stripe Session ID is provided
+            if (!string.IsNullOrWhiteSpace(dto.StripeSessionId))
+            {
+                var verifiedInvoiceId = await _stripePaymentService.VerifyCheckoutSessionAsync(dto.StripeSessionId);
+                if (verifiedInvoiceId.HasValue && verifiedInvoiceId.Value != invoice.InvoiceId)
+                {
+                    return BadRequest(new { message = "Stripe payment verification mismatch." });
+                }
+                invoice.StripeSessionId = dto.StripeSessionId;
             }
 
             var oldStatus = invoice.Status;
@@ -171,12 +193,54 @@ namespace CrmSystem.Api.Controllers
         [HttpPost("/api/webhooks/stripe")]
         public async Task<IActionResult> HandleStripeWebhook()
         {
-            // Endpoint to receive Stripe Checkout session completed events
-            using var reader = new System.IO.StreamReader(HttpContext.Request.Body);
-            var json = await reader.ReadToEndAsync();
-            Console.WriteLine($"[Stripe Webhook Received]: {json}");
+            try
+            {
+                using var reader = new System.IO.StreamReader(HttpContext.Request.Body);
+                var json = await reader.ReadToEndAsync();
+                var signatureHeader = HttpContext.Request.Headers["Stripe-Signature"].ToString();
 
-            return Ok(new { received = true });
+                var invoiceId = await _stripePaymentService.ProcessWebhookEventAsync(json, signatureHeader);
+                if (invoiceId.HasValue)
+                {
+                    var invoice = await _db.Invoices
+                        .Include(i => i.Customer)
+                        .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId.Value && !i.IsDeleted);
+
+                    if (invoice != null && invoice.Status != "Paid")
+                    {
+                        var oldStatus = invoice.Status;
+                        invoice.Status = "Paid";
+                        invoice.PaidAt = DateTime.UtcNow;
+                        invoice.PaymentMethod = "Stripe Webhook (Verified)";
+                        invoice.UpdatedAt = DateTime.UtcNow;
+                        await _db.SaveChangesAsync();
+
+                        await _auditService.LogFieldChangeAsync(
+                            entityTypeId: 5,
+                            entityId: invoice.InvoiceId,
+                            fieldName: "Status",
+                            oldValue: oldStatus,
+                            newValue: "Paid",
+                            actionTypeName: "Update",
+                            changedById: invoice.CreatedById
+                        );
+
+                        await _hubContext.Clients.Group($"user_{invoice.CreatedById}").SendAsync("ReceiveNotification", new
+                        {
+                            title = "Invoice Paid via Stripe!",
+                            message = $"Invoice #{invoice.InvoiceNumber} ({invoice.TotalAmount:C}) was verified as Paid by Stripe Webhook!",
+                            type = "InvoicePaid"
+                        });
+                    }
+                }
+
+                return Ok(new { received = true, verified = invoiceId.HasValue });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Stripe Webhook Exception]: {ex.Message}");
+                return BadRequest(new { message = "Webhook processing error." });
+            }
         }
     }
 }

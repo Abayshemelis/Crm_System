@@ -459,6 +459,15 @@ export const PublicAiAssistant: React.FC = () => {
   const renderFormattedText = (text: string) => {
     if (!text) return null;
 
+    const escapeHtml = (unsafe: string) => {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+
     const lines = text.split('\n');
     const elements: React.ReactNode[] = [];
     let currentList: string[] = [];
@@ -467,16 +476,17 @@ export const PublicAiAssistant: React.FC = () => {
       if (currentList.length > 0) {
         elements.push(
           <ul key={`${keyPrefix}-ul`} className="copilot-formatted-list">
-            {currentList.map((item, i) => (
-              <li
-                key={i}
-                dangerouslySetInnerHTML={{
-                  __html: item
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>')
-                }}
-              />
-            ))}
+            {currentList.map((item, i) => {
+              const safeHtml = escapeHtml(item)
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
+              return (
+                <li
+                  key={i}
+                  dangerouslySetInnerHTML={{ __html: safeHtml }}
+                />
+              );
+            })}
           </ul>
         );
         currentList = [];
@@ -492,7 +502,7 @@ export const PublicAiAssistant: React.FC = () => {
       } else {
         flushList(`line-${idx}`);
         if (trimmed) {
-          const formattedLine = trimmed
+          const safeFormattedLine = escapeHtml(trimmed)
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/`([^`]+)`/g, '<code class="copilot-inline-code">$1</code>');
 
@@ -500,7 +510,7 @@ export const PublicAiAssistant: React.FC = () => {
             <p
               key={`p-${idx}`}
               className="copilot-formatted-p"
-              dangerouslySetInnerHTML={{ __html: formattedLine }}
+              dangerouslySetInnerHTML={{ __html: safeFormattedLine }}
             />
           );
         }

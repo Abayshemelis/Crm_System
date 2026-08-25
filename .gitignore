@@ -4,6 +4,17 @@ obj/
 .vs/
 *.user
 *.suo
+.vscode/
+
+## Node / Client
+node_modules/
+dist/
+.vite/
+
+## Local Databases
+*.db
+*.sqlite
+*.db-journal
 
 ## Secrets — never commit
 **/appsettings.*.local.json
@@ -12,6 +23,8 @@ appsettings.Development.json
 secrets.json
 .env
 *.env
+.env.local
+.env.*.local
 
 ## OS
 Thumbs.db
