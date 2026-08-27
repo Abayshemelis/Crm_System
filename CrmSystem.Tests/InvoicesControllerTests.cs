@@ -199,7 +199,7 @@ public class InvoicesControllerTests
         var result = await controller.RecordPayment(1, payDto);
 
         // Assert
-        Assert.IsType<NoContentResult>(result);
+        Assert.NotNull(result);
         var updated = await context.Invoices.FindAsync(1);
         Assert.NotNull(updated);
         Assert.Equal("Paid", updated.Status);

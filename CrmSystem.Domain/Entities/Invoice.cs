@@ -39,4 +39,6 @@ public class Invoice
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; set; } = false;
+
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }

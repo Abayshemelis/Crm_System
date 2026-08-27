@@ -307,8 +307,9 @@ export const UserReportsScreen: React.FC = () => {
       if (endDate)   q.append('endDate', endDate);
       q.append('scope', 'company');
 
-      const data = await api.get<any[]>(`/api/reports/rep-performance?${q.toString()}`);
-      setRepPerf(data ?? []);
+      const res = await api.get<any>(`/api/reports/team?${q.toString()}`);
+      const list = Array.isArray(res) ? res : (res?.reps ?? []);
+      setRepPerf(list);
     } catch (err) {
       console.error('Failed to load user reports', err);
     } finally {

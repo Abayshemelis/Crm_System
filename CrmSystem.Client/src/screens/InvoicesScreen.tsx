@@ -1,15 +1,22 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download, Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight, Edit3, Trash2, RefreshCw, Users, UserCheck } from 'lucide-react';
+import {
+  Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download,
+  Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight,
+  Edit3, Trash2, RefreshCw, Users, UserCheck, Send, Link, ExternalLink,
+  ShieldCheck, Landmark, Copy, Check
+} from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
+import { validatePositiveNumber, validateRequiredSelect, validateDateRange, validateMaxLength } from '../lib/validators';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -29,7 +36,12 @@ export interface InvoiceItem {
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
-  status: string; // Draft, Sent, Paid, Overdue, Cancelled
+  amountPaid: number;
+  balanceDue: number;
+  status: string; // Draft, Sent, PartiallyPaid, Paid, PendingVerification, Overdue, Cancelled
+  paymentStatus: string;
+  paymentCount: number;
+  paymentUrl?: string;
   issueDate: string;
   dueDate: string;
   paidAt?: string;
@@ -43,16 +55,22 @@ export interface InvoiceItem {
 
 const InvoiceActionMenu: React.FC<{
   invoice: InvoiceItem;
-  onPay: (inv: InvoiceItem) => void;
-  onStripePay: (inv: InvoiceItem) => void;
-  onSyncStripe?: (inv: InvoiceItem) => void;
+  onRecordPayment: (inv: InvoiceItem) => void;
+  onSendPaymentRequest: (inv: InvoiceItem) => void;
+  onCopyPaymentLink: (inv: InvoiceItem) => void;
   onEdit: (inv: InvoiceItem) => void;
   onDelete: (inv: InvoiceItem) => void;
   onView: (inv: InvoiceItem) => void;
   onPrint: (inv: InvoiceItem) => void;
-}> = ({ invoice, onPay, onStripePay, onSyncStripe, onEdit, onDelete, onView, onPrint }) => {
+}> = ({ invoice, onRecordPayment, onSendPaymentRequest, onCopyPaymentLink, onEdit, onDelete, onView, onPrint }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const invStatus = (invoice.status || '').toLowerCase();
+  const isPaid = invStatus === 'paid' || (invoice.balanceDue !== undefined && invoice.balanceDue <= 0.01 && (invoice.amountPaid || 0) > 0);
+  const isPartiallyPaid = invStatus === 'partiallypaid' || ((invoice.amountPaid || 0) > 0 && (invoice.balanceDue || 0) > 0.01);
+  const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+  const isPayable = !isPaid && !isCancelledOrRefunded && invStatus !== 'pendingverification';
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -76,13 +94,13 @@ const InvoiceActionMenu: React.FC<{
       </button>
 
       {open && (
-        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px' }}>
+        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px', minWidth: '220px' }}>
           <button
             type="button"
             className="crm-action-menu-item"
             onClick={(e) => { e.stopPropagation(); onView(invoice); setOpen(false); }}
           >
-            <FileText size={14} /> View Invoice
+            <FileText size={14} /> View Details
           </button>
 
           <button
@@ -93,47 +111,57 @@ const InvoiceActionMenu: React.FC<{
             <Printer size={14} /> Print / Save PDF
           </button>
 
-          {invoice.status !== 'Paid' && (
+          <div className="crm-action-menu-divider" />
+
+          {isPayable && (
             <button
               type="button"
               className="crm-action-menu-item"
-              onClick={(e) => { e.stopPropagation(); onPay(invoice); setOpen(false); }}
+              onClick={(e) => { e.stopPropagation(); onSendPaymentRequest(invoice); setOpen(false); }}
+              style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
             >
-              <CreditCard size={14} style={{ color: '#10b981' }} /> Record Payment
+              <Send size={14} /> Send Payment Request
             </button>
           )}
 
-          {invoice.status !== 'Paid' && (
+          {isPayable && (
             <button
               type="button"
               className="crm-action-menu-item"
-              onClick={(e) => { e.stopPropagation(); onStripePay(invoice); setOpen(false); }}
+              onClick={(e) => { e.stopPropagation(); onCopyPaymentLink(invoice); setOpen(false); }}
             >
-              <CreditCard size={14} style={{ color: '#818cf8' }} /> Pay via Stripe
+              <Copy size={14} />
+              <span>
+                {isPartiallyPaid
+                  ? `Copy Pay Link ($${(invoice.balanceDue ?? 0).toLocaleString()} Due)`
+                  : 'Copy Payment Link'}
+              </span>
             </button>
           )}
 
-          {invoice.status !== 'Paid' && onSyncStripe && (
+          {!isPaid && !isCancelledOrRefunded && (
             <button
               type="button"
               className="crm-action-menu-item"
-              onClick={(e) => { e.stopPropagation(); onSyncStripe(invoice); setOpen(false); }}
+              onClick={(e) => { e.stopPropagation(); onRecordPayment(invoice); setOpen(false); }}
+              style={{ color: '#10b981', fontWeight: 600 }}
             >
-              <RefreshCw size={14} style={{ color: '#0284c7' }} /> 🔄 Check Stripe Status
-            </button>
-          )}
-
-          {invoice.status !== 'Paid' && (
-            <button
-              type="button"
-              className="crm-action-menu-item"
-              onClick={(e) => { e.stopPropagation(); onEdit(invoice); setOpen(false); }}
-            >
-              <Edit3 size={14} style={{ color: '#d97706' }} /> Edit Invoice
+              <DollarSign size={14} /> Record Received Payment
             </button>
           )}
 
           <div className="crm-action-menu-divider" />
+
+          {!isPaid && !isCancelledOrRefunded && (
+            <button
+              type="button"
+              className="crm-action-menu-item"
+              onClick={(e) => { e.stopPropagation(); onEdit(invoice); setOpen(false); }}
+              style={{ color: '#d97706' }}
+            >
+              <Edit3 size={14} /> Edit Invoice
+            </button>
+          )}
 
           <button
             type="button"
@@ -149,7 +177,43 @@ const InvoiceActionMenu: React.FC<{
   );
 };
 
+// Local date string helper (YYYY-MM-DD) avoiding UTC day-shifting
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Safe date formatter for display (e.g. "Aug 25, 2026")
+const formatDisplayDate = (dateStr?: string | Date | null): string => {
+  if (!dateStr) return '—';
+  if (typeof dateStr === 'string') {
+    const dateOnly = dateStr.split('T')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        return new Date(y, m, d).toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      }
+    }
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
 export const InvoicesScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { isManagerOrAboveSelected, selectedRole } = useAuth();
 
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
@@ -166,21 +230,36 @@ export const InvoicesScreen: React.FC = () => {
   // New Invoice Form State
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([]);
   const [contractsList, setContractsList] = useState<{ id: number; number: string; title: string; value: number }[]>([]);
+  const [opportunitiesList, setOpportunitiesList] = useState<{ id: number; title: string; value: number; stage?: string }[]>([]);
   const [newCustomerId, setNewCustomerId] = useState(0);
   const [newContractId, setNewContractId] = useState<number | null>(null);
+  const [newOpportunityId, setNewOpportunityId] = useState<number | null>(null);
   const [newAmount, setNewAmount] = useState<number>(0);
   const [newTaxRate, setNewTaxRate] = useState<number>(10);
-  const [newIssueDate, setNewIssueDate] = useState(new Date().toISOString().slice(0, 10));
-  const [newDueDate, setNewDueDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+  const [newIssueDate, setNewIssueDate] = useState(() => getLocalDateString(new Date()));
+  const [newDueDate, setNewDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return getLocalDateString(d);
+  });
   const [newNotes, setNewNotes] = useState('');
   const [newTerms, setNewTerms] = useState('Payment due within 30 days of issue date.');
   const [creating, setCreating] = useState(false);
 
-  // Payment Modal State
-  const [payingInvoice, setPayingInvoice] = useState<InvoiceItem | null>(null);
+  // Offline / Bank Payment Recording Modal State
+  const [recordingPaymentInvoice, setRecordingPaymentInvoice] = useState<InvoiceItem | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentDate, setPaymentDate] = useState<string>(() => getLocalDateString(new Date()));
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
+  const [paymentBankName, setPaymentBankName] = useState('Commercial Bank of Ethiopia (Nigd Bank)');
+  const [paymentRef, setPaymentRef] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
-  const [processingPayment, setProcessingPayment] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
+
+  // Send Payment Request Modal State
+  const [sendingRequestInvoice, setSendingRequestInvoice] = useState<InvoiceItem | null>(null);
+  const [customRequestMsg, setCustomRequestMsg] = useState('');
+  const [sendingRequest, setSendingRequest] = useState(false);
 
   // Edit Invoice State
   const [editingInvoice, setEditingInvoice] = useState<InvoiceItem | null>(null);
@@ -189,6 +268,8 @@ export const InvoicesScreen: React.FC = () => {
   const [editStatus, setEditStatus] = useState('Draft');
   const [editIssueDate, setEditIssueDate] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
+  const [editContractId, setEditContractId] = useState<number | null>(null);
+  const [editOpportunityId, setEditOpportunityId] = useState<number | null>(null);
   const [editNotes, setEditNotes] = useState('');
   const [editTerms, setEditTerms] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -212,8 +293,8 @@ export const InvoicesScreen: React.FC = () => {
     }
   }, [isManagerOrAboveSelected, selectedRole]);
 
-  const fetchInvoices = useCallback(async () => {
-    setIsLoading(true);
+  const fetchInvoices = useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
       const q = new URLSearchParams();
       if (dataScope === 'personal') {
@@ -226,198 +307,347 @@ export const InvoicesScreen: React.FC = () => {
       }
 
       const data = await api.get<InvoiceItem[]>(`/api/invoices?${q.toString()}`);
-      setInvoices(data);
+      setInvoices(data || []);
     } catch {
-      showToast('Failed to load invoices', 'error');
+      if (isInitial) showToast('Failed to load invoices', 'error');
     } finally {
-      setIsLoading(false);
+      if (isInitial) setIsLoading(false);
     }
   }, [dataScope, selectedRepId]);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const paidSessionId = urlParams.get('paid_session_id');
+    fetchInvoices(true);
+    loadCustomers();
 
-    if (paidSessionId) {
-      api.post<{ message: string; invoiceNumber?: string }>(`/api/invoices/verify-stripe-session?sessionId=${encodeURIComponent(paidSessionId)}`, {})
-        .then(res => {
-          window.history.replaceState({}, document.title, window.location.pathname);
-          showToast(`Payment received! Invoice #${res.invoiceNumber || ''} has been marked as Paid.`);
-          fetchInvoices();
-        })
-        .catch((err: any) => {
-          console.error('Stripe verification error:', err);
-          window.history.replaceState({}, document.title, window.location.pathname);
-          showToast(err?.message || 'Could not verify Stripe payment.', 'error');
-          fetchInvoices();
-        });
-    } else {
-      fetchInvoices();
-    }
+    const handleFocus = () => {
+      fetchInvoices(false);
+      loadCustomers();
+    };
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('app:role-switched', handleFocus);
+
+    const interval = setInterval(() => fetchInvoices(false), 15000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('app:role-switched', handleFocus);
+      clearInterval(interval);
+    };
   }, [fetchInvoices]);
 
   const loadCustomers = async () => {
     try {
-      const res = await api.get<any>('/api/customers?pageSize=100');
-      const list = Array.isArray(res) ? res : res.data || [];
-      setCustomers(list.map((c: any) => ({
-        id: c.customerId,
-        name: `${c.firstName} ${c.lastName}`.trim() + (c.companyName ? ` (${c.companyName})` : ''),
-      })));
-    } catch { }
-  };
-
-  const handleCustomerChange = async (cid: number) => {
-    setNewCustomerId(cid);
-    setNewContractId(null);
-    if (!cid) {
-      setContractsList([]);
-      return;
-    }
-    try {
-      const contracts = await api.get<any[]>(`/api/contracts?customerId=${cid}`);
-      setContractsList((contracts || []).map(c => ({
-        id: c.contractId,
-        number: c.contractNumber,
-        title: c.title,
-        value: c.contractValue,
+      const res = await api.get<any>('/api/customers?pageSize=500');
+      const items = Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
+      setCustomers(items.map((c: any) => ({
+        id: c.customerId ?? c.id,
+        name: `${c.firstName || ''} ${c.lastName || ''}${c.companyName ? ` (${c.companyName})` : ''}`.trim()
       })));
     } catch {
-      setContractsList([]);
+      showToast('Failed to load customer list', 'error');
+    }
+  };
+
+  const handleOpenCreateModal = async () => {
+    setShowCreateModal(true);
+    setNewCustomerId(0);
+    setNewContractId(null);
+    setNewOpportunityId(null);
+    setContractsList([]);
+    setOpportunitiesList([]);
+    setNewAmount(0);
+    setNewTaxRate(10);
+    const today = getLocalDateString(new Date());
+    const due = new Date();
+    due.setDate(due.getDate() + 30);
+    setNewIssueDate(today);
+    setNewDueDate(getLocalDateString(due));
+    setNewNotes('');
+    setNewTerms('Payment due within 30 days of issue date.');
+    await loadCustomers();
+  };
+
+  const handleCustomerChange = async (customerId: number) => {
+    setNewCustomerId(customerId);
+    setNewContractId(null);
+    setNewOpportunityId(null);
+    setContractsList([]);
+    setOpportunitiesList([]);
+
+    if (customerId <= 0) return;
+
+    // Load Contracts for Customer
+    try {
+      const res = await api.get<any>(`/api/contracts?customerId=${customerId}&pageSize=100`);
+      const items = Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
+      const signedContracts = items
+        .filter((c: any) => c.status === 'Signed' || c.status === 'Active' || c.isFullyExecuted)
+        .map((c: any) => ({
+          id: c.contractId ?? c.id,
+          number: c.contractNumber ?? `CTR-${c.contractId}`,
+          title: c.title,
+          value: c.contractValue ?? c.value ?? 0
+        }));
+      setContractsList(signedContracts);
+    } catch {
+      // optional
+    }
+
+    // Load Opportunities / Deals for Customer
+    try {
+      const res = await api.get<any>(`/api/opportunities?customerId=${customerId}&pageSize=100`);
+      const items = Array.isArray(res) ? res : (res?.items ?? res?.data ?? []);
+      const opps = items.map((o: any) => ({
+        id: o.opportunityId ?? o.id,
+        title: o.title,
+        value: o.estimatedValue ?? 0,
+        stage: o.stageName
+      }));
+      setOpportunitiesList(opps);
+    } catch {
+      // optional
+    }
+  };
+
+  const handleOpportunitySelect = (oppId: number) => {
+    setNewOpportunityId(oppId > 0 ? oppId : null);
+    if (oppId > 0) {
+      const opp = opportunitiesList.find(item => item.id === oppId);
+      if (opp && opp.value > 0 && newAmount <= 0) {
+        setNewAmount(opp.value);
+      }
+      if (opp && !newNotes.trim()) {
+        setNewNotes(`Invoice for deal: ${opp.title}`);
+      }
     }
   };
 
   const handleContractSelect = (contractId: number) => {
     setNewContractId(contractId > 0 ? contractId : null);
     if (contractId > 0) {
-      const found = contractsList.find(c => c.id === contractId);
-      if (found) {
-        setNewAmount(found.value);
+      const c = contractsList.find(item => item.id === contractId);
+      if (c && c.value > 0) {
+        setNewAmount(c.value);
       }
     }
   };
 
-  const handleOpenCreateModal = () => {
-    setShowCreateModal(true);
-    loadCustomers();
-  };
-
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomerId) { showToast('Please select a customer', 'error'); return; }
-    if (newAmount <= 0) { showToast('Invoice amount must be greater than $0', 'error'); return; }
+    const custErr = validateRequiredSelect(newCustomerId, 'Customer (payer)');
+    if (custErr) {
+      showToast(custErr, 'error');
+      return;
+    }
+    const amtErr = validatePositiveNumber(newAmount, 'Invoice amount');
+    if (amtErr) {
+      showToast(amtErr, 'error');
+      return;
+    }
+    const taxErr = validatePositiveNumber(newTaxRate, 'Tax rate', true, 100);
+    if (taxErr) {
+      showToast(taxErr, 'error');
+      return;
+    }
+    if (newIssueDate && newDueDate) {
+      const dateErr = validateDateRange(newIssueDate, newDueDate, 'Issue date', 'Due date');
+      if (dateErr) {
+        showToast(dateErr, 'error');
+        return;
+      }
+    }
+    const notesErr = validateMaxLength(newNotes, 1000, 'Scope / Notes');
+    if (notesErr) {
+      showToast(notesErr, 'error');
+      return;
+    }
 
     setCreating(true);
     try {
       await api.post('/api/invoices', {
         customerId: newCustomerId,
-        contractId: newContractId ?? null,
+        contractId: newContractId || undefined,
+        opportunityId: newOpportunityId || undefined,
         amount: newAmount,
         taxRate: newTaxRate,
-        issueDate: new Date(newIssueDate).toISOString(),
-        dueDate: new Date(newDueDate).toISOString(),
-        notes: newNotes || null,
-        terms: newTerms || null,
+        issueDate: newIssueDate,
+        dueDate: newDueDate,
+        notes: newNotes.trim() || undefined,
+        terms: newTerms.trim() || undefined,
       });
-      showToast('Invoice generated successfully!');
+
+      showToast('Invoice generated successfully! Ready for billing & e-payment.', 'success');
       setShowCreateModal(false);
-      setNewCustomerId(0);
-      setNewContractId(null);
-      setNewAmount(0);
-      setNewNotes('');
       fetchInvoices();
-    } catch {
-      showToast('Failed to create invoice', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create invoice', 'error');
     } finally {
       setCreating(false);
     }
   };
 
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
+  const handleOpenRecordPayment = (inv: InvoiceItem) => {
+    setRecordingPaymentInvoice(inv);
+    const balance = inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount);
+    setPaymentAmount(balance > 0 ? balance : inv.totalAmount);
+    setPaymentDate(getLocalDateString(new Date()));
+    setPaymentMethod('Bank Transfer');
+    setPaymentBankName('Commercial Bank of Ethiopia (Nigd Bank)');
+    setPaymentRef('');
+    setPaymentNotes('');
+  };
+
+  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payingInvoice) return;
+    if (!recordingPaymentInvoice) return;
+    const amtErr = validatePositiveNumber(paymentAmount, 'Payment amount');
+    if (amtErr) {
+      showToast(amtErr, 'error');
+      return;
+    }
 
-    setProcessingPayment(true);
+    setRecordingPayment(true);
     try {
-      await api.post(`/api/invoices/${payingInvoice.invoiceId}/pay`, {
+      const showBank = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer';
+      const res = await api.post<any>(`/api/invoices/${recordingPaymentInvoice.invoiceId}/pay`, {
+        amount: paymentAmount,
         paymentMethod,
-        notes: paymentNotes || null,
+        bankName: showBank ? paymentBankName : undefined,
+        paymentDate: paymentDate || undefined,
+        transactionReference: paymentRef.trim() || undefined,
+        notes: paymentNotes.trim() || undefined,
       });
-      showToast('Payment recorded successfully!');
-      setPayingInvoice(null);
+
+      showToast(res.message || 'Payment recorded & verified into Company account!', 'success');
+      setRecordingPaymentInvoice(null);
       fetchInvoices();
-    } catch {
-      showToast('Failed to record payment', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to record payment', 'error');
     } finally {
-      setProcessingPayment(false);
+      setRecordingPayment(false);
     }
   };
 
-  const handleStripePay = async (invoice: InvoiceItem) => {
-    try {
-      const successUrl = `${window.location.origin}/invoices?paid_session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${window.location.origin}/invoices?cancel_session_id=true`;
-      
-      const res = await api.post<{url: string}>(`/api/invoices/${invoice.invoiceId}/stripe-checkout?successUrl=${encodeURIComponent(successUrl)}&cancelUrl=${encodeURIComponent(cancelUrl)}`, {});
-      window.location.href = res.url;
-    } catch (err: any) {
-      showToast(err.message || 'Failed to generate Stripe checkout session', 'error');
-    }
+  const handleSendPaymentRequest = async (inv: InvoiceItem) => {
+    setSendingRequestInvoice(inv);
+    setCustomRequestMsg('');
   };
 
-  const handleSyncStripe = async (inv: InvoiceItem) => {
+  const handleConfirmSendRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sendingRequestInvoice) return;
+
+    setSendingRequest(true);
     try {
-      showToast('Checking Stripe for recent payments...', 'info');
-      const res = await api.post<{ message: string; status: string }>(`/api/invoices/${inv.invoiceId}/sync-stripe`, {});
-      if (res.status === 'Paid') {
-        showToast(res.message, 'success');
+      const res = await api.post<any>(`/api/invoices/${sendingRequestInvoice.invoiceId}/send-payment-request`, {
+        customMessage: customRequestMsg.trim() || undefined
+      });
+      if (res?.emailSent) {
+        showToast(res.message || `Payment request sent to ${sendingRequestInvoice.customerEmail}!`, 'success');
       } else {
-        showToast(res.message, 'info');
+        if (res?.paymentUrl) {
+          navigator.clipboard.writeText(res.paymentUrl);
+        }
+        showToast(res?.message || 'Payment link generated and copied to clipboard! (Email server credentials not configured).', 'info');
       }
+      setSendingRequestInvoice(null);
       fetchInvoices();
     } catch (err: any) {
-      showToast(err?.message || 'Failed to sync with Stripe', 'error');
+      showToast(err?.message || 'Failed to process payment request', 'error');
+    } finally {
+      setSendingRequest(false);
     }
   };
 
-  const handleOpenEditModal = (inv: InvoiceItem) => {
+  const handleCopyPaymentLink = (inv: InvoiceItem) => {
+    const origin = window.location.origin;
+    const url = `${origin}/invoices/pay/${inv.invoiceNumber}`;
+    navigator.clipboard.writeText(url);
+    showToast(`Payment portal link copied: ${url}`, 'success');
+  };
+
+  const handleOpenEditModal = async (inv: InvoiceItem) => {
     setEditingInvoice(inv);
     setEditAmount(inv.amount);
     setEditTaxRate(inv.taxRate);
     setEditStatus(inv.status);
-    setEditIssueDate(inv.issueDate ? inv.issueDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
-    setEditDueDate(inv.dueDate ? inv.dueDate.slice(0, 10) : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+    setEditIssueDate(inv.issueDate ? inv.issueDate.split('T')[0] : getLocalDateString(new Date()));
+    setEditDueDate(inv.dueDate ? inv.dueDate.split('T')[0] : getLocalDateString(new Date()));
+    setEditContractId(inv.contractId ?? null);
+    setEditOpportunityId(inv.opportunityId ?? null);
     setEditNotes(inv.notes || '');
-    setEditTerms(inv.terms || 'Payment due within 30 days of issue date.');
+    setEditTerms(inv.terms || '');
+
+    if (inv.customerId > 0) {
+      try {
+        const [contractsRes, oppsRes] = await Promise.all([
+          api.get<any>(`/api/contracts?customerId=${inv.customerId}&pageSize=100`),
+          api.get<any>(`/api/opportunities?customerId=${inv.customerId}&pageSize=100`)
+        ]);
+        const contractItems = Array.isArray(contractsRes) ? contractsRes : (contractsRes?.items ?? contractsRes?.data ?? []);
+        setContractsList(contractItems.map((c: any) => ({
+          id: c.contractId ?? c.id,
+          number: c.contractNumber ?? `CTR-${c.contractId}`,
+          title: c.title,
+          value: c.contractValue ?? c.value ?? 0
+        })));
+        const oppItems = Array.isArray(oppsRes) ? oppsRes : (oppsRes?.items ?? oppsRes?.data ?? []);
+        setOpportunitiesList(oppItems.map((o: any) => ({
+          id: o.opportunityId ?? o.id,
+          title: o.title,
+          value: o.estimatedValue ?? 0,
+          stage: o.stageName
+        })));
+      } catch {
+        // optional
+      }
+    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingInvoice) return;
-    if (editAmount <= 0) { showToast('Invoice amount must be greater than $0', 'error'); return; }
+
+    const amtErr = validatePositiveNumber(editAmount, 'Invoice amount');
+    if (amtErr) {
+      showToast(amtErr, 'error');
+      return;
+    }
+    const taxErr = validatePositiveNumber(editTaxRate, 'Tax rate', true, 100);
+    if (taxErr) {
+      showToast(taxErr, 'error');
+      return;
+    }
+    if (editIssueDate && editDueDate) {
+      const dateErr = validateDateRange(editIssueDate, editDueDate, 'Issue date', 'Due date');
+      if (dateErr) {
+        showToast(dateErr, 'error');
+        return;
+      }
+    }
+    const notesErr = validateMaxLength(editNotes, 1000, 'Notes');
+    if (notesErr) {
+      showToast(notesErr, 'error');
+      return;
+    }
 
     setSavingEdit(true);
     try {
-      const parseDate = (dStr: string) => {
-        if (!dStr) return new Date().toISOString();
-        const d = new Date(dStr);
-        return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-      };
-
       await api.put(`/api/invoices/${editingInvoice.invoiceId}`, {
         amount: editAmount,
         taxRate: editTaxRate,
         status: editStatus,
-        issueDate: parseDate(editIssueDate),
-        dueDate: parseDate(editDueDate),
-        notes: editNotes || null,
-        terms: editTerms || null,
+        issueDate: editIssueDate,
+        dueDate: editDueDate,
+        contractId: editContractId,
+        opportunityId: editOpportunityId,
+        notes: editNotes || undefined,
+        terms: editTerms || undefined
       });
-      showToast('Invoice updated successfully!');
+      showToast('Invoice updated successfully', 'success');
       setEditingInvoice(null);
       fetchInvoices();
     } catch (err: any) {
-      console.error('Failed to update invoice:', err);
       showToast(err?.message || 'Failed to update invoice', 'error');
     } finally {
       setSavingEdit(false);
@@ -425,47 +655,58 @@ export const InvoicesScreen: React.FC = () => {
   };
 
   const handleDeleteInvoice = async (inv: InvoiceItem) => {
-    if (!await confirmAction(`Are you sure you want to delete invoice ${inv.invoiceNumber}? This action cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirmAction(`Are you sure you want to delete Invoice #${inv.invoiceNumber}?`);
+    if (!ok) return;
+
     try {
       await api.delete(`/api/invoices/${inv.invoiceId}`);
-      showToast(`Invoice ${inv.invoiceNumber} deleted`);
+      showToast(`Invoice #${inv.invoiceNumber} deleted.`, 'success');
       fetchInvoices();
     } catch (err: any) {
-      console.error('Failed to delete invoice:', err);
       showToast(err?.message || 'Failed to delete invoice', 'error');
     }
   };
 
   const isInvoiceOverdue = (inv: InvoiceItem) => {
-    const s = (inv.status || '').toLowerCase();
-    if (s === 'paid' || s === 'cancelled') return false;
-
-    if (inv.dueDate) {
-      const dateOnly = inv.dueDate.split('T')[0];
-      const parts = dateOnly.split('-').map(Number);
-      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-        const dueEndOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
-        const now = new Date();
-        return now.getTime() > dueEndOfDay.getTime();
-      }
+    const status = (inv.status || '').toLowerCase();
+    if (status === 'paid' || status === 'cancelled' || status === 'refunded' || status === 'pendingverification') {
+      return false;
     }
-    return s === 'overdue';
+    if (!inv.dueDate) return false;
+
+    const dateOnly = typeof inv.dueDate === 'string' ? inv.dueDate.split('T')[0] : '';
+    const parts = dateOnly.split('-');
+    let dueEndOfDay: number;
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      dueEndOfDay = new Date(y, m, d, 23, 59, 59, 999).getTime();
+    } else {
+      const dueDateObj = new Date(inv.dueDate);
+      dueEndOfDay = new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate(), 23, 59, 59, 999).getTime();
+    }
+
+    return Date.now() > dueEndOfDay;
   };
 
-  const getOverdueDays = (dueDateStr?: string) => {
+  const getDaysOverdue = (dueDateStr?: string) => {
     if (!dueDateStr) return 0;
     const dateOnly = dueDateStr.split('T')[0];
-    const parts = dateOnly.split('-').map(Number);
-    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-      const dueEndOfDay = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
-      const now = new Date();
-      const diffMs = now.getTime() - dueEndOfDay.getTime();
-      if (diffMs <= 0) return 0;
-      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const parts = dateOnly.split('-');
+    let dueEndOfDay: number;
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      dueEndOfDay = new Date(y, m, d, 23, 59, 59, 999).getTime();
+    } else {
+      const dueDateObj = new Date(dueDateStr);
+      dueEndOfDay = new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate(), 23, 59, 59, 999).getTime();
     }
-    return 0;
+    const diff = Date.now() - dueEndOfDay;
+    if (diff <= 0) return 0;
+    return Math.ceil(diff / 86400000);
   };
 
   const filteredInvoices = invoices.filter(inv => {
@@ -473,57 +714,67 @@ export const InvoicesScreen: React.FC = () => {
     const matchesSearch =
       inv.invoiceNumber.toLowerCase().includes(term) ||
       inv.customerName.toLowerCase().includes(term) ||
+      inv.customerEmail.toLowerCase().includes(term) ||
       (inv.companyName && inv.companyName.toLowerCase().includes(term)) ||
       (inv.contractNumber && inv.contractNumber.toLowerCase().includes(term));
 
     if (!matchesSearch) return false;
 
     if (statusFilter === 'Paid') return inv.status === 'Paid';
-    if (statusFilter === 'Sent') return (inv.status === 'Sent' || inv.status === 'Draft') && !isInvoiceOverdue(inv);
+    if (statusFilter === 'PartiallyPaid') return inv.status === 'PartiallyPaid';
+    if (statusFilter === 'PendingVerification') return inv.status === 'PendingVerification';
+    if (statusFilter === 'Sent') return inv.status === 'Sent' && !isInvoiceOverdue(inv);
+    if (statusFilter === 'Draft') return inv.status === 'Draft';
     if (statusFilter === 'Overdue') return isInvoiceOverdue(inv);
-    if (statusFilter === 'Draft') return inv.status === 'Draft' && !isInvoiceOverdue(inv);
+
     return true;
   });
 
-  // Financial KPI Metrics
   const totalInvoiced = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
-  const totalCollected = invoices.filter(i => i.status === 'Paid').reduce((sum, i) => sum + i.totalAmount, 0);
-  const totalOutstanding = invoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled').reduce((sum, i) => sum + i.totalAmount, 0);
-  const overdueInvoices = invoices.filter(isInvoiceOverdue);
-  const totalOverdueAmount = overdueInvoices.reduce((sum, i) => sum + i.totalAmount, 0);
-  const collectionRate = totalInvoiced > 0 ? (totalCollected / totalInvoiced) * 100 : 0;
-  const paidCount = invoices.filter(i => i.status === 'Paid').length;
-  const pendingCount = invoices.filter(i => (i.status !== 'Paid' && i.status !== 'Cancelled') && !isInvoiceOverdue(i)).length;
+  const totalCollected = invoices.reduce((sum, i) => sum + (Number(i.amountPaid) || 0), 0);
+  const totalReceivable = invoices.reduce((sum, i) => sum + (i.status !== 'Paid' && i.status !== 'Cancelled' ? (i.balanceDue ?? i.totalAmount) : 0), 0);
+  const overdueCount = invoices.filter(isInvoiceOverdue).length;
 
   const statusBadge = (inv: InvoiceItem) => {
     if (inv.status === 'Paid') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', whiteSpace: 'nowrap' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-          Paid &amp; Settled
+          <CheckCircle size={13} /> Paid &amp; Settled
+        </span>
+      );
+    }
+    if (inv.status === 'PartiallyPaid') {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', whiteSpace: 'nowrap' }}>
+          <Clock size={13} /> Partially Paid (${inv.amountPaid.toLocaleString()} / ${inv.totalAmount.toLocaleString()})
+        </span>
+      );
+    }
+    if (inv.status === 'PendingVerification') {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', whiteSpace: 'nowrap' }}>
+          <Landmark size={13} /> Pending Wire Approval
         </span>
       );
     }
     if (isInvoiceOverdue(inv)) {
+      const days = getDaysOverdue(inv.dueDate);
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', whiteSpace: 'nowrap' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px #ef4444' }} />
-          🔴 Overdue
+          <AlertTriangle size={13} /> 🔴 Overdue {days > 0 ? `(${days}d late)` : ''}
         </span>
       );
     }
     if (inv.status === 'Sent') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)', whiteSpace: 'nowrap' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', boxShadow: '0 0 6px #3b82f6' }} />
-          Sent to Client
+          <Send size={13} /> Payment Requested
         </span>
       );
     }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.7rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 700, background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', whiteSpace: 'nowrap' }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' }} />
-        Draft
+        <Clock size={13} /> Draft (Unsent)
       </span>
     );
   };
@@ -567,12 +818,12 @@ export const InvoicesScreen: React.FC = () => {
         <div class="invoice-box">
           <div class="header">
             <div>
-              <div class="logo">⚡ CRM Enterprise</div>
-              <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Official Invoice Document</div>
+              <div class="logo">⚡ Enterprise CRM Solutions Inc.</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Commercial Invoicing &amp; Accounts Receivable</div>
             </div>
             <div>
-              <div class="inv-title">INVOICE</div>
-              <div style="text-align: right; color: #64748b; font-weight: 600; margin-top: 2px;">${inv.invoiceNumber}</div>
+              <div class="inv-title">COMMERCIAL INVOICE</div>
+              <div style="text-align: right; color: #64748b; font-weight: 600; margin-top: 2px;">#${inv.invoiceNumber}</div>
               <div style="text-align: right;">
                 <span class="status status-${inv.status.toLowerCase()}">${inv.status}</span>
               </div>
@@ -581,17 +832,19 @@ export const InvoicesScreen: React.FC = () => {
 
           <div class="info-grid">
             <div class="info-block">
-              <h4>Billed To</h4>
-              <p><strong>${inv.customerName}</strong></p>
-              ${inv.companyName ? `<p>${inv.companyName}</p>` : ''}
-              <p>${inv.customerEmail}</p>
+              <h4>Remit Payment To (Company / Receiver):</h4>
+              <p><strong>Enterprise CRM Solutions Inc.</strong></p>
+              <p>100 Enterprise Way, Suite 400</p>
+              <p>San Francisco, CA 94105, USA</p>
+              <p>Tax ID: US-94829471</p>
             </div>
             <div class="info-block" style="text-align: right;">
-              <h4>Invoice Details</h4>
-              <p><strong>Issue Date:</strong> ${new Date(inv.issueDate).toLocaleDateString()}</p>
-              <p><strong>Due Date:</strong> ${new Date(inv.dueDate).toLocaleDateString()}</p>
-              ${inv.paidAt ? `<p><strong>Paid On:</strong> ${new Date(inv.paidAt).toLocaleDateString()} (${inv.paymentMethod || 'Bank Transfer'})</p>` : ''}
-              ${inv.contractNumber ? `<p><strong>Ref Contract:</strong> ${inv.contractNumber}</p>` : ''}
+              <h4>Bill To (Customer / Payer):</h4>
+              <p><strong>${inv.customerName}</strong></p>
+              ${inv.companyName ? `<p>🏢 ${inv.companyName}</p>` : ''}
+              <p>✉️ ${inv.customerEmail}</p>
+              <p style="margin-top: 10px;"><strong>Issue Date:</strong> ${formatDisplayDate(inv.issueDate)}</p>
+              <p><strong>Payment Due:</strong> ${formatDisplayDate(inv.dueDate)}</p>
             </div>
           </div>
 
@@ -605,37 +858,37 @@ export const InvoicesScreen: React.FC = () => {
             <tbody>
               <tr>
                 <td>
-                  <strong>${inv.contractTitle || 'Professional Commercial Services'}</strong>
-                  <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Standard commercial billing item.</div>
+                  <strong>Professional Services &amp; Settlement</strong>
+                  ${inv.opportunityTitle ? `<div style="font-size: 12px; color: #4f46e5; font-weight: 600; margin-top: 2px;">Ref Deal: 💼 ${inv.opportunityTitle}</div>` : ''}
+                  ${inv.contractNumber ? `<div style="font-size: 12px; color: #64748b;">Ref Contract: 📄 ${inv.contractNumber} (${inv.contractTitle || ''})</div>` : ''}
+                  ${inv.notes ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${inv.notes}</div>` : ''}
                 </td>
-                <td style="text-align: right;">$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style="text-align: right; font-weight: 600;">$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
               </tr>
             </tbody>
           </table>
 
           <div class="total-box">
-            <div class="total-row"><span>Subtotal:</span> <span>$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row"><span>Tax (${inv.taxRate}%):</span> <span>$${inv.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row total-grand"><span>Total Due:</span> <span>$${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row"><span>Subtotal:</span><span>$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row"><span>Tax (${inv.taxRate}%):</span><span>$${inv.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row total-grand"><span>Total Amount:</span><span>$${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row" style="color: #10b981; font-weight: 700; margin-top: 4px;"><span>Amount Paid:</span><span>$${(inv.amountPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row" style="color: #6366f1; font-weight: 800; font-size: 16px;"><span>Balance Due:</span><span>$${(inv.balanceDue ?? inv.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
           </div>
 
-          ${inv.notes ? `
-            <div style="margin-top: 30px; background: #f8fafc; padding: 15px; border-radius: 8px;">
-              <h4 style="margin: 0 0 6px 0; font-size: 12px; color: #64748b; text-transform: uppercase;">Notes</h4>
-              <div style="font-size: 13px; color: #334155;">${inv.notes}</div>
-            </div>
-          ` : ''}
-
           <div class="footer">
-            <p>Thank you for your business! For billing inquiries, please contact accounting@crmsystem.com</p>
+            <p><strong>Payment Terms:</strong> ${inv.terms || 'Payment due within 30 days of invoice issue date.'}</p>
+            <p style="margin-top: 6px;">To pay online via Card, Stripe, or Bank Wire, visit: <strong>${window.location.origin}/invoices/pay/${inv.invoiceNumber}</strong></p>
           </div>
         </div>
         <script>
-          window.onload = function() { window.print(); };
+          window.onload = function() { window.print(); }
         </script>
       </body>
       </html>
     `;
+
+    printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -646,53 +899,35 @@ export const InvoicesScreen: React.FC = () => {
       <div className="dashboard-header animate-fade-in" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div className="dashboard-title">
           <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
-            <Receipt style={{ color: 'var(--accent-primary)' }} size={28} /> Financial Invoices &amp; Billing
+            <Receipt style={{ color: 'var(--accent-primary)' }} size={28} /> Invoices &amp; Receivables Management
           </h1>
           <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Generate customer invoices, record payment collections, and print PDF receipts
+            Issue commercial invoices to customers, send secure payment requests, and record incoming wire &amp; offline settlements
           </p>
         </div>
-        <Button onClick={handleOpenCreateModal} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)', fontWeight: 600 }}>
-          <Plus size={18} style={{ marginRight: 6 }} /> Create New Invoice
-        </Button>
-      </div>
-
-      {/* Interactive Billing Workflow Guide Banner */}
-      <div className="crm-workflow-guide-banner animate-fade-in">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.95rem' }}>
-          💡 Invoicing &amp; Payment Collection Workflow:
-        </div>
-        <div className="crm-workflow-guide-grid">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <div style={{ background: '#6366f1', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>1</div>
-            <div><strong>Generate Invoice</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Create manual or 1-click contract invoice</span></div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <div style={{ background: '#6366f1', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>2</div>
-            <div><strong>Issue to Client</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Sent status with due dates</span></div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <div style={{ background: '#10b981', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>3</div>
-            <div><strong>Record Payment</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Mark paid with Bank/Credit card method</span></div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            <div style={{ background: '#10b981', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>4</div>
-            <div><strong>Export PDF</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Print receipt or download PDF copy</span></div>
-          </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Button onClick={() => fetchInvoices(true)} variant="secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <RefreshCw size={15} /> Refresh
+          </Button>
+          <Button onClick={() => navigate('/invoices/new')} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)', fontWeight: 600 }}>
+            <Plus size={18} style={{ marginRight: 6 }} /> Create Invoice
+          </Button>
         </div>
       </div>
 
-      {/* 4 Financial Metric KPI Cards */}
+      {/* 4 Metric KPI Cards */}
       <div className="crm-metrics-responsive-grid animate-fade-in">
         <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #6366f1' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Invoiced Portfolio</span>
+              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Invoiced</span>
               <Receipt className="metric-icon" size={20} style={{ color: '#6366f1' }} />
             </div>
-            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>${totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+              ${totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Across <strong>{invoices.length}</strong> total invoice records
+              {invoices.length} total issued invoices
             </div>
           </Card.Content>
         </Card>
@@ -700,12 +935,14 @@ export const InvoicesScreen: React.FC = () => {
         <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #10b981' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Collected Revenue</span>
-              <CheckCircle className="metric-icon" size={20} style={{ color: '#10b981' }} />
+              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Revenue Collected</span>
+              <DollarSign className="metric-icon" size={20} style={{ color: '#10b981' }} />
             </div>
-            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>
+              ${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Collection rate: <strong>{collectionRate.toFixed(1)}%</strong> ({paidCount} paid)
+              Settled into Company bank account
             </div>
           </Card.Content>
         </Card>
@@ -713,25 +950,29 @@ export const InvoicesScreen: React.FC = () => {
         <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #f59e0b' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Outstanding Balance</span>
+              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Accounts Receivable</span>
               <Clock className="metric-icon" size={20} style={{ color: '#f59e0b' }} />
             </div>
-            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f59e0b' }}>${totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f59e0b' }}>
+              ${totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Pending collection: <strong>{pendingCount}</strong> invoices
+              Unpaid balance due from customers
             </div>
           </Card.Content>
         </Card>
 
-        <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #8b5cf6' }}>
+        <Card className="metric-card glass-panel" style={{ borderLeft: '4px solid #ef4444' }}>
           <Card.Content style={{ padding: '1.25rem' }}>
             <div className="metric-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Payment Settlement Rate</span>
-              <DollarSign className="metric-icon" size={20} style={{ color: '#8b5cf6' }} />
+              <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Overdue Invoices</span>
+              <AlertTriangle className="metric-icon" size={20} style={{ color: '#ef4444' }} />
             </div>
-            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#8b5cf6' }}>{collectionRate.toFixed(0)}% Settled</div>
+            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ef4444' }}>
+              {overdueCount}
+            </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              <strong>{paidCount}</strong> of {invoices.length} invoices settled
+              Requires immediate follow-up
             </div>
           </Card.Content>
         </Card>
@@ -739,115 +980,51 @@ export const InvoicesScreen: React.FC = () => {
 
       {/* Filter Tabs & Search Bar */}
       <div className="crm-filter-toolbar-wrap animate-fade-in" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-          {/* Pill Filter Tabs */}
-          <div className="crm-filter-tabs-bar">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('All')}
-              className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
-            >
-              All Invoices ({invoices.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('Sent')}
-              className={`crm-filter-tab-btn ${statusFilter === 'Sent' ? 'active-sent' : ''}`}
-            >
-              📬 Sent / Pending ({pendingCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('Paid')}
-              className={`crm-filter-tab-btn ${statusFilter === 'Paid' ? 'active-paid' : ''}`}
-            >
-              ✅ Paid &amp; Settled ({paidCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('Overdue')}
-              className={`crm-filter-tab-btn ${statusFilter === 'Overdue' ? 'active-overdue' : ''}`}
-            >
-              ⚠️ Overdue ({overdueInvoices.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('Draft')}
-              className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
-            >
-              📝 Drafts ({invoices.filter(i => i.status === 'Draft' && !isInvoiceOverdue(i)).length})
-            </button>
-          </div>
-
-          {/* Role-Based Scope & Rep Toggle for Manager/Admin */}
-          {isManagerOrAboveSelected && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <button
-                  type="button"
-                  onClick={() => setDataScope('personal')}
-                  style={{
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: dataScope === 'personal' ? 'var(--accent-primary)' : 'transparent',
-                    color: dataScope === 'personal' ? '#fff' : 'var(--text-muted)',
-                    fontWeight: 600,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem'
-                  }}
-                >
-                  <UserCheck size={14} /> My Invoices
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDataScope('team')}
-                  style={{
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: dataScope === 'team' ? 'var(--accent-primary)' : 'transparent',
-                    color: dataScope === 'team' ? '#fff' : 'var(--text-muted)',
-                    fontWeight: 600,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem'
-                  }}
-                >
-                  <Users size={14} /> All Company
-                </button>
-              </div>
-
-              {dataScope === 'team' && usersList.length > 0 && (
-                <select
-                  value={selectedRepId}
-                  onChange={(e) => setSelectedRepId(e.target.value)}
-                  style={{
-                    padding: '0.35rem 0.65rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.82rem',
-                    fontWeight: 500
-                  }}
-                >
-                  <option value="all">All Sales Representatives</option>
-                  {usersList.map((u: any) => (
-                    <option key={u.userId} value={u.userId}>
-                      {u.name} ({u.roles ? u.roles.join(', ') : 'User'})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
+        
+        {/* Status Filters */}
+        <div className="crm-filter-tabs-bar">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('All')}
+            className={`crm-filter-tab-btn ${statusFilter === 'All' ? 'active-all' : ''}`}
+          >
+            All Invoices ({invoices.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Paid')}
+            className={`crm-filter-tab-btn ${statusFilter === 'Paid' ? 'active-paid' : ''}`}
+          >
+            ✅ Paid ({invoices.filter(i => i.status === 'Paid').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('PartiallyPaid')}
+            className={`crm-filter-tab-btn ${statusFilter === 'PartiallyPaid' ? 'active-paid' : ''}`}
+          >
+            ⏳ Partially Paid ({invoices.filter(i => i.status === 'PartiallyPaid').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Sent')}
+            className={`crm-filter-tab-btn ${statusFilter === 'Sent' ? 'active-draft' : ''}`}
+          >
+            📬 Requested ({invoices.filter(i => i.status === 'Sent' && !isInvoiceOverdue(i)).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Overdue')}
+            className={`crm-filter-tab-btn ${statusFilter === 'Overdue' ? 'active-overdue' : ''}`}
+          >
+            ⚠️ Overdue ({overdueCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('Draft')}
+            className={`crm-filter-tab-btn ${statusFilter === 'Draft' ? 'active-draft' : ''}`}
+          >
+            📝 Draft ({invoices.filter(i => i.status === 'Draft').length})
+          </button>
         </div>
 
         {/* Search Bar */}
@@ -864,7 +1041,7 @@ export const InvoicesScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Invoices Table & Card Container */}
+      {/* Invoices Table */}
       <Card className="glass-panel animate-fade-in" style={{ borderRadius: '12px', overflow: 'hidden' }}>
         <Card.Content style={{ padding: 0 }}>
           {isLoading ? (
@@ -879,441 +1056,597 @@ export const InvoicesScreen: React.FC = () => {
               title={searchTerm || statusFilter !== 'All' ? 'No invoices match your filters' : 'No invoices yet'}
               description={searchTerm || statusFilter !== 'All' ? 'Try clearing your search or changing the status filter.' : 'Create your first invoice or generate one directly from a signed contract.'}
               actionText={!searchTerm && statusFilter === 'All' ? 'Create Invoice' : undefined}
-              onActionClick={!searchTerm && statusFilter === 'All' ? () => setShowCreateModal(true) : undefined}
+              onActionClick={!searchTerm && statusFilter === 'All' ? handleOpenCreateModal : undefined}
             />
           ) : (
             <>
-              {/* Desktop Table View */}
               <div className="contracts-table-wrap" style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice #</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Customer &amp; Account</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Related Agreement</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Amount Due</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payment Status</th>
-                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Due Date</th>
-                      <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInvoices.map(inv => (
-                      <tr
-                        key={inv.invoiceId}
-                        style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}
-                        className="contract-table-row"
-                      >
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.9rem' }}>
-                            {inv.invoiceNumber}
-                          </span>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                            Issued: {new Date(inv.issueDate).toLocaleDateString()}
+              <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice #</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payer (Customer)</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Contract / Deal Ref</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Total Invoiced</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Balance Due</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payment Status</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Due Date</th>
+                    <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInvoices.map(inv => (
+                    <tr
+                      key={inv.invoiceId}
+                      style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}
+                      className="contract-table-row"
+                    >
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.9rem' }}>
+                          {inv.invoiceNumber}
+                        </span>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                          Issued: {formatDisplayDate(inv.issueDate)}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>
+                          {inv.customerName}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {inv.companyName ? `🏢 ${inv.companyName} · ` : ''}{inv.customerEmail}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        {inv.contractNumber ? (
+                          <div>
+                            <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                              📄 {inv.contractNumber}
+                            </span>
+                            {inv.contractTitle && (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {inv.contractTitle}
+                              </div>
+                            )}
+                            {inv.opportunityTitle && (
+                              <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '2px', fontWeight: 600 }}>
+                                💼 {inv.opportunityTitle}
+                              </div>
+                            )}
                           </div>
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>
-                            {inv.customerName}
+                        ) : inv.opportunityTitle ? (
+                          <div>
+                            <span style={{ fontWeight: 600, color: '#818cf8', fontSize: '0.85rem' }}>
+                              💼 {inv.opportunityTitle}
+                            </span>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Linked Opportunity</div>
                           </div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                            {inv.companyName ? `🏢 ${inv.companyName}` : inv.customerEmail}
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Direct Invoice —</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>
+                          ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                        {inv.amountPaid > 0 && (
+                          <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
+                            Paid: ${inv.amountPaid.toLocaleString()}
                           </div>
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          {inv.contractNumber ? (
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        <div style={{ fontWeight: 800, color: (inv.balanceDue ?? inv.totalAmount) > 0 ? 'var(--accent-primary)' : '#10b981', fontSize: '0.98rem' }}>
+                          ${(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        {statusBadge(inv)}
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem' }}>
+                        {(() => {
+                          const overdue = isInvoiceOverdue(inv);
+                          const daysOverdue = getDaysOverdue(inv.dueDate);
+                          return (
                             <div>
-                              <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                                📄 {inv.contractNumber}
-                              </span>
-                              {inv.contractTitle && (
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {inv.contractTitle}
+                              <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500 }}>
+                                {formatDisplayDate(inv.dueDate)}
+                              </div>
+                              {overdue && (
+                                <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+                                  ⚠️ {daysOverdue > 1 ? `${daysOverdue} days late` : 'Due today'}
                                 </div>
                               )}
                             </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Direct Invoice —</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1rem' }}>
-                            ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </div>
-                          {inv.taxRate > 0 && (
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                              incl. {inv.taxRate}% tax
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          {statusBadge(inv)}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
+                          );
+                        })()}
+                      </td>
+                      <td style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center', justifyContent: 'flex-end' }}>
                           {(() => {
-                            const overdue = isInvoiceOverdue(inv);
-                            const daysOverdue = Math.floor((Date.now() - new Date(inv.dueDate).getTime()) / 86400000);
-                            return (
-                              <div>
-                                <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500 }}>
-                                  {new Date(inv.dueDate).toLocaleDateString()}
-                                </div>
-                                {overdue && (
-                                  <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
-                                    ⚠️ {daysOverdue > 0 ? `${daysOverdue} days late` : 'Due today'}
-                                  </div>
-                                )}
-                              </div>
-                            );
+                            const invStatus = (inv.status || '').toLowerCase();
+                            const isPaid = invStatus === 'paid' || (inv.balanceDue !== undefined && inv.balanceDue <= 0.01 && (inv.amountPaid || 0) > 0);
+                            const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+                            const isPayable = !isPaid && !isCancelledOrRefunded && invStatus !== 'pendingverification';
+
+                            return isPayable ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleSendPaymentRequest(inv)}
+                                title="Send Payment Request Link to Customer"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '0.35rem 0.65rem', whiteSpace: 'nowrap', flexShrink: 0 }}
+                              >
+                                <Send size={13} style={{ color: 'var(--accent-primary)' }} /> Send Link
+                              </Button>
+                            ) : null;
                           })()}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
                           <InvoiceActionMenu
                             invoice={inv}
-                            onPay={setPayingInvoice}
+                            onRecordPayment={handleOpenRecordPayment}
+                            onSendPaymentRequest={handleSendPaymentRequest}
+                            onCopyPaymentLink={handleCopyPaymentLink}
                             onPrint={printInvoicePDF}
-                            onEdit={handleOpenEditModal}
+                            onEdit={(invoiceItem) => navigate(`/invoices/${invoiceItem.invoiceId}/edit`)}
                             onDelete={handleDeleteInvoice}
-                            onStripePay={handleStripePay}
-                            onSyncStripe={handleSyncStripe}
                             onView={setSelectedInvoice}
                           />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-              {/* Mobile Cards View */}
-              <div className="contracts-mobile-list">
-                {filteredInvoices.map(inv => (
+            {/* Mobile Responsive Cards View */}
+            <div className="contracts-mobile-list">
+              {filteredInvoices.map(inv => {
+                const invStatus = (inv.status || '').toLowerCase();
+                const isPaid = invStatus === 'paid' || (inv.balanceDue !== undefined && inv.balanceDue <= 0.01 && (inv.amountPaid || 0) > 0);
+                const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+                const isPayable = !isPaid && !isCancelledOrRefunded && invStatus !== 'pendingverification';
+                const overdue = isInvoiceOverdue(inv);
+                const daysOverdue = getDaysOverdue(inv.dueDate);
+
+                return (
                   <div key={inv.invoiceId} style={{
                     borderBottom: '1px solid var(--border-color)',
-                    padding: '1.25rem',
-                    display: 'flex', flexDirection: 'column', gap: '0.65rem',
+                    padding: '1.15rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                       <div>
-                        <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.85rem' }}>{inv.invoiceNumber}</div>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '1rem' }}>👤 {inv.customerName}</div>
-                        {inv.companyName && <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>🏢 {inv.companyName}</div>}
+                        <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.88rem' }}>
+                          {inv.invoiceNumber}
+                        </div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.15rem', fontSize: '0.98rem' }}>
+                          👤 {inv.customerName}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                          {inv.companyName ? `🏢 ${inv.companyName} · ` : ''}{inv.customerEmail}
+                        </div>
                       </div>
                       {statusBadge(inv)}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', margin: '0.25rem 0' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.15rem' }}>
-                        ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Due: {new Date(inv.dueDate).toLocaleDateString()}</span>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Total Invoiced</div>
+                        <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1rem', marginTop: '0.1rem' }}>
+                          ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Balance Due</div>
+                        <div style={{ fontWeight: 800, color: (inv.balanceDue ?? inv.totalAmount) > 0 ? 'var(--accent-primary)' : '#10b981', fontSize: '1rem', marginTop: '0.1rem' }}>
+                          ${(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <InvoiceActionMenu
-                        invoice={inv}
-                        onPay={setPayingInvoice}
-                        onPrint={printInvoicePDF}
-                        onEdit={handleOpenEditModal}
-                        onDelete={handleDeleteInvoice}
-                        onStripePay={handleStripePay}
-                        onSyncStripe={handleSyncStripe}
-                        onView={setSelectedInvoice}
-                      />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem' }}>
+                      <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500, fontSize: '0.78rem' }}>
+                        📅 Due: {formatDisplayDate(inv.dueDate)} {overdue && `(⚠️ ${daysOverdue > 0 ? `${daysOverdue}d late` : 'Today'})`}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginLeft: 'auto' }}>
+                        {isPayable && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleSendPaymentRequest(inv)}
+                            title="Send Payment Request Link to Customer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', padding: '0.35rem 0.65rem', whiteSpace: 'nowrap' }}
+                          >
+                            <Send size={13} style={{ color: 'var(--accent-primary)' }} /> Send Link
+                          </Button>
+                        )}
+                        <InvoiceActionMenu
+                          invoice={inv}
+                          onRecordPayment={handleOpenRecordPayment}
+                          onSendPaymentRequest={handleSendPaymentRequest}
+                          onCopyPaymentLink={handleCopyPaymentLink}
+                          onPrint={printInvoicePDF}
+                          onEdit={(invoiceItem) => navigate(`/invoices/${invoiceItem.invoiceId}/edit`)}
+                          onDelete={handleDeleteInvoice}
+                          onView={setSelectedInvoice}
+                        />
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </Card.Content>
-      </Card>
-
-      {/* Create Invoice Modal */}
-      {showCreateModal && (
-        <div className="crm-modal-overlay">
-          <div className="crm-modal-container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Create New Invoice</h3>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
+                );
+              })}
             </div>
+          </>
+        )}
+      </Card.Content>
+    </Card>
 
-            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Customer *</label>
-                <SearchableSelect
-                  value={newCustomerId}
-                  onChange={val => handleCustomerChange(parseInt(String(val), 10))}
-                  options={[
-                    { value: 0, label: '— Select Customer —' },
-                    ...customers.map(c => ({ value: String(c.id), label: c.name }))
-                  ]}
-                  placeholder="— Select Customer —"
-                />
+      {/* RECORD / VERIFY CUSTOMER PAYMENT MODAL */}
+      {recordingPaymentInvoice && (() => {
+        const recInv = recordingPaymentInvoice;
+        const remainingBal = recInv.balanceDue ?? (recInv.status === 'Paid' ? 0 : recInv.totalAmount);
+        const isBankMethod = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer';
+
+        return (
+          <div className="crm-modal-overlay">
+            <div className="crm-modal-container" style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={22} style={{ color: '#10b981' }} /> Record &amp; Verify Payment
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                    Invoice #{recInv.invoiceNumber} · Internal Ledger Verification
+                  </div>
+                </div>
+                <button onClick={() => setRecordingPaymentInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
               </div>
 
-              {newCustomerId > 0 && (
+              {/* Clarification Notice: Internal Company Verification */}
+              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>Internal Verification:</strong> Record that the <strong>Customer (Payer)</strong> has made a verified payment to <strong>Our Company (Receiver)</strong>.
+                </div>
+              </div>
+
+              {/* Explicit Payer vs Receiver Block */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>👤 Payer (Customer)</div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>{recInv.customerName}</div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{recInv.companyName || recInv.customerEmail}</div>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>🏢 Receiver (Our Company)</div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>Enterprise CRM Solutions</div>
+                  <div style={{ fontSize: '0.76rem', color: '#10b981', fontWeight: 600 }}>Balance: ${remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+
+              <form onSubmit={handleRecordPaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="crm-form-2col">
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Amount Paid ($) *
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={remainingBal > 0 ? remainingBal : recInv.totalAmount}
+                      value={paymentAmount}
+                      onChange={e => setPaymentAmount(Number(e.target.value))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Payment Date *
+                    </label>
+                    <Input
+                      type="date"
+                      value={paymentDate}
+                      onChange={e => setPaymentDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Link Signed Contract (optional)
+                    Payment Method (How Customer Paid) *
                   </label>
                   <SearchableSelect
-                    value={newContractId ?? 0}
-                    onChange={val => handleContractSelect(parseInt(String(val), 10))}
+                    value={paymentMethod}
+                    onChange={val => setPaymentMethod(String(val))}
                     options={[
-                      { value: 0, label: '— None (Manual Billing) —' },
-                      ...contractsList.map(c => ({
-                        value: String(c.id),
-                        label: `📜 ${c.number} — ${c.title} ($${c.value.toLocaleString()})`
-                      }))
+                      { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
+                      { value: 'Stripe', label: '💳 Stripe (Credit / Debit Card)' },
+                      { value: 'Cash', label: '💵 Cash Settlement' },
+                      { value: 'Check', label: '📑 Business Check / Cheque' },
+                      { value: 'Telebirr / CBE Birr', label: '📱 Telebirr / CBE Birr' },
+                      { value: 'SWIFT Wire Transfer', label: '🌐 SWIFT International Wire' },
+                      { value: 'Other', label: '⚡ Other Supported Method' }
                     ]}
-                    placeholder="— None (Manual Billing) —"
                   />
                 </div>
-              )}
 
-              <div className="crm-form-2col">
+                {isBankMethod && (
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Bank Name (Customer's / Receiving Bank)
+                    </label>
+                    <SearchableSelect
+                      value={paymentBankName}
+                      onChange={val => setPaymentBankName(String(val))}
+                      options={[
+                        { value: 'Commercial Bank of Ethiopia (Nigd Bank)', label: 'Commercial Bank of Ethiopia (Nigd Bank)' },
+                        { value: 'Awash Bank', label: 'Awash Bank' },
+                        { value: 'Bank of Abyssinia', label: 'Bank of Abyssinia' },
+                        { value: 'Dashen Bank', label: 'Dashen Bank' },
+                        { value: 'Nib International Bank', label: 'Nib International Bank' },
+                        { value: 'Zemen Bank', label: 'Zemen Bank' },
+                        { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
+                        { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
+                        { value: 'Other Supported Bank', label: 'Other Supported Bank' }
+                      ]}
+                    />
+                  </div>
+                )}
+
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Subtotal Amount ($) *</label>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Transaction / Check Reference (Optional)
+                  </label>
                   <Input
-                    type="number"
-                    value={newAmount}
-                    onChange={e => setNewAmount(Number(e.target.value))}
-                    required
+                    value={paymentRef}
+                    onChange={e => setPaymentRef(e.target.value)}
+                    placeholder="e.g. Bank Ref #TXN-928374, Stripe ID, or Check #4092"
                   />
                 </div>
+
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Tax Rate (%)</label>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Accounting Remarks (Optional)
+                  </label>
                   <Input
-                    type="number"
-                    value={newTaxRate}
-                    onChange={e => setNewTaxRate(Number(e.target.value))}
+                    value={paymentNotes}
+                    onChange={e => setPaymentNotes(e.target.value)}
+                    placeholder="e.g. Deposit payment / Verified against bank statement"
                   />
                 </div>
-              </div>
 
-              <div className="crm-form-2col">
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Issue Date</label>
-                  <Input
-                    type="date"
-                    value={newIssueDate}
-                    onChange={e => setNewIssueDate(e.target.value)}
-                  />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                  <Button variant="secondary" type="button" onClick={() => setRecordingPaymentInvoice(null)}>Cancel</Button>
+                  <Button type="submit" disabled={recordingPayment} style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>
+                    <CheckCircle size={16} style={{ marginRight: 6 }} /> {recordingPayment ? 'Recording…' : 'Confirm & Verify Payment'}
+                  </Button>
                 </div>
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Due Date</label>
-                  <Input
-                    type="date"
-                    value={newDueDate}
-                    onChange={e => setNewDueDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Invoice Notes & Particulars</label>
-                <textarea
-                  value={newNotes}
-                  onChange={e => setNewNotes(e.target.value)}
-                  placeholder="Enter description of goods or services..."
-                  rows={2}
-                  style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <Button variant="secondary" type="button" onClick={() => setShowCreateModal(false)}>Cancel</Button>
-                <Button variant="primary" type="submit" disabled={creating}>
-                  {creating ? 'Creating...' : 'Create & Send Invoice'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Record Payment Modal */}
-      {payingInvoice && (
-        <div className="crm-modal-overlay">
-          <div className="crm-modal-container" style={{ maxWidth: '460px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>💳 Record Payment</h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 600, marginTop: '0.2rem' }}>
-                  {payingInvoice.invoiceNumber} — ${payingInvoice.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-              <button onClick={() => setPayingInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
+              </form>
             </div>
-
-            <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ padding: '1rem', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15))', borderRadius: 'var(--radius-md)', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'flex', flexDirection: 'column', gap: '0.5rem', textAlign: 'center' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                  💳 Pay Online via Stripe
-                </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Launch online checkout to pay by credit card or debit card instantly via Stripe.</div>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={() => {
-                    const inv = payingInvoice;
-                    setPayingInvoice(null);
-                    handleStripePay(inv);
-                  }}
-                  style={{ width: '100%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', border: 'none', marginTop: '0.2rem', cursor: 'pointer' }}
-                >
-                  ⚡ Open Stripe Checkout Page
-                </Button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.25rem 0', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-                <span>OR RECORD MANUAL PAYMENT</span>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Payment Method</label>
-                <SearchableSelect
-                  value={paymentMethod}
-                  onChange={val => setPaymentMethod(String(val))}
-                  options={[
-                    { value: 'Bank Transfer', label: 'Bank Transfer (ACH / Wire)' },
-                    { value: 'Credit Card', label: 'Credit Card' },
-                    { value: 'Cash', label: 'Cash' },
-                    { value: 'Check', label: 'Check' }
-                  ]}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Payment Reference / Notes</label>
-                <Input
-                  value={paymentNotes}
-                  onChange={e => setPaymentNotes(e.target.value)}
-                  placeholder={
-                    paymentMethod === 'Cash' ? 'e.g. Cash Receipt #CR-1048 (Received by Rep)' :
-                    paymentMethod === 'Check' ? 'e.g. Bank of America Check #4092' :
-                    paymentMethod === 'Credit Card' ? 'e.g. Auth #839102 (Visa ending 4128)' :
-                    'e.g. Wire Reference #FED-982319024'
-                  }
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <Button variant="secondary" type="button" onClick={() => setPayingInvoice(null)}>Cancel</Button>
-                <Button variant="primary" type="submit" disabled={processingPayment}>
-                  {processingPayment ? 'Processing...' : 'Confirm Paid'}
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* Edit Invoice Modal */}
-      {editingInvoice && (
-        <div className="crm-modal-overlay">
-          <div className="crm-modal-container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>✏️ Edit Invoice</h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 600, marginTop: '0.2rem' }}>
-                  {editingInvoice.invoiceNumber} — {editingInvoice.customerName}
+      {/* SEND PAYMENT REQUEST MODAL */}
+      {sendingRequestInvoice && (() => {
+        const sendInv = sendingRequestInvoice;
+        const currentPayUrl = `${window.location.origin}/invoices/pay/${sendInv.invoiceNumber}`;
+        const balanceVal = (sendInv.balanceDue ?? (sendInv.status === 'Paid' ? 0 : sendInv.totalAmount));
+        const emailSubject = encodeURIComponent(`Payment Request: Invoice #${sendInv.invoiceNumber} ($${balanceVal.toLocaleString(undefined, { minimumFractionDigits: 2 })} due)`);
+        const emailBody = encodeURIComponent(
+          `Dear ${sendInv.customerName},\n\nPlease find your official payment link for Invoice #${sendInv.invoiceNumber} ($${balanceVal.toLocaleString(undefined, { minimumFractionDigits: 2 })} due):\n\n${currentPayUrl}\n\n${customRequestMsg ? customRequestMsg + '\n\n' : ''}You can complete payment securely online via Credit/Debit Card, Stripe, or Bank Wire Transfer.\n\nBest regards,\nEnterprise CRM Solutions`
+        );
+        const waText = encodeURIComponent(
+          `Hello ${sendInv.customerName}, here is the secure payment link for Invoice #${sendInv.invoiceNumber} ($${balanceVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}): ${currentPayUrl}`
+        );
+
+        return (
+          <div className="crm-modal-overlay">
+            <div className="crm-modal-container" style={{ maxWidth: '540px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Send size={18} style={{ color: 'var(--accent-primary)' }} /> Send Payment Request
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                    Send or share the official payment portal link with {sendInv.customerName}
+                  </div>
                 </div>
+                <button onClick={() => setSendingRequestInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
               </div>
-              <button onClick={() => setEditingInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
+
+              <form onSubmit={handleConfirmSendRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-color)' }}>
+                  <div><strong>Recipient:</strong> {sendInv.customerName} ({sendInv.customerEmail || 'No email set'})</div>
+                  <div><strong>Invoice Reference:</strong> #{sendInv.invoiceNumber}</div>
+                  <div><strong>Balance Due:</strong> <strong style={{ color: '#10b981' }}>${balanceVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                </div>
+
+                {/* Direct Payment Link Box */}
+                <div>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Official Payment Portal Link (Direct URL)
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      readOnly
+                      value={currentPayUrl}
+                      style={{ flex: 1, padding: '0.55rem 0.75rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '0.82rem', color: 'var(--accent-primary)', fontFamily: 'monospace' }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentPayUrl);
+                        showToast('Payment link copied to clipboard!', 'success');
+                      }}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      <Copy size={14} style={{ marginRight: 4 }} /> Copy
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Quick Sharing Options */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <a
+                    href={`https://wa.me/?text=${waText}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', textDecoration: 'none', fontWeight: 600, border: '1px solid rgba(16, 185, 129, 0.3)' }}
+                  >
+                    💬 Share via WhatsApp
+                  </a>
+                  <a
+                    href={`mailto:${sendInv.customerEmail || ''}?subject=${emailSubject}&body=${emailBody}`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', background: 'rgba(99, 102, 241, 0.12)', color: '#818cf8', textDecoration: 'none', fontWeight: 600, border: '1px solid rgba(99, 102, 241, 0.3)' }}
+                  >
+                    ✉️ Open in Mail Client
+                  </a>
+                  <a
+                    href={currentPayUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.75rem', borderRadius: '6px', fontSize: '0.78rem', background: 'rgba(148, 163, 184, 0.12)', color: 'var(--text-secondary)', textDecoration: 'none', fontWeight: 600, border: '1px solid var(--border-color)' }}
+                  >
+                    🌐 Open Portal
+                  </a>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Custom Message to Customer (Optional)</label>
+                  <textarea
+                    value={customRequestMsg}
+                    onChange={e => setCustomRequestMsg(e.target.value)}
+                    placeholder="e.g. Please find the payment link for project milestone 1. Let us know once remitted."
+                    rows={2}
+                    style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                  <Button variant="secondary" type="button" onClick={() => setSendingRequestInvoice(null)}>Cancel</Button>
+                  <Button type="submit" variant="primary" disabled={sendingRequest} style={{ fontWeight: 700 }}>
+                    <Send size={15} style={{ marginRight: 6 }} /> {sendingRequest ? 'Sending…' : 'Send Payment Email'}
+                  </Button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="crm-form-2col">
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Base Amount ($) *</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={editAmount}
-                    onChange={e => setEditAmount(parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Tax Rate (%)</label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={editTaxRate}
-                    onChange={e => setEditTaxRate(parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Invoice Status</label>
-                <SearchableSelect
-                  value={editStatus}
-                  onChange={val => setEditStatus(String(val))}
-                  options={[
-                    { value: 'Draft', label: 'Draft' },
-                    { value: 'Sent', label: 'Sent' },
-                    { value: 'Overdue', label: 'Overdue' },
-                    { value: 'Cancelled', label: 'Cancelled' }
-                  ]}
-                />
-              </div>
-
-              <div className="crm-form-2col">
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Issue Date</label>
-                  <Input
-                    type="date"
-                    value={editIssueDate}
-                    onChange={e => setEditIssueDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Due Date</label>
-                  <Input
-                    type="date"
-                    value={editDueDate}
-                    onChange={e => setEditDueDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Notes / Memo</label>
-                <textarea
-                  value={editNotes}
-                  onChange={e => setEditNotes(e.target.value)}
-                  rows={2}
-                  style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Payment Terms</label>
-                <textarea
-                  value={editTerms}
-                  onChange={e => setEditTerms(e.target.value)}
-                  rows={2}
-                  style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <Button variant="secondary" type="button" onClick={() => setEditingInvoice(null)}>Cancel</Button>
-                <Button variant="primary" type="submit" disabled={savingEdit}>
-                  {savingEdit ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* VIEW INVOICE DETAIL MODAL */}
+      {selectedInvoice && (() => {
+        const viewInv = selectedInvoice;
+        const invStatus = (viewInv.status || '').toLowerCase();
+        const isPaid = invStatus === 'paid' || (viewInv.balanceDue !== undefined && viewInv.balanceDue <= 0.01 && (viewInv.amountPaid || 0) > 0);
+        const isPartiallyPaid = invStatus === 'partiallypaid' || ((viewInv.amountPaid || 0) > 0 && (viewInv.balanceDue || 0) > 0.01);
+        const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+        const isPayable = !isPaid && !isCancelledOrRefunded && invStatus !== 'pendingverification';
+
+        return (
+          <div className="crm-modal-overlay">
+            <div className="crm-modal-container" style={{ maxWidth: '580px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Invoice #{viewInv.invoiceNumber}</h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                    Issued {formatDisplayDate(viewInv.issueDate)}
+                  </div>
+                </div>
+                <button onClick={() => setSelectedInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.9rem' }}>
+                <div className="crm-form-2col">
+                  <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Receiver (Our Company)</div>
+                    <div style={{ fontWeight: 700, marginTop: '0.25rem' }}>Enterprise CRM Solutions Inc.</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>San Francisco, CA · Tax ID: US-94829471</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>Payer (Customer)</div>
+                    <div style={{ fontWeight: 700, marginTop: '0.25rem' }}>{viewInv.customerName}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{viewInv.companyName || viewInv.customerEmail}</div>
+                  </div>
+                </div>
+
+                {(viewInv.contractNumber || viewInv.opportunityTitle) && (
+                  <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                    {viewInv.opportunityTitle && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>💼 Linked Deal / Opp: </span>
+                        <strong style={{ color: '#818cf8' }}>{viewInv.opportunityTitle}</strong>
+                      </div>
+                    )}
+                    {viewInv.contractNumber && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>📜 Linked Contract: </span>
+                        <strong>{viewInv.contractNumber} {viewInv.contractTitle ? `(${viewInv.contractTitle})` : ''}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ background: 'var(--bg-secondary)', padding: '1.25rem', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invoice Total</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--text-primary)' }}>${viewInv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Amount Paid</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.3rem', color: '#10b981' }}>${(viewInv.amountPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Balance Due</div>
+                    <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--accent-primary)' }}>${(viewInv.balanceDue ?? viewInv.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  {isPayable && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleCopyPaymentLink(viewInv)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                    >
+                      <Copy size={15} />
+                      <span>{isPartiallyPaid ? `Copy Link ($${(viewInv.balanceDue ?? 0).toLocaleString()} Due)` : 'Copy Customer Link'}</span>
+                    </Button>
+                  )}
+                  {isPayable && (
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setSelectedInvoice(null);
+                        setSendingRequestInvoice(viewInv);
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                    >
+                      <Send size={15} /> Send Payment Request
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() => printInvoicePDF(viewInv)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  >
+                    <Printer size={15} /> Print Commercial Invoice
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </Layout>
   );

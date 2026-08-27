@@ -43,6 +43,16 @@ public class ContractReadDto
     public int CreatedById { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+
+    // Linked Commercial Invoice & Payment Details
+    public int? InvoiceId { get; set; }
+    public string? InvoiceNumber { get; set; }
+    public string? InvoiceStatus { get; set; } // "Draft", "Sent", "PartiallyPaid", "Paid", "PendingVerification", "Cancelled", "Refunded"
+    public decimal? InvoiceTotalAmount { get; set; }
+    public decimal? InvoiceAmountPaid { get; set; }
+    public decimal? InvoiceBalanceDue { get; set; }
+    public DateTime? InvoicePaidAt { get; set; }
+    public string? InvoicePaymentUrl { get; set; }
 }
 
 public class CreateContractDto

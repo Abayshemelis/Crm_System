@@ -7,6 +7,8 @@ import { Plus, Trash2, Edit2, Package } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { api } from '../lib/api';
+import { showToast } from '../lib/toast';
+import { validateName, validatePositiveNumber, validateRequiredSelect, validateMaxLength } from '../lib/validators';
 import { useAuth } from '../context/AuthContext';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
@@ -60,25 +62,48 @@ export const ProductsScreen: React.FC = () => {
   }, []);
 
   const handleAddProduct = async () => {
-    if (!newProductName.trim()) {
-      alert('Please enter a product name');
+    const nameErr = validateName(newProductName, 'Product name', 2, 100);
+    if (nameErr) {
+      showToast(nameErr, 'error');
       return;
     }
-    if (!newProductSku.trim()) {
-      alert('Please enter a SKU');
+    const skuErr = validateName(newProductSku, 'SKU', 2, 50);
+    if (skuErr) {
+      showToast(skuErr, 'error');
       return;
     }
     const categoryId = Number(newProductCategoryId);
     const statusId = Number(newProductStatusId);
     
-    if (isNaN(categoryId) || categoryId === 0) {
-      alert('Please select a category');
+    const catErr = validateRequiredSelect(categoryId, 'Product category');
+    if (catErr) {
+      showToast(catErr, 'error');
       return;
     }
-    if (isNaN(statusId) || statusId === 0) {
-      alert('Please select a status');
+    const statErr = validateRequiredSelect(statusId, 'Product status');
+    if (statErr) {
+      showToast(statErr, 'error');
       return;
     }
+
+    const priceErr = validatePositiveNumber(newProductPrice, 'Price', false);
+    if (priceErr) {
+      showToast(priceErr, 'error');
+      return;
+    }
+
+    const stockErr = validatePositiveNumber(newProductStockQuantity, 'Stock quantity', true);
+    if (stockErr) {
+      showToast(stockErr, 'error');
+      return;
+    }
+
+    const descErr = validateMaxLength(newProductDescription, 1000, 'Description');
+    if (descErr) {
+      showToast(descErr, 'error');
+      return;
+    }
+
     try {
       await api.post('/api/products', {
         name: newProductName.trim(),
@@ -100,9 +125,9 @@ export const ProductsScreen: React.FC = () => {
       setNewProductPrice('0');
       setNewProductCost('');
       setNewProductStockQuantity('0');
-      alert('Product added successfully');
+      showToast('Product added successfully', 'success');
     } catch (error: any) {
-      alert(error?.message || 'Failed to add product. You may not have permission (Manager/Admin required).');
+      showToast(error?.message || 'Failed to add product', 'error');
     }
   };
 
@@ -111,8 +136,9 @@ export const ProductsScreen: React.FC = () => {
     try {
       await api.delete(`/api/products/${id}`);
       setProducts(products.filter(p => p.id !== id));
+      showToast('Product deleted successfully', 'success');
     } catch (error: any) {
-      alert(error?.message || 'Failed to delete product');
+      showToast(error?.message || 'Failed to delete product', 'error');
     }
   };
 
@@ -129,25 +155,48 @@ export const ProductsScreen: React.FC = () => {
   };
 
   const handleSaveProduct = async (id: number) => {
-    if (!editingProductName.trim()) {
-      alert('Please enter a product name');
+    const nameErr = validateName(editingProductName, 'Product name', 2, 100);
+    if (nameErr) {
+      showToast(nameErr, 'error');
       return;
     }
-    if (!editingProductSku.trim()) {
-      alert('Please enter a SKU');
+    const skuErr = validateName(editingProductSku, 'SKU', 2, 50);
+    if (skuErr) {
+      showToast(skuErr, 'error');
       return;
     }
     const categoryId = Number(editingProductCategoryId);
     const statusId = Number(editingProductStatusId);
     
-    if (isNaN(categoryId) || categoryId === 0) {
-      alert('Please select a category');
+    const catErr = validateRequiredSelect(categoryId, 'Product category');
+    if (catErr) {
+      showToast(catErr, 'error');
       return;
     }
-    if (isNaN(statusId) || statusId === 0) {
-      alert('Please select a status');
+    const statErr = validateRequiredSelect(statusId, 'Product status');
+    if (statErr) {
+      showToast(statErr, 'error');
       return;
     }
+
+    const priceErr = validatePositiveNumber(editingProductPrice, 'Price', false);
+    if (priceErr) {
+      showToast(priceErr, 'error');
+      return;
+    }
+
+    const stockErr = validatePositiveNumber(editingProductStockQuantity, 'Stock quantity', true);
+    if (stockErr) {
+      showToast(stockErr, 'error');
+      return;
+    }
+
+    const descErr = validateMaxLength(editingProductDescription, 1000, 'Description');
+    if (descErr) {
+      showToast(descErr, 'error');
+      return;
+    }
+
     try {
       await api.put(`/api/products/${id}`, {
         name: editingProductName.trim(),
@@ -162,6 +211,7 @@ export const ProductsScreen: React.FC = () => {
       const updated = await api.get<any[]>('/api/products');
       setProducts((updated ?? []).map(p => ({ ...p, id: p.id ?? p.productId })));
       setEditingProductId(null);
+      showToast('Product updated successfully', 'success');
       setEditingProductName('');
       setEditingProductSku('');
       setEditingProductDescription('');

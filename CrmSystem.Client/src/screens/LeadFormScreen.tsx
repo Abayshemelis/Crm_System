@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { PhoneInput } from '../components/ui/PhoneInput';
+import { validateName, validateEmail, validatePhone, validatePositiveNumber, validateMaxLength } from '../lib/validators';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft } from 'lucide-react';
@@ -130,10 +131,36 @@ export const LeadFormScreen: React.FC = () => {
 
     const validate = (): boolean => {
         const tempErrors: Record<string, string> = {};
-        if (!form.firstName.trim()) tempErrors.firstName = 'First name is required';
-        if (!form.lastName.trim()) tempErrors.lastName = 'Last name is required';
-        if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-            tempErrors.email = 'Email address is invalid';
+        
+        const firstNameErr = validateName(form.firstName, 'First name', 2, 50);
+        if (firstNameErr) tempErrors.firstName = firstNameErr;
+
+        const lastNameErr = validateName(form.lastName, 'Last name', 2, 50);
+        if (lastNameErr) tempErrors.lastName = lastNameErr;
+
+        if (form.email.trim()) {
+            const emailErr = validateEmail(form.email, false, 'Email address');
+            if (emailErr) tempErrors.email = emailErr;
+        }
+
+        if (form.phone && form.phone.trim()) {
+            const phoneErr = validatePhone(form.phone, false, 'Phone number');
+            if (phoneErr) tempErrors.phone = phoneErr;
+        }
+
+        // At least one contact method (email or phone) is recommended
+        if (!form.email.trim() && !form.phone.trim()) {
+            tempErrors.email = 'Please provide either an email address or phone number';
+        }
+
+        if (form.companyName.trim()) {
+            const compErr = validateMaxLength(form.companyName, 150, 'Company name');
+            if (compErr) tempErrors.companyName = compErr;
+        }
+
+        const score = Number(form.leadScore);
+        if (isNaN(score) || score < 0 || score > 100) {
+            tempErrors.leadScore = 'Lead score must be between 0 and 100';
         }
 
         setErrors(tempErrors);

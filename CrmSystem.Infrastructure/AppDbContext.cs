@@ -44,6 +44,7 @@ public class AppDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Contract> Contracts => Set<Contract>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<Payment> Payments => Set<Payment>();
 
     // ── Activity & Tasks ───────────────────────────────────────────────────
     public DbSet<Activity> Activities => Set<Activity>();
@@ -56,6 +57,9 @@ public class AppDbContext : DbContext
     // ── Notifications & Audit ─────────────────────────────────────────────
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    // ── System ────────────────────────────────────────────────────────────
+    public DbSet<SystemProfile> SystemProfiles => Set<SystemProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -465,6 +469,30 @@ public class AppDbContext : DbContext
         });
 
         // ── StageHistory ──────────────────────────────────────────────────
+        modelBuilder.Entity<Payment>(e =>
+        {
+            e.HasKey(p => p.PaymentId);
+            e.HasOne(p => p.Invoice)
+             .WithMany(i => i.Payments)
+             .HasForeignKey(p => p.InvoiceId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── SystemProfile ────────────────────────────────────────────────
+        modelBuilder.Entity<SystemProfile>(e =>
+        {
+            e.HasKey(sp => sp.Id);
+            e.HasData(new SystemProfile
+            {
+                Id = 1,
+                SystemName = "KENOVA CRM",
+                CompanyName = "KENOVA",
+                LogoUrl = null,
+                Currency = "USD",
+                Timezone = "UTC"
+            });
+        });
+
         modelBuilder.Entity<StageHistory>(e =>
         {
             e.HasKey(sh => sh.StageHistoryId);
@@ -611,6 +639,56 @@ public class AppDbContext : DbContext
             e.HasIndex(i => new { i.IsDeleted, i.Status, i.DueDate });
             e.HasIndex(i => i.CustomerId);
             e.HasQueryFilter(i => !i.IsDeleted);
+        });
+
+        // ── Payment ────────────────────────────────────────────────────────
+        modelBuilder.Entity<Payment>(e =>
+        {
+            e.HasKey(p => p.PaymentId);
+            e.Property(p => p.PaymentNumber).HasMaxLength(50).IsRequired();
+            e.Property(p => p.Amount).HasColumnType("decimal(18,2)").IsRequired();
+            e.Property(p => p.Currency).HasMaxLength(10).IsRequired();
+            e.Property(p => p.PaymentMethod).HasMaxLength(50).IsRequired();
+            e.Property(p => p.Status).HasMaxLength(30).IsRequired();
+            e.Property(p => p.TransactionReference).HasMaxLength(200);
+            e.Property(p => p.ReceiptUrl).HasMaxLength(500);
+            e.Property(p => p.Notes).HasMaxLength(1000);
+
+            e.HasOne(p => p.Invoice)
+             .WithMany(i => i.Payments)
+             .HasForeignKey(p => p.InvoiceId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(p => p.Customer)
+             .WithMany(c => c.Payments)
+             .HasForeignKey(p => p.CustomerId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(p => p.Contract)
+             .WithMany()
+             .HasForeignKey(p => p.ContractId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(p => p.Opportunity)
+             .WithMany()
+             .HasForeignKey(p => p.OpportunityId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(p => p.VerifiedBy)
+             .WithMany()
+             .HasForeignKey(p => p.VerifiedById)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(p => p.CreatedBy)
+             .WithMany()
+             .HasForeignKey(p => p.CreatedById)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasIndex(p => p.PaymentNumber).IsUnique();
+            e.HasIndex(p => new { p.IsDeleted, p.Status, p.PaymentDate });
+            e.HasIndex(p => p.InvoiceId);
+            e.HasIndex(p => p.CustomerId);
+            e.HasQueryFilter(p => !p.IsDeleted);
         });
     }
 }

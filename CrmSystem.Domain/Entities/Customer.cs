@@ -44,4 +44,7 @@ public class Customer
 
     // Segmentation tags (e.g., VIP, Enterprise, Important)
     public ICollection<Tag> Tags { get; set; } = new List<Tag>();
+
+    // Payment history
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }

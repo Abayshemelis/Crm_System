@@ -7,6 +7,7 @@ public interface IEmailTemplateService
     string BuildInvoiceIssuedHtml(string customerName, string invoiceNumber, decimal amount, decimal totalAmount, DateTime issueDate, DateTime dueDate, string? contractNumber);
     string BuildInvoiceOverdueHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime dueDate);
     string BuildInvoicePaymentReceiptHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime paidAt, string paymentMethod);
+    string BuildInvoicePaymentRequestHtml(string customerName, string invoiceNumber, decimal totalAmount, decimal balanceDue, DateTime dueDate, string payUrl, string? customMessage);
 }
 
 public class EmailTemplateService : IEmailTemplateService
@@ -34,7 +35,7 @@ public class EmailTemplateService : IEmailTemplateService
         .info-box {{ background: #f1f5f9; border-left: 4px solid {PrimaryColor}; padding: 16px; border-radius: 0 8px 8px 0; margin: 20px 0; }}
         .info-row {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #cbd5e1; font-size: 14px; }}
         .info-row:last-child {{ border-bottom: none; }}
-        .cta-btn {{ display: inline-block; background: linear-gradient(135deg, {PrimaryColor} 0%, {AccentColor} 100%); color: #ffffff !important; padding: 14px 32px; font-weight: 700; font-size: 15px; text-decoration: none; border-radius: 10px; margin: 24px 0; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35); text-align: center; }}
+        .cta-btn {{ display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff !important; padding: 14px 32px; font-weight: 700; font-size: 15px; text-decoration: none; border-radius: 10px; margin: 24px 0; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35); text-align: center; }}
         .email-footer {{ background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }}
     </style>
 </head>
@@ -72,7 +73,7 @@ public class EmailTemplateService : IEmailTemplateService
             <p>Please review and sign the document by clicking the button below:</p>
             
             <div style=""text-align: center;"">
-                <a href=""{signUrl}"" class=""cta-btn"" target=""_blank"">🖋️ Review &amp; Sign Contract</a>
+                <a href=""{signUrl}"" class=""cta-btn"" target=""_blank"" style=""background: linear-gradient(135deg, {PrimaryColor} 0%, {AccentColor} 100%); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);"">🖋️ Review &amp; Sign Contract</a>
             </div>
 
             <p style=""font-size: 13px; color: #64748b;"">If the button doesn't work, copy and paste this link into your web browser:<br><a href=""{signUrl}"" style=""color: #6366f1;"">{signUrl}</a></p>
@@ -152,5 +153,32 @@ public class EmailTemplateService : IEmailTemplateService
             <p>Your account has been updated accordingly. Thank you for your continued partnership!</p>
 ";
         return WrapContainer($"Payment Receipt for Invoice #{invoiceNumber}", content);
+    }
+
+    public string BuildInvoicePaymentRequestHtml(string customerName, string invoiceNumber, decimal totalAmount, decimal balanceDue, DateTime dueDate, string payUrl, string? customMessage)
+    {
+        var content = $@"
+            <p>Dear <strong>{customerName}</strong>,</p>
+            <p>Please find your payment request for Invoice <strong>#{invoiceNumber}</strong>.</p>
+
+            {(!string.IsNullOrWhiteSpace(customMessage) ? $"<div style=\"background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 16px 0; font-style: italic; color: #475569;\">\"{customMessage}\"</div>" : "")}
+
+            <div class=""info-box"">
+                <div class=""info-row""><span>Invoice Number:</span> <strong>{invoiceNumber}</strong></div>
+                <div class=""info-row""><span>Invoice Total:</span> <strong>${totalAmount:N2}</strong></div>
+                <div class=""info-row"" style=""font-size: 16px; font-weight: 700; color: #10b981;""><span>Remaining Balance Due:</span> <span>${balanceDue:N2}</span></div>
+                <div class=""info-row""><span>Due Date:</span> <strong>{dueDate:MMMM dd, yyyy}</strong></div>
+                <div class=""info-row""><span>Payment Options:</span> <strong>Credit/Debit Card, Stripe, Bank Wire</strong></div>
+            </div>
+
+            <p>To view your invoice details and remit payment securely online, click the button below:</p>
+
+            <div style=""text-align: center;"">
+                <a href=""{payUrl}"" class=""cta-btn"" target=""_blank"">💳 Pay Invoice Online</a>
+            </div>
+
+            <p style=""font-size: 13px; color: #64748b;"">Direct link: <a href=""{payUrl}"" style=""color: #6366f1;"">{payUrl}</a></p>
+";
+        return WrapContainer($"Payment Request for Invoice #{invoiceNumber}", content);
     }
 }

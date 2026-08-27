@@ -5,7 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { PhoneInput } from '../components/ui/PhoneInput';
-import { validatePhoneNumber } from '../components/ui/countryData';
+import { validateName, validateEmail, validatePhone, validateMaxLength } from '../lib/validators';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -138,24 +138,25 @@ export const CustomerFormScreen: React.FC = () => {
 
     const validate = (): boolean => {
         const tempErrors: Record<string, string> = {};
-        if (!form.firstName.trim()) tempErrors.firstName = 'First name is required';
-        if (!form.lastName.trim()) tempErrors.lastName = 'Last name is required';
-        if (!form.email.trim()) {
-            tempErrors.email = 'Email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-            tempErrors.email = 'Email address is invalid';
-        }
+        
+        const firstNameErr = validateName(form.firstName, 'First name', 2, 50);
+        if (firstNameErr) tempErrors.firstName = firstNameErr;
+
+        const lastNameErr = validateName(form.lastName, 'Last name', 2, 50);
+        if (lastNameErr) tempErrors.lastName = lastNameErr;
+
+        const emailErr = validateEmail(form.email, true, 'Email address');
+        if (emailErr) tempErrors.email = emailErr;
+
+        const phoneErr = validatePhone(form.phone, false, 'Phone number');
+        if (phoneErr) tempErrors.phone = phoneErr;
+
+        const jobTitleErr = validateMaxLength(form.jobTitle, 100, 'Job title');
+        if (jobTitleErr) tempErrors.jobTitle = jobTitleErr;
 
         // Only require assigned rep if user is manager AND there are reps available
         if (isManagerOrAbove && reps.length > 0 && !form.assignedRepId) {
-            tempErrors.assignedRepId = 'Please select an assigned rep.';
-        }
-
-        if (form.phone && form.phone.trim()) {
-            const phoneErr = validatePhoneNumber(form.phone);
-            if (phoneErr) {
-                tempErrors.phone = phoneErr;
-            }
+            tempErrors.assignedRepId = 'Please select an assigned sales representative';
         }
 
         setErrors(tempErrors);

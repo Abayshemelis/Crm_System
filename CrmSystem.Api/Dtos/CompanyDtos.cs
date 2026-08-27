@@ -67,7 +67,8 @@ public record CompanyDetailDto(
     decimal TotalOpenPipelineValue,
     IReadOnlyList<CompanyContactDto> Contacts,
     bool IsDeleted,
-    string? CustomFieldsJson = null);
+    string? CustomFieldsJson = null,
+    DateTime? CreatedAt = null);
 
 public class CompanyListQuery : PaginationQuery
 {

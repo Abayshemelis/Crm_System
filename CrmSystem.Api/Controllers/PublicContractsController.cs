@@ -63,7 +63,11 @@ public class PublicContractsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
-        return Ok(MapToReadDto(contract));
+        var linkedInvoice = await _db.Invoices
+            .FirstOrDefaultAsync(i => i.ContractId == contract.ContractId && !i.IsDeleted);
+
+        var dto = MapToReadDto(contract, linkedInvoice);
+        return Ok(dto);
     }
 
     [HttpPost("{token}/sign")]
@@ -113,6 +117,41 @@ public class PublicContractsController : ControllerBase
         }
 
         contract.UpdatedAt = DateTime.UtcNow;
+
+        // ── Auto-generate linked commercial invoice for payment ──
+        Invoice? invoice = await _db.Invoices
+            .FirstOrDefaultAsync(i => i.ContractId == contract.ContractId && !i.IsDeleted);
+
+        if (invoice == null && contract.ContractValue > 0)
+        {
+            var invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{contract.ContractId:D4}";
+            if (await _db.Invoices.AnyAsync(i => i.InvoiceNumber == invoiceNumber))
+            {
+                invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{contract.ContractId:D4}-{Guid.NewGuid().ToString("N")[..4].ToUpper()}";
+            }
+
+            invoice = new Invoice
+            {
+                InvoiceNumber = invoiceNumber,
+                CustomerId = contract.CustomerId,
+                ContractId = contract.ContractId,
+                OpportunityId = contract.OpportunityId,
+                Amount = contract.ContractValue,
+                TotalAmount = contract.ContractValue,
+                TaxRate = 0m,
+                TaxAmount = 0m,
+                Status = "Sent",
+                IssueDate = DateTime.UtcNow,
+                DueDate = DateTime.UtcNow.AddDays(30),
+                PaymentUrl = $"/invoices/pay/{invoiceNumber}",
+                CreatedById = contract.CreatedById,
+                Notes = $"Commercial invoice automatically generated upon contract execution for #{contract.ContractNumber} ({contract.Title})",
+                Terms = contract.TermsAndConditions ?? "Due within 30 days of contract execution."
+            };
+
+            _db.Invoices.Add(invoice);
+        }
+
         await _db.SaveChangesAsync();
 
         // Send email notification to creator/rep
@@ -146,7 +185,7 @@ public class PublicContractsController : ControllerBase
         {
             var targetUserId = contract.CreatedById;
             var msg = hasCompanySign
-                ? $"🎉 Contract #{contract.ContractNumber} ('{contract.Title}') is now FULLY SIGNED by both parties!"
+                ? $"🎉 Contract #{contract.ContractNumber} ('{contract.Title}') is now FULLY SIGNED by both parties! Invoice #{invoice?.InvoiceNumber} generated."
                 : $"✍️ Customer {contract.CustomerSignedByName} signed Contract #{contract.ContractNumber} ('{contract.Title}'). Please counter-sign to complete execution.";
             
             await _notificationService.CreateNotificationAsync(
@@ -169,11 +208,16 @@ public class PublicContractsController : ControllerBase
             signedByName = contract.CustomerSignedByName,
             signedAt = contract.CustomerSignedAt,
             status = contract.Status,
-            isFullySigned = hasCompanySign
+            isFullySigned = hasCompanySign,
+            invoiceId = invoice?.InvoiceId,
+            invoiceNumber = invoice?.InvoiceNumber,
+            invoiceStatus = invoice?.Status ?? "Sent",
+            invoiceTotalAmount = invoice?.TotalAmount ?? contract.ContractValue,
+            paymentUrl = invoice != null ? $"/invoices/pay/{invoice.InvoiceNumber}" : null
         });
     }
 
-    private static ContractReadDto MapToReadDto(Contract c) => new()
+    private static ContractReadDto MapToReadDto(Contract c, Invoice? inv = null) => new()
     {
         ContractId = c.ContractId,
         ContractNumber = c.ContractNumber,
@@ -203,5 +247,11 @@ public class PublicContractsController : ControllerBase
         CreatedById = c.CreatedById,
         CreatedByName = c.CreatedBy?.Name ?? "Sales Representative",
         CreatedAt = c.CreatedAt,
+        InvoiceId = inv?.InvoiceId,
+        InvoiceNumber = inv?.InvoiceNumber,
+        InvoiceStatus = inv?.Status,
+        InvoiceTotalAmount = inv?.TotalAmount,
+        InvoicePaidAt = inv?.PaidAt,
+        InvoicePaymentUrl = inv != null ? $"/invoices/pay/{inv.InvoiceNumber}" : null
     };
 }

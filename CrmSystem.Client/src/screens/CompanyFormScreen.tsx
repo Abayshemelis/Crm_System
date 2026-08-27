@@ -7,7 +7,7 @@ import { Input } from '../components/ui/Input';
 import { PhoneInput } from '../components/ui/PhoneInput';
 import { IndustrySelect } from '../components/ui/IndustrySelect';
 import { CompanySizeSelect } from '../components/ui/CompanySizeSelect';
-import { validatePhoneNumber } from '../components/ui/countryData';
+import { validateName, validateEmail, validatePhone, validateUrl, validateMaxLength } from '../lib/validators';
 import { api } from '../lib/api';
 import { ArrowLeft } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -112,16 +112,21 @@ export const CompanyFormScreen: React.FC = () => {
 
     const validate = (): boolean => {
         const tempErrors: Record<string, string> = {};
-        if (!form.name.trim()) tempErrors.name = 'Company name is required';
-        if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-            tempErrors.email = 'Email address is invalid';
-        }
-        if (form.phone && form.phone.trim()) {
-            const phoneErr = validatePhoneNumber(form.phone);
-            if (phoneErr) {
-                tempErrors.phone = phoneErr;
-            }
-        }
+        
+        const nameErr = validateName(form.name, 'Company name', 2, 100);
+        if (nameErr) tempErrors.name = nameErr;
+
+        const emailErr = validateEmail(form.email, false, 'Email address');
+        if (emailErr) tempErrors.email = emailErr;
+
+        const phoneErr = validatePhone(form.phone, false, 'Phone number');
+        if (phoneErr) tempErrors.phone = phoneErr;
+
+        const urlErr = validateUrl(form.website, false, 'Website URL');
+        if (urlErr) tempErrors.website = urlErr;
+
+        const addrErr = validateMaxLength(form.address, 250, 'Address');
+        if (addrErr) tempErrors.address = addrErr;
 
         setErrors(tempErrors);
         return Object.keys(tempErrors).length === 0;

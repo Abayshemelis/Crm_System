@@ -1,11 +1,100 @@
 // ==============================================================================
-// CRM DATE UTILITIES FOR OPPORTUNITIES & EXPECTED CLOSE DATES (dateUtils.ts)
+// CRM DATE UTILITIES FOR OPPORTUNITIES, INVOICES & CONTRACTS (dateUtils.ts)
 // ==============================================================================
-// Implements standard CRM behaviors for Expected Close Date calculations:
-// 1. Overdue detection for open deals past their target date
-// 2. Urgent / Closing Soon detection for deals due within 3 days
-// 3. Quick shortcut date generators (+2 Weeks, +30 Days, End of Month, Next Quarter)
-// ==============================================================================
+
+/**
+ * Returns a local date string (YYYY-MM-DD) avoiding UTC midnight timezone shifts.
+ */
+export function getLocalDateString(d = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Robust date formatter for display (e.g. "Aug 25, 2026") that avoids UTC day-shifting.
+ */
+export function formatDisplayDate(dateInput?: string | Date | null): string {
+  if (!dateInput) return '—';
+  try {
+    if (typeof dateInput === 'string') {
+      const datePart = dateInput.split('T')[0];
+      const parts = datePart.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          const d = new Date(year, month, day);
+          return d.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        }
+      }
+    }
+    const d = new Date(dateInput);
+    return isNaN(d.getTime())
+      ? '—'
+      : d.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+  } catch {
+    return '—';
+  }
+}
+
+/**
+ * Checks if an invoice is overdue (past end-of-day on the due date).
+ */
+export function isInvoiceOverdue(dueDateStr?: string | null, status?: string): boolean {
+  const normStatus = (status || '').toLowerCase();
+  if (normStatus === 'paid' || normStatus === 'cancelled' || normStatus === 'refunded' || normStatus === 'pendingverification') {
+    return false;
+  }
+  if (!dueDateStr) return false;
+
+  const dateOnly = typeof dueDateStr === 'string' ? dueDateStr.split('T')[0] : '';
+  const parts = dateOnly.split('-');
+  let dueEndOfDay: number;
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    dueEndOfDay = new Date(y, m, d, 23, 59, 59, 999).getTime();
+  } else {
+    const dueDateObj = new Date(dueDateStr);
+    dueEndOfDay = new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate(), 23, 59, 59, 999).getTime();
+  }
+
+  return Date.now() > dueEndOfDay;
+}
+
+/**
+ * Returns how many full days an invoice or item is past its due date.
+ */
+export function getDaysOverdue(dueDateStr?: string | null): number {
+  if (!dueDateStr) return 0;
+  const dateOnly = typeof dueDateStr === 'string' ? dueDateStr.split('T')[0] : '';
+  const parts = dateOnly.split('-');
+  let dueEndOfDay: number;
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    dueEndOfDay = new Date(y, m, d, 23, 59, 59, 999).getTime();
+  } else {
+    const dueDateObj = new Date(dueDateStr);
+    dueEndOfDay = new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate(), 23, 59, 59, 999).getTime();
+  }
+  const diff = Date.now() - dueEndOfDay;
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / 86400000);
+}
 
 export interface CloseDateStatus {
   status: 'none' | 'overdue' | 'today' | 'soon' | 'future' | 'closed';
@@ -32,7 +121,18 @@ export function getExpectedCloseDateStatus(
     };
   }
 
-  const targetDate = new Date(dateStr);
+  const dateOnly = dateStr.split('T')[0];
+  const parts = dateOnly.split('-');
+  let targetDate: Date;
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    targetDate = new Date(y, m, d);
+  } else {
+    targetDate = new Date(dateStr);
+  }
+
   if (isNaN(targetDate.getTime())) {
     return {
       status: 'none',
@@ -122,7 +222,7 @@ export function getExpectedCloseDateStatus(
 }
 
 /**
- * Returns formatted ISO date string (YYYY-MM-DD) for common standard CRM presets
+ * Returns formatted local date strings (YYYY-MM-DD) for common standard CRM presets
  */
 export function getStandardCloseDatePresets() {
   const today = new Date();
@@ -145,12 +245,10 @@ export function getStandardCloseDatePresets() {
   const currentQuarter = Math.floor(today.getMonth() / 3);
   const endOfQuarter = new Date(today.getFullYear(), (currentQuarter + 1) * 3, 0);
 
-  const format = (d: Date) => d.toISOString().split('T')[0];
-
   return [
-    { label: '+2 Weeks', value: format(plus2Weeks) },
-    { label: '+30 Days (Standard)', value: format(plus30Days) },
-    { label: 'End of Month', value: format(endOfMonth) },
-    { label: 'End of Quarter', value: format(endOfQuarter) }
+    { label: '+2 Weeks', value: getLocalDateString(plus2Weeks) },
+    { label: '+30 Days (Standard)', value: getLocalDateString(plus30Days) },
+    { label: 'End of Month', value: getLocalDateString(endOfMonth) },
+    { label: 'End of Quarter', value: getLocalDateString(endOfQuarter) }
   ];
 }

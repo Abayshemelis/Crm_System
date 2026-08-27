@@ -74,6 +74,8 @@ export const setOfflineHandler = (cb: () => void) => {
   offlineCallback = cb;
 };
 
+let refreshPromise: Promise<string | null> | null = null;
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const selectedRole = typeof localStorage !== 'undefined' ? localStorage.getItem('selectedRole') : null;
@@ -123,9 +125,55 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   // Step A: Handle session expiry (401 Unauthorized)
   if (res.status === 401) {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-    throw new Error('Unauthorized - session expired. Please sign in again.');
+    const storedRefresh = localStorage.getItem('refreshToken');
+    if (storedRefresh) {
+      if (!refreshPromise) {
+        refreshPromise = fetch(buildUrl('/api/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '69420' },
+          body: JSON.stringify({ refreshToken: storedRefresh })
+        }).then(async (refreshRes) => {
+          if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            localStorage.setItem('token', data.accessToken);
+            if (data.refreshToken) {
+              localStorage.setItem('refreshToken', data.refreshToken);
+            }
+            window.dispatchEvent(new Event('auth:token-refreshed'));
+            return data.accessToken;
+          }
+          return null;
+        }).catch((err) => {
+          console.error('[API] Silent refresh failed:', err);
+          return null;
+        }).finally(() => {
+          refreshPromise = null;
+        });
+      }
+      
+      const newToken = await refreshPromise;
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        res = await fetch(buildUrl(path), { ...options, headers });
+        
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+          throw new Error('Unauthorized - session expired. Please sign in again.');
+        }
+      } else {
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        throw new Error('Unauthorized - session expired. Please sign in again.');
+      }
+    } else {
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login';
+      throw new Error('Unauthorized - session expired. Please sign in again.');
+    }
   }
 
   // Step B: Handle server errors and parse ASP.NET Validation/ProblemDetails
@@ -183,8 +231,28 @@ export const api = {
 
   upload: <T>(path: string, form: FormData, options?: RequestInit) =>
     request<T>(path, { method: 'POST', body: form, ...options }),
-};
 
+  // ==========================================
+  // SYSTEM PROFILE ENDPOINTS
+  // ==========================================
+  getSystemProfile: () => request<any>('/api/systemprofiles', { method: 'GET' }),
+  updateSystemProfile: (payload: any) => request<any>('/api/systemprofiles', { method: 'PUT', body: JSON.stringify(payload) }),
+  uploadSystemLogo: async (file: File) => {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/systemprofiles/upload-logo', {
+      method: 'POST',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: 'Upload failed' }));
+      throw new Error(err.message || 'Upload failed');
+    }
+    return res.json();
+  },
+};
 // ── 5. MEDIA & DOCUMENT URL RESOLVER ──────────────────────────────────────────
 export function resolveUrl(path: string) {
   if (!path) return path;

@@ -233,7 +233,7 @@ export const PipelineScreen: React.FC = () => {
                 </div>
             </div>
 
-            <div className="filters-bar customer-filters animate-fade-in" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div className="filters-bar customer-filters animate-fade-in" style={{ flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.5rem', position: 'relative', zIndex: 10 }}>
                 <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '160px' }}>
                     <Search size={16} className="filter-icon" />
                     <input
@@ -279,8 +279,8 @@ export const PipelineScreen: React.FC = () => {
                     />
                 </div>
                 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '140px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', flex: '1 1 300px' }}>
+                    <div style={{ flex: '1 1 140px', minWidth: '140px' }}>
                         <SearchableSelect
                             value={dateFilterField}
                             onChange={val => setDateFilterField(String(val) as any)}
@@ -291,14 +291,16 @@ export const PipelineScreen: React.FC = () => {
                         />
                     </div>
 
-                    <DateRangePicker
-                        startDate={startDate}
-                        endDate={endDate}
-                        onApply={(s, e) => {
-                            setStartDate(s);
-                            setEndDate(e);
-                        }}
-                    />
+                    <div style={{ flex: '1 1 200px' }}>
+                        <DateRangePicker
+                            startDate={startDate}
+                            endDate={endDate}
+                            onApply={(s, e) => {
+                                setStartDate(s);
+                                setEndDate(e);
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
 

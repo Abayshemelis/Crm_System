@@ -23,14 +23,19 @@ public class InvoiceReadDto
     public decimal TaxRate { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal AmountPaid { get; set; }
+    public decimal BalanceDue { get; set; }
 
     public string Status { get; set; } = "Draft";
+    public string PaymentStatus { get; set; } = "Unpaid";
+    public int PaymentCount { get; set; }
 
     public DateTime IssueDate { get; set; }
     public DateTime DueDate { get; set; }
     public DateTime? PaidAt { get; set; }
 
     public string? PaymentMethod { get; set; }
+    public string? PaymentUrl { get; set; }
     public string? Notes { get; set; }
     public string? Terms { get; set; }
 
@@ -63,6 +68,8 @@ public class UpdateInvoiceDto
     public string Status { get; set; } = "Draft";
     public DateTime IssueDate { get; set; }
     public DateTime DueDate { get; set; }
+    public int? ContractId { get; set; }
+    public int? OpportunityId { get; set; }
     public string? PaymentMethod { get; set; }
     public string? Notes { get; set; }
     public string? Terms { get; set; }
@@ -70,6 +77,15 @@ public class UpdateInvoiceDto
 
 public class PayInvoiceDto
 {
+    public decimal? Amount { get; set; }
     public string PaymentMethod { get; set; } = "Bank Transfer";
-    public string? Notes { get; set; }
+    public string? BankName { get; set; }
+    public string? TransactionReference { get; set; }
+    public string? Notes { get; set; } // Accounting remarks
+    public DateTime? PaymentDate { get; set; }
+}
+
+public class SendPaymentRequestDto
+{
+    public string? CustomMessage { get; set; }
 }

@@ -75,17 +75,40 @@ public class ResendEmailSender : IEmailSender
             if (response.IsSuccessStatusCode)
             {
                 Console.WriteLine($"[Resend SUCCESS] Email sent to {toEmail} (Subject: '{subject}'). Response: {responseJson}");
+                return;
             }
-            else
+
+            Console.WriteLine($"[Resend ERROR] Status {(int)response.StatusCode} {response.StatusCode}: {responseJson}");
+
+            if (_fallbackSmtp.IsConfigured)
             {
-                Console.WriteLine($"[Resend WARNING] Failed to send via Resend ({response.StatusCode}): {responseJson}. Attempting SMTP fallback...");
+                Console.WriteLine("[Resend Fallback] Attempting fallback to SMTP...");
                 await _fallbackSmtp.SendEmailAsync(toEmail, subject, bodyHtml, cancellationToken);
+                return;
             }
+
+            // Parse message from Resend response
+            string resendError = responseJson;
+            try
+            {
+                using var doc = JsonDocument.Parse(responseJson);
+                if (doc.RootElement.TryGetProperty("message", out var msgProp))
+                {
+                    resendError = msgProp.GetString() ?? responseJson;
+                }
+            }
+            catch { }
+
+            throw new InvalidOperationException($"Resend delivery error: {resendError}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!(ex is InvalidOperationException))
         {
-            Console.WriteLine($"[Resend ERROR] Exception sending via Resend: {ex.Message}. Falling back to SMTP...");
-            await _fallbackSmtp.SendEmailAsync(toEmail, subject, bodyHtml, cancellationToken);
+            if (_fallbackSmtp.IsConfigured)
+            {
+                await _fallbackSmtp.SendEmailAsync(toEmail, subject, bodyHtml, cancellationToken);
+                return;
+            }
+            throw new InvalidOperationException($"Email dispatch failed: {ex.Message}", ex);
         }
     }
 }

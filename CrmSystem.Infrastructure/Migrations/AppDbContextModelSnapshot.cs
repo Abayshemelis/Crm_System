@@ -67,13 +67,15 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("ActivityTypeId");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("CreatedById");
 
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("LeadId");
-
                     b.HasIndex("OpportunityId");
+
+                    b.HasIndex("CustomerId", "CreatedAt");
+
+                    b.HasIndex("LeadId", "CreatedAt");
 
                     b.ToTable("Activities");
                 });
@@ -226,7 +228,7 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("ChangedById");
 
-                    b.HasIndex("EntityTypeId");
+                    b.HasIndex("EntityTypeId", "EntityId", "ChangedAt");
 
                     b.ToTable("AuditLogs");
                 });
@@ -294,6 +296,8 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("SourceId");
 
+                    b.HasIndex("IsDeleted", "AssignedRepId");
+
                     b.ToTable("Companies");
                 });
 
@@ -304,6 +308,15 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ContractId"));
+
+                    b.Property<string>("CompanySignatureDataUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("CompanySignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CompanySignedByName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ContractNumber")
                         .IsRequired()
@@ -321,6 +334,15 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.Property<int>("CustomerId")
                         .HasColumnType("int");
+
+                    b.Property<string>("CustomerSignatureDataUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("CustomerSignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomerSignedByName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("datetime2");
@@ -371,6 +393,9 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasKey("ContractId");
 
+                    b.HasIndex("ContractNumber")
+                        .IsUnique();
+
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("CustomerId");
@@ -378,6 +403,8 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("OpportunityId");
 
                     b.HasIndex("SigningToken");
+
+                    b.HasIndex("IsDeleted", "Status");
 
                     b.ToTable("Contracts");
                 });
@@ -430,17 +457,19 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("ActivityId");
 
-                    b.HasIndex("AssignedToId");
-
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("CrmTaskStatusId");
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("DueDate");
+
                     b.HasIndex("LeadId");
 
                     b.HasIndex("OpportunityId");
+
+                    b.HasIndex("AssignedToId", "DueDate", "CrmTaskStatusId");
 
                     b.ToTable("CrmTasks");
                 });
@@ -565,9 +594,15 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("SourceId");
+
+                    b.HasIndex("IsDeleted", "AssignedRepId");
+
+                    b.HasIndex("IsDeleted", "CompanyId");
 
                     b.ToTable("Customers");
                 });
@@ -629,6 +664,9 @@ namespace CrmSystem.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ProfileImage")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
@@ -746,7 +784,12 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("InvoiceNumber")
+                        .IsUnique();
+
                     b.HasIndex("OpportunityId");
+
+                    b.HasIndex("IsDeleted", "Status", "DueDate");
 
                     b.ToTable("Invoices");
                 });
@@ -824,20 +867,6 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<int?>("NextFollowUpAssignedToId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("NextFollowUpDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("NextFollowUpNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("NextFollowUpType")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -863,13 +892,19 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasIndex("ConvertedOpportunityId");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("CreatedById");
 
                     b.HasIndex("LeadStatusId");
 
-                    b.HasIndex("NextFollowUpAssignedToId");
-
                     b.HasIndex("SourceId");
+
+                    b.HasIndex("IsDeleted", "AssignedRepId");
+
+                    b.HasIndex("IsDeleted", "LeadScore");
+
+                    b.HasIndex("IsDeleted", "LeadStatusId");
 
                     b.ToTable("Leads");
                 });
@@ -934,13 +969,13 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasKey("NotificationId");
 
-                    b.HasIndex("IdentityId");
-
                     b.HasIndex("NotificationTypeId");
 
                     b.HasIndex("RelatedOpportunityId");
 
                     b.HasIndex("RelatedTaskId");
+
+                    b.HasIndex("IdentityId", "IsRead", "CreatedAt");
 
                     b.ToTable("Notifications");
                 });
@@ -1013,11 +1048,15 @@ namespace CrmSystem.Infrastructure.Migrations
 
                     b.HasKey("OpportunityId");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("OpportunityStageId");
+                    b.HasIndex("ExpectedCloseDate");
 
                     b.HasIndex("OwnerId");
+
+                    b.HasIndex("OpportunityStageId", "OwnerId");
 
                     b.ToTable("Opportunities");
                 });
@@ -1111,6 +1150,104 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("IdentityId");
 
                     b.ToTable("PasswordResetTokens");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Payment", b =>
+                {
+                    b.Property<int>("PaymentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PaymentId"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("ContractId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("InvoiceId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("OpportunityId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PaymentDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("PaymentNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ReceiptUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TransactionReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("VerifiedById")
+                        .HasColumnType("int");
+
+                    b.HasKey("PaymentId");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("OpportunityId");
+
+                    b.HasIndex("PaymentNumber")
+                        .IsUnique();
+
+                    b.HasIndex("VerifiedById");
+
+                    b.HasIndex("IsDeleted", "Status", "PaymentDate");
+
+                    b.ToTable("Payments");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Product", b =>
@@ -1327,6 +1464,71 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.HasIndex("OpportunityId");
 
                     b.ToTable("StageHistories");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.SystemProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CompanyName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("LogoUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SystemName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Timezone")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SystemProfiles");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CompanyName = "KENOVA",
+                            Currency = "USD",
+                            SystemName = "KENOVA CRM",
+                            Timezone = "UTC"
+                        });
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Tag", b =>
@@ -1707,11 +1909,6 @@ namespace CrmSystem.Infrastructure.Migrations
                         .HasForeignKey("LeadStatusId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("CrmSystem.Domain.Entities.Identity", "NextFollowUpAssignedTo")
-                        .WithMany()
-                        .HasForeignKey("NextFollowUpAssignedToId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("CrmSystem.Domain.Entities.Source", "Source")
                         .WithMany()
                         .HasForeignKey("SourceId")
@@ -1728,8 +1925,6 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("LeadStatus");
-
-                    b.Navigation("NextFollowUpAssignedTo");
 
                     b.Navigation("Source");
                 });
@@ -1824,6 +2019,53 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Identity");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Payment", b =>
+                {
+                    b.HasOne("CrmSystem.Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("CrmSystem.Domain.Entities.Customer", "Customer")
+                        .WithMany("Payments")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CrmSystem.Domain.Entities.Invoice", "Invoice")
+                        .WithMany("Payments")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CrmSystem.Domain.Entities.Opportunity", "Opportunity")
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("CrmSystem.Domain.Entities.Identity", "VerifiedBy")
+                        .WithMany()
+                        .HasForeignKey("VerifiedById")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Opportunity");
+
+                    b.Navigation("VerifiedBy");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Product", b =>
                 {
                     b.HasOne("CrmSystem.Domain.Entities.ProductCategory", "ProductCategory")
@@ -1907,9 +2149,19 @@ namespace CrmSystem.Infrastructure.Migrations
                     b.Navigation("Tasks");
                 });
 
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Customer", b =>
+                {
+                    b.Navigation("Payments");
+                });
+
             modelBuilder.Entity("CrmSystem.Domain.Entities.Identity", b =>
                 {
                     b.Navigation("IdentityRoles");
+                });
+
+            modelBuilder.Entity("CrmSystem.Domain.Entities.Invoice", b =>
+                {
+                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("CrmSystem.Domain.Entities.Lead", b =>

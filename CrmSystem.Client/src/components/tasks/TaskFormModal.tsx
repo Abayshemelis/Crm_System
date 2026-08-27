@@ -7,6 +7,7 @@ import { Input } from '../ui/Input';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { showToast } from '../../lib/toast';
 import { confirmAction } from '../../lib/confirm';
+import { validateName, validateMaxLength } from '../../lib/validators';
 import './TaskFormModal.css';
 
 interface Lookup { id: number; name: string; }
@@ -141,11 +142,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   const validate = () => {
     const errs: Record<string, string> = {};
-    if (!form.title.trim()) {
-      errs.title = 'Task title is required';
-    } else if (form.title.length > 150) {
-      errs.title = 'Task title must be 150 characters or less';
-    }
+    
+    const titleErr = validateName(form.title, 'Task title', 2, 150);
+    if (titleErr) errs.title = titleErr;
 
     if (!form.dueDate || !form.dueDate.trim()) {
       errs.dueDate = 'Due date and time are required';
@@ -155,6 +154,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         errs.dueDate = 'Invalid date format';
       }
     }
+
+    const descErr = validateMaxLength(form.description, 1000, 'Description');
+    if (descErr) errs.description = descErr;
 
     return errs;
   };

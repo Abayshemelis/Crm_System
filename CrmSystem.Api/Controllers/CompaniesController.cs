@@ -154,6 +154,15 @@ public class CompaniesController : ControllerBase
             return Unauthorized();
         }
 
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { message = "Company name is required." });
+
+        var normalizedName = request.Name.Trim().ToLower();
+        if (await _db.Companies.AnyAsync(c => !c.IsDeleted && c.Name.ToLower() == normalizedName))
+        {
+            return BadRequest(new { message = "A company with this name already exists." });
+        }
+
         var (isValid, assignedRepId) = await ResolveAssignedRepIdAsync(request.AssignedRepId);
         if (!isValid)
         {
@@ -208,6 +217,15 @@ public class CompaniesController : ControllerBase
         if (!_currentUser.CanAccessOwnedRecord(company.AssignedRepId))
         {
             return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { message = "Company name is required." });
+
+        var normalizedName = request.Name.Trim().ToLower();
+        if (await _db.Companies.AnyAsync(c => !c.IsDeleted && c.CompanyId != id && c.Name.ToLower() == normalizedName))
+        {
+            return BadRequest(new { message = "A company with this name already exists." });
         }
 
         var (isValid, assignedRepId) = await ResolveAssignedRepIdAsync(request.AssignedRepId);
@@ -517,7 +535,8 @@ public class CompaniesController : ControllerBase
             totalOpenPipelineValue,
             contacts,
             company.IsDeleted,
-            company.CustomFieldsJson);
+            company.CustomFieldsJson,
+            company.CreatedAt);
 
     private async Task<decimal> CalculateCompanyTotalOpenPipelineAsync(int companyId)
     {

@@ -3,8 +3,8 @@ import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../lib/toast';
 import {
   X, Camera, Trash2, Check, User, Mail, Shield, LogOut,
-  UploadCloud, Copy, CheckCheck, Sparkles, Key, Smartphone,
-  Activity, Clock, BadgeCheck, ChevronRight
+  UploadCloud, Copy, CheckCheck, Key, ShieldCheck,
+  RefreshCw, BadgeCheck, Smartphone, CheckCircle2
 } from 'lucide-react';
 import './layout.css';
 
@@ -13,23 +13,19 @@ interface UserProfileModalProps {
   onClose: () => void;
 }
 
-type TabType = 'overview' | 'avatar' | 'security';
-
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose }) => {
   const { user, updateProfileImage, logout, selectedRole, switchRole } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [previewImage, setPreviewImage] = useState<string | null>(user?.profileImage || null);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen || !user) return null;
 
-  // Sync state if user.profileImage changes
+  // Sync current avatar
   const currentAvatar = previewImage !== null ? previewImage : user.profileImage;
 
-  // Compress image on client using canvas to keep payload super light (~30-50kb)
+  // Client-side image processing & compression using canvas
   const processImageFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
       showToast('Please select a valid image file (PNG, JPG, WebP)', 'error');
@@ -41,7 +37,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxSize = 320;
+        const maxSize = 300;
         let width = img.width;
         let height = img.height;
 
@@ -64,7 +60,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
           ctx.drawImage(img, 0, 0, width, height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
           setPreviewImage(dataUrl);
-          showToast('Photo selected! Click "Save Photo" to apply.', 'info');
+          showToast('Photo selected! Click "Save Changes" to apply.', 'info');
         }
       };
       img.src = event.target?.result as string;
@@ -74,23 +70,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processImageFile(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
     if (file) processImageFile(file);
   };
 
@@ -107,10 +86,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleRemoveAvatar = async () => {
+  const handleRemoveAvatar = () => {
     setPreviewImage(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
-    showToast('Photo reset. Click "Save Photo" to confirm.', 'info');
+    showToast('Photo reset. Click "Save Changes" to confirm.', 'info');
   };
 
   const handleCopyEmail = () => {
@@ -121,7 +100,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
-  // Get user initials for default avatar fallback
   const getInitials = (name: string) => {
     if (!name) return 'U';
     const parts = name.trim().split(' ');
@@ -132,310 +110,244 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const isRoleAdmin = user.roles.includes('Admin');
   const isRoleManager = user.roles.includes('Manager');
 
+  // Short role label matching the active session role
+  const profileTitle =
+    selectedRole === 'Admin'
+      ? 'Admin'
+      : selectedRole === 'Manager'
+      ? 'Manager'
+      : 'Sales Rep';
+
   return (
     <div className="user-profile-modal-overlay" onClick={onClose}>
       <div
-        className="user-profile-modal-card modern-profile-card animate-fade-in"
+        className="user-profile-modal-card clean-profile-card animate-fade-in"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-modal-title"
       >
-        {/* Cover Banner with Sleek Gradient */}
-        <div className="profile-cover-banner">
-          <div className="profile-cover-badges">
-            <span className="profile-cover-status">
-              <span className="status-dot-pulse" />
-              Active Session
-            </span>
-          </div>
-          <button className="profile-modal-close-btn" onClick={onClose} aria-label="Close modal">
-            <X size={18} />
-          </button>
-        </div>
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png, image/jpeg, image/webp"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
 
-        {/* Hero Section */}
-        <div className="profile-hero-container">
-          <div className="profile-hero-avatar-wrap">
-            <div className="profile-avatar-glow-ring">
+        {/* ── Compact Profile Header ── */}
+        <div className="clean-profile-header">
+          <div className="clean-profile-header-left">
+            <div className="clean-profile-avatar-wrap">
               {currentAvatar ? (
                 <img
                   src={currentAvatar}
                   alt={user.name}
-                  className="profile-hero-avatar-img"
+                  className="clean-profile-avatar-img"
                 />
               ) : (
-                <div className="profile-hero-avatar-initials">
+                <div className="clean-profile-avatar-initials">
                   {getInitials(user.name)}
                 </div>
               )}
-            </div>
-
-            <button
-              type="button"
-              className="profile-camera-floating-btn"
-              onClick={() => {
-                setActiveTab('avatar');
-                fileInputRef.current?.click();
-              }}
-              title="Change Profile Photo"
-              aria-label="Change Profile Photo"
-            >
-              <Camera size={15} />
-            </button>
-          </div>
-
-          <div className="profile-hero-meta">
-            <div className="profile-hero-name-row">
-              <h2 id="profile-modal-title" className="profile-hero-user-name">
-                {user.name}
-              </h2>
-              <span className="profile-verified-badge" title="Verified Account">
-                <BadgeCheck size={16} />
-              </span>
-            </div>
-
-            <div className="profile-hero-sub-row">
               <button
                 type="button"
-                className="profile-email-chip"
-                onClick={handleCopyEmail}
-                title="Click to copy email"
+                className="clean-profile-camera-btn"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload/Change Profile Photo"
+                aria-label="Upload/Change Profile Photo"
               >
-                <Mail size={13} />
-                <span>{user.email || 'No email associated'}</span>
-                {copiedEmail ? <CheckCheck size={13} className="text-success" /> : <Copy size={12} className="copy-icon" />}
+                <Camera size={13} />
               </button>
+            </div>
 
-              <div className={`profile-role-pill role-${selectedRole.toLowerCase()}`}>
-                <Shield size={13} />
-                <span>
-                  {selectedRole === 'Admin'
-                    ? 'Administrator'
-                    : selectedRole === 'Manager'
-                    ? 'Sales Manager'
-                    : 'Sales Representative'}
+            <div className="clean-profile-user-info">
+              <div className="clean-profile-name-row">
+                <h2 id="profile-modal-title" className="clean-profile-name">
+                  {user.name}
+                </h2>
+                <span title="Verified CRM Account" style={{ display: 'inline-flex' }}>
+                  <BadgeCheck size={16} className="clean-profile-verified" />
+                </span>
+              </div>
+
+              <div className="clean-profile-meta-row">
+                <button
+                  type="button"
+                  className="clean-profile-email-btn"
+                  onClick={handleCopyEmail}
+                  title="Click to copy email"
+                >
+                  <Mail size={12} />
+                  <span>{user.email || 'No email associated'}</span>
+                  {copiedEmail ? <CheckCheck size={12} color="#10b981" /> : <Copy size={11} className="copy-icon" />}
+                </button>
+
+                <div className={`clean-profile-role-badge role-${selectedRole.toLowerCase()}`}>
+                  <Shield size={12} />
+                  <span>{profileTitle}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="clean-profile-close-btn"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* ── Profile Body Sections ── */}
+        <div className="clean-profile-body">
+          {/* Section 1: Account Information */}
+          <div className="clean-profile-section">
+            <div className="clean-profile-section-title">
+              <User size={14} /> Account Information
+            </div>
+
+            <div className="clean-profile-info-grid">
+              <div className="clean-profile-info-item">
+                <span className="clean-profile-info-label">Full Name</span>
+                <span className="clean-profile-info-value">{user.name}</span>
+              </div>
+
+              <div className="clean-profile-info-item">
+                <span className="clean-profile-info-label">Email Address</span>
+                <span className="clean-profile-info-value">{user.email}</span>
+              </div>
+
+              <div className="clean-profile-info-item">
+                <span className="clean-profile-info-label">Assigned Roles</span>
+                <span className="clean-profile-info-value">
+                  {user.roles.join(', ') || selectedRole}
+                </span>
+              </div>
+
+              <div className="clean-profile-info-item">
+                <span className="clean-profile-info-label">Account Reference</span>
+                <span className="clean-profile-info-value" style={{ fontFamily: 'monospace' }}>
+                  #USR-{user.userId || '001'}
                 </span>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Modal Navigation Tabs */}
-        <div className="profile-nav-tabs">
-          <button
-            type="button"
-            className={`profile-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            <User size={15} />
-            <span>Profile Overview</span>
-          </button>
-
-          <button
-            type="button"
-            className={`profile-tab-btn ${activeTab === 'avatar' ? 'active' : ''}`}
-            onClick={() => setActiveTab('avatar')}
-          >
-            <Camera size={15} />
-            <span>Photo & Branding</span>
-            {previewImage !== user.profileImage && <span className="tab-update-dot" />}
-          </button>
-
-          <button
-            type="button"
-            className={`profile-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
-          >
-            <Key size={15} />
-            <span>Account & Access</span>
-          </button>
-        </div>
-
-        {/* Modal Body Content */}
-        <div className="profile-modal-content-area">
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <div className="profile-tab-pane animate-fade-in">
-              <div className="profile-summary-grid">
-                <div className="profile-card-field">
-                  <span className="field-title">
-                    <User size={13} /> Full Legal Name
-                  </span>
-                  <span className="field-data">{user.name}</span>
-                </div>
-
-                <div className="profile-card-field">
-                  <span className="field-title">
-                    <Mail size={13} /> Work Email
-                  </span>
-                  <span className="field-data">{user.email}</span>
-                </div>
-
-                <div className="profile-card-field">
-                  <span className="field-title">
-                    <Shield size={13} /> Primary Role
-                  </span>
-                  <span className="field-data">
-                    {user.roles.join(', ') || selectedRole}
-                  </span>
-                </div>
-
-                <div className="profile-card-field">
-                  <span className="field-title">
-                    <Activity size={13} /> Account ID
-                  </span>
-                  <span className="field-data font-mono">
-                    #USR-{user.userId || '001'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Privilege Highlights Card */}
-              <div className="profile-access-card">
-                <div className="access-card-header">
-                  <Sparkles size={16} className="text-accent" />
-                  <span className="access-card-title">Role Privileges & Access</span>
-                </div>
-                <p className="access-card-desc">
-                  {selectedRole === 'Admin'
-                    ? 'Full enterprise access enabled: Lead generation, Opportunity management, Pipeline automation, User provisioning, Audit logs, and System settings.'
-                    : selectedRole === 'Manager'
-                    ? 'Management access enabled: Pipeline analytics, Sales team supervision, Deal assignment, and Reporting dashboards.'
-                    : 'Sales representative access: Opportunity pipeline tracking, Lead management, Task management, and Customer engagement tools.'}
-                </p>
-              </div>
+          {/* Section 2: Photo Management Actions */}
+          <div className="clean-profile-section">
+            <div className="clean-profile-section-title">
+              <Camera size={14} /> Profile Picture Management
             </div>
-          )}
 
-          {/* TAB 2: AVATAR & BRANDING */}
-          {activeTab === 'avatar' && (
-            <div className="profile-tab-pane animate-fade-in">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png, image/jpeg, image/webp, image/gif"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
-
-              <div
-                className={`profile-dropzone ${isDragging ? 'dropzone-active' : ''}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+            <div className="clean-profile-photo-bar">
+              <button
+                type="button"
+                className="clean-profile-action-btn primary"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <div className="dropzone-icon-circle">
-                  <UploadCloud size={24} />
-                </div>
-                <div className="dropzone-text">
-                  <h4>Drag & Drop your photo here</h4>
-                  <p>or click to browse files from your device</p>
-                </div>
-                <span className="dropzone-badge">JPG, PNG, WebP • Max 5MB</span>
-              </div>
+                <UploadCloud size={14} />
+                <span>Upload New Photo</span>
+              </button>
 
-              <div className="profile-avatar-actions-bar">
+              {currentAvatar && (
                 <button
                   type="button"
-                  className="btn-upload-action"
-                  onClick={() => fileInputRef.current?.click()}
+                  className="clean-profile-action-btn secondary"
+                  onClick={handleRemoveAvatar}
                 >
-                  <UploadCloud size={15} />
-                  <span>Choose New Photo</span>
+                  <Trash2 size={14} />
+                  <span>Reset to Initials</span>
                 </button>
-
-                {previewImage && (
-                  <button
-                    type="button"
-                    className="btn-remove-action"
-                    onClick={handleRemoveAvatar}
-                  >
-                    <Trash2 size={15} />
-                    <span>Reset to Initials</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: SECURITY & SESSION */}
-          {activeTab === 'security' && (
-            <div className="profile-tab-pane animate-fade-in">
-              {/* Role Simulation for Admins */}
-              {(isRoleAdmin || isRoleManager) && (
-                <div className="profile-role-switcher-section">
-                  <div className="section-label-row">
-                    <Shield size={14} />
-                    <span>Role View Switcher</span>
-                  </div>
-                  <p className="section-subtext">
-                    Preview CRM dashboard workflows under different permission sets:
-                  </p>
-                  <div className="role-switcher-buttons">
-                    {isRoleAdmin && (
-                      <button
-                        type="button"
-                        className={`role-choice-btn ${selectedRole === 'Admin' ? 'active' : ''}`}
-                        onClick={() => switchRole('Admin')}
-                      >
-                        👑 Administrator
-                      </button>
-                    )}
-                    {(isRoleAdmin || isRoleManager) && (
-                      <button
-                        type="button"
-                        className={`role-choice-btn ${selectedRole === 'Manager' ? 'active' : ''}`}
-                        onClick={() => switchRole('Manager')}
-                      >
-                        👔 Manager
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className={`role-choice-btn ${selectedRole === 'SalesRep' ? 'active' : ''}`}
-                      onClick={() => switchRole('SalesRep')}
-                    >
-                      💼 Sales Rep
-                    </button>
-                  </div>
-                </div>
               )}
 
-              {/* Active Session Info */}
-              <div className="profile-session-box">
-                <div className="session-item">
-                  <Smartphone size={16} className="text-secondary" />
-                  <div className="session-info">
-                    <span className="session-title">Current Web Session</span>
-                    <span className="session-subtitle">Active now • JWT Secure Bearer Token</span>
-                  </div>
-                  <span className="badge-online">Online</span>
-                </div>
+              <span className="clean-profile-photo-hint">
+                PNG, JPG, WebP (auto-optimized)
+              </span>
+            </div>
+          </div>
+
+          {/* Section 3: Role Switcher (For Admins / Managers) */}
+          {(isRoleAdmin || isRoleManager) && (
+            <div className="clean-profile-section">
+              <div className="clean-profile-section-title">
+                <Shield size={14} /> Role View Switcher
+              </div>
+              <p className="clean-profile-section-desc">
+                Preview CRM dashboards and permissions under different user perspectives:
+              </p>
+
+              <div className="clean-profile-role-switcher">
+                {isRoleAdmin && (
+                  <button
+                    type="button"
+                    className={`clean-role-toggle-btn ${selectedRole === 'Admin' ? 'active' : ''}`}
+                    onClick={() => switchRole('Admin')}
+                  >
+                    👑 Administrator
+                  </button>
+                )}
+                {(isRoleAdmin || isRoleManager) && (
+                  <button
+                    type="button"
+                    className={`clean-role-toggle-btn ${selectedRole === 'Manager' ? 'active' : ''}`}
+                    onClick={() => switchRole('Manager')}
+                  >
+                    👔 Manager
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`clean-role-toggle-btn ${selectedRole === 'SalesRep' ? 'active' : ''}`}
+                  onClick={() => switchRole('SalesRep')}
+                >
+                  💼 Sales Rep
+                </button>
               </div>
             </div>
           )}
+
+          {/* Section 4: Security Status */}
+          <div className="clean-profile-section">
+            <div className="clean-profile-section-title">
+              <Key size={14} /> Security & Session
+            </div>
+
+            <div className="clean-profile-security-row">
+              <div className="clean-profile-security-left">
+                <ShieldCheck size={16} color="#10b981" />
+                <div>
+                  <span className="clean-profile-security-main">Active Web Session</span>
+                  <span className="clean-profile-security-sub">JWT Bearer Token Encrypted • Role & Scope Guarded</span>
+                </div>
+              </div>
+              <span className="clean-profile-status-pill">
+                <span className="clean-profile-status-dot" /> Online
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="profile-modal-footer-modern">
+        {/* ── Footer Actions ── */}
+        <div className="clean-profile-footer">
           <button
             type="button"
-            className="profile-btn-signout"
+            className="clean-profile-signout-btn"
             onClick={() => {
               onClose();
               logout();
             }}
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
             <span>Sign Out</span>
           </button>
 
-          <div className="profile-footer-right-actions">
+          <div className="clean-profile-footer-right">
             <button
               type="button"
-              className="profile-btn-cancel"
+              className="clean-profile-btn-close"
               onClick={onClose}
               disabled={isSaving}
             >
@@ -445,11 +357,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             {previewImage !== user.profileImage && (
               <button
                 type="button"
-                className="profile-btn-save"
+                className="clean-profile-btn-save"
                 onClick={handleSaveAvatar}
                 disabled={isSaving}
               >
-                <Check size={16} />
+                {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
                 <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
               </button>
             )}

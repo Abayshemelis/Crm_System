@@ -177,9 +177,10 @@
 }
 
 /* ── Centered Content Container ── */
+/* ── Centered Content Container ── */
 .auth-center-content {
   width: 100%;
-  max-width: 440px;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -196,7 +197,7 @@
 /* ── Glassmorphism Login Card ── */
 .login-card {
   width: 100%;
-  padding: 2.25rem 2rem;
+  padding: 2.5rem 2.6rem;
   box-sizing: border-box;
   background: var(--bg-secondary, rgba(31, 28, 37, 0.88)) !important;
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1)) !important;

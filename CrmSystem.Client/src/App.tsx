@@ -8,6 +8,7 @@ import { Toast } from './components/ui/Toast';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { GlobalConfirmDialog } from './components/ui/GlobalConfirmDialog';
 import { SignalRProvider } from './context/SignalRContext';
+import { SystemProfileProvider } from './context/SystemProfileContext';
 
 // Eagerly loaded public entry screens for instant first paint
 import LandingPage from './screens/LandingPage';
@@ -34,23 +35,30 @@ const OpportunityDetailScreen = lazy(() => import('./screens/OpportunityDetailSc
 const OpportunityFormScreen = lazy(() => import('./screens/OpportunityFormScreen').then(m => ({ default: m.OpportunityFormScreen })));
 const ProductsScreen = lazy(() => import('./screens/ProductsScreen').then(m => ({ default: m.ProductsScreen })));
 const TasksScreen = lazy(() => import('./screens/TasksScreen').then(m => ({ default: m.TasksScreen })));
+const TaskFormScreen = lazy(() => import('./screens/TaskFormScreen').then(m => ({ default: m.TaskFormScreen })));
 const ContractsScreen = lazy(() => import('./screens/ContractsScreen').then(m => ({ default: m.ContractsScreen })));
+const ContractFormScreen = lazy(() => import('./screens/ContractFormScreen').then(m => ({ default: m.ContractFormScreen })));
 const InvoicesScreen = lazy(() => import('./screens/InvoicesScreen').then(m => ({ default: m.InvoicesScreen })));
-const ReportsScreen = lazy(() => import('./screens/ReportsScreen').then(m => ({ default: m.ReportsScreen })));
+const InvoiceFormScreen = lazy(() => import('./screens/InvoiceFormScreen').then(m => ({ default: m.InvoiceFormScreen })));
+const PaymentsScreen = lazy(() => import('./screens/PaymentsScreen').then(m => ({ default: m.PaymentsScreen })));
 const UsersScreen = lazy(() => import('./screens/UsersScreen').then(m => ({ default: m.UsersScreen })));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
 const SearchResultsScreen = lazy(() => import('./screens/SearchResultsScreen').then(m => ({ default: m.SearchResultsScreen })));
-
 const AuditLogsScreen = lazy(() => import('./screens/AuditLogsScreen').then(m => ({ default: m.AuditLogsScreen })));
 
-// Dedicated module-specific report screens
+// 11 Clean, Database-driven Reporting Screens
+const ReportsOverviewScreen = lazy(() => import('./screens/reports/ReportsOverviewScreen').then(m => ({ default: m.ReportsOverviewScreen })));
 const CustomerReportsScreen = lazy(() => import('./screens/reports/CustomerReportsScreen').then(m => ({ default: m.CustomerReportsScreen })));
 const CompanyReportsScreen = lazy(() => import('./screens/reports/CompanyReportsScreen').then(m => ({ default: m.CompanyReportsScreen })));
 const LeadReportsScreen = lazy(() => import('./screens/reports/LeadReportsScreen').then(m => ({ default: m.LeadReportsScreen })));
 const PipelineReportsScreen = lazy(() => import('./screens/reports/PipelineReportsScreen').then(m => ({ default: m.PipelineReportsScreen })));
+const OpportunityReportsScreen = lazy(() => import('./screens/reports/OpportunityReportsScreen').then(m => ({ default: m.OpportunityReportsScreen })));
 const ContractReportsScreen = lazy(() => import('./screens/reports/ContractReportsScreen').then(m => ({ default: m.ContractReportsScreen })));
 const InvoiceReportsScreen = lazy(() => import('./screens/reports/InvoiceReportsScreen').then(m => ({ default: m.InvoiceReportsScreen })));
+const PaymentReportsScreen = lazy(() => import('./screens/reports/PaymentReportsScreen').then(m => ({ default: m.PaymentReportsScreen })));
+const ActivityReportsScreen = lazy(() => import('./screens/reports/ActivityReportsScreen').then(m => ({ default: m.ActivityReportsScreen })));
 const TaskReportsScreen = lazy(() => import('./screens/reports/TaskReportsScreen').then(m => ({ default: m.TaskReportsScreen })));
+const TeamPerformanceReportsScreen = lazy(() => import('./screens/reports/TeamPerformanceReportsScreen').then(m => ({ default: m.TeamPerformanceReportsScreen })));
 
 const UserReportsScreen = lazy(() => import('./screens/reports/UserReportsScreen').then(m => ({ default: m.UserReportsScreen })));
 const AuditReportsScreen = lazy(() => import('./screens/reports/AuditReportsScreen').then(m => ({ default: m.AuditReportsScreen })));
@@ -89,19 +97,39 @@ function AppRoutes() {
           <Route path="/invoice/pay/:id" element={<PublicInvoicePayScreen />} />
           <Route path="/invoices/pay/:id" element={<PublicInvoicePayScreen />} />
           <Route path="/dashboard" element={<ProtectedRoute><DashboardScreen /></ProtectedRoute>} />
-          <Route path="/reports" element={<ProtectedRoute><ReportsScreen /></ProtectedRoute>} />
 
+          {/* ── Master Reports Routes ────────────────────────────────────── */}
+          <Route path="/reports" element={<ProtectedRoute><ReportsOverviewScreen /></ProtectedRoute>} />
+          <Route path="/reports/overview" element={<ProtectedRoute><ReportsOverviewScreen /></ProtectedRoute>} />
+          <Route path="/reports/customers" element={<ProtectedRoute><CustomerReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/companies" element={<ProtectedRoute><CompanyReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/leads" element={<ProtectedRoute><LeadReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/pipeline" element={<ProtectedRoute><PipelineReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/opportunities" element={<ProtectedRoute><OpportunityReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/contracts" element={<ProtectedRoute><ContractReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/invoices" element={<ProtectedRoute><InvoiceReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/payments" element={<ProtectedRoute><PaymentReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/activities" element={<ProtectedRoute><ActivityReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/tasks" element={<ProtectedRoute><TaskReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/team" element={<ProtectedRoute><TeamPerformanceReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/team-performance" element={<ProtectedRoute><TeamPerformanceReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/system-history" element={<ProtectedRoute><AuditReportsScreen /></ProtectedRoute>} />
+
+          {/* ── Main CRM Entity Routes ──────────────────────────────────── */}
           <Route path="/customers" element={<ProtectedRoute><CustomersScreen /></ProtectedRoute>} />
           <Route path="/customers/new" element={<ProtectedRoute><CustomerFormScreen /></ProtectedRoute>} />
           <Route path="/customers/reports" element={<ProtectedRoute><CustomerReportsScreen /></ProtectedRoute>} />
           <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetailScreen /></ProtectedRoute>} />
           <Route path="/customers/:id/edit" element={<ProtectedRoute><CustomerFormScreen /></ProtectedRoute>} />
+
           <Route path="/companies" element={<ProtectedRoute><CompaniesScreen /></ProtectedRoute>} />
           <Route path="/companies/new" element={<ProtectedRoute><CompanyFormScreen /></ProtectedRoute>} />
           <Route path="/companies/reports" element={<ProtectedRoute><CompanyReportsScreen /></ProtectedRoute>} />
           <Route path="/companies/:id" element={<ProtectedRoute><CompanyDetailScreen /></ProtectedRoute>} />
           <Route path="/companies/:id/edit" element={<ProtectedRoute><CompanyFormScreen /></ProtectedRoute>} />
+
           <Route path="/products" element={<ProtectedRoute><ProductsScreen /></ProtectedRoute>} />
+
           <Route path="/leads" element={<ProtectedRoute><LeadsScreen /></ProtectedRoute>} />
           <Route path="/leads/new" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
           <Route path="/leads/reports" element={<ProtectedRoute><LeadReportsScreen /></ProtectedRoute>} />
@@ -109,27 +137,50 @@ function AppRoutes() {
           <Route path="/leads/:id/edit" element={<ProtectedRoute><LeadFormScreen /></ProtectedRoute>} />
           <Route path="/leads/sources" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
           <Route path="/leads/statuses" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
+
           <Route path="/pipeline" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
           <Route path="/pipeline/new" element={<ProtectedRoute><OpportunityFormScreen /></ProtectedRoute>} />
           <Route path="/pipeline/reports" element={<ProtectedRoute><PipelineReportsScreen /></ProtectedRoute>} />
           <Route path="/pipeline/:id/edit" element={<ProtectedRoute><OpportunityFormScreen /></ProtectedRoute>} />
+          <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
+
           <Route path="/opportunities" element={<ProtectedRoute><PipelineScreen /></ProtectedRoute>} />
           <Route path="/opportunities/new" element={<ProtectedRoute><OpportunityFormScreen /></ProtectedRoute>} />
-          <Route path="/opportunities/reports" element={<ProtectedRoute><PipelineReportsScreen /></ProtectedRoute>} />
+          <Route path="/opportunities/reports" element={<ProtectedRoute><OpportunityReportsScreen /></ProtectedRoute>} />
           <Route path="/opportunities/:id" element={<ProtectedRoute><OpportunityDetailScreen /></ProtectedRoute>} />
           <Route path="/opportunities/:id/edit" element={<ProtectedRoute><OpportunityFormScreen /></ProtectedRoute>} />
-          <Route path="/pipeline/products" element={<ProtectedRoute><Navigate to="/settings" replace /></ProtectedRoute>} />
-          <Route path="/pipeline/stages" element={<ProtectedRoute><PipelineStagesScreen /></ProtectedRoute>} />
+
           <Route path="/contracts" element={<ProtectedRoute><ContractsScreen /></ProtectedRoute>} />
+          <Route path="/contracts/new" element={<ProtectedRoute><ContractFormScreen /></ProtectedRoute>} />
+          <Route path="/contracts/:id/edit" element={<ProtectedRoute><ContractFormScreen /></ProtectedRoute>} />
           <Route path="/contracts/reports" element={<ProtectedRoute><ContractReportsScreen /></ProtectedRoute>} />
+
           <Route path="/invoices" element={<ProtectedRoute><InvoicesScreen /></ProtectedRoute>} />
+          <Route path="/invoices/new" element={<ProtectedRoute><InvoiceFormScreen /></ProtectedRoute>} />
+          <Route path="/invoices/:id/edit" element={<ProtectedRoute><InvoiceFormScreen /></ProtectedRoute>} />
           <Route path="/invoices/reports" element={<ProtectedRoute><InvoiceReportsScreen /></ProtectedRoute>} />
+
+          <Route path="/payments" element={<ProtectedRoute><PaymentsScreen /></ProtectedRoute>} />
+          <Route path="/payments/reports" element={<ProtectedRoute><PaymentReportsScreen /></ProtectedRoute>} />
+
           <Route path="/tasks" element={<ProtectedRoute><TasksScreen /></ProtectedRoute>} />
+          <Route path="/tasks/new" element={<ProtectedRoute><TaskFormScreen /></ProtectedRoute>} />
+          <Route path="/tasks/:id/edit" element={<ProtectedRoute><TaskFormScreen /></ProtectedRoute>} />
           <Route path="/tasks/reports" element={<ProtectedRoute><TaskReportsScreen /></ProtectedRoute>} />
+
+          <Route path="/activities" element={<ProtectedRoute><Navigate to="/reports/activities" replace /></ProtectedRoute>} />
+          <Route path="/activities/reports" element={<ProtectedRoute><ActivityReportsScreen /></ProtectedRoute>} />
+
+          <Route path="/team" element={<ProtectedRoute><Navigate to="/reports/team" replace /></ProtectedRoute>} />
+          <Route path="/team/reports" element={<ProtectedRoute><TeamPerformanceReportsScreen /></ProtectedRoute>} />
+
           <Route path="/audit-logs" element={<ManagerOnlyRoute><AuditLogsScreen /></ManagerOnlyRoute>} />
-          <Route path="/audit-logs/reports" element={<ManagerOnlyRoute><AuditReportsScreen /></ManagerOnlyRoute>} />
+          <Route path="/audit-logs/reports" element={<ProtectedRoute><AuditReportsScreen /></ProtectedRoute>} />
+
           <Route path="/users" element={<ManagerOnlyRoute><UsersScreen /></ManagerOnlyRoute>} />
-          <Route path="/users/reports" element={<ManagerOnlyRoute><UserReportsScreen /></ManagerOnlyRoute>} />
+          <Route path="/users/reports" element={<ProtectedRoute><TeamPerformanceReportsScreen /></ProtectedRoute>} />
+          <Route path="/reports/users" element={<ProtectedRoute><TeamPerformanceReportsScreen /></ProtectedRoute>} />
+
           <Route path="/search" element={<ProtectedRoute><SearchResultsScreen /></ProtectedRoute>} />
           <Route path="/settings" element={<ManagerOnlyRoute><SettingsScreen /></ManagerOnlyRoute>} />
         </Routes>
@@ -141,17 +192,6 @@ function AppRoutes() {
 function AppShell() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmState, setConfirmState] = useState<{ message: string; resolve: (val: boolean) => void } | null>(null);
-
-  // Initialize theme from localStorage on mount
-  const isHexColor = (value: string) => /^#([a-f\d]{6})$/i.test(value);
-  const isLightBackground = (background: string): boolean => {
-    if (!isHexColor(background)) return false;
-    const r = parseInt(background.slice(1, 3), 16);
-    const g = parseInt(background.slice(3, 5), 16);
-    const b = parseInt(background.slice(5, 7), 16);
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness > 190;
-  };
 
   useEffect(() => {
     initTheme();
@@ -194,12 +234,20 @@ function AppShell() {
 }
 
 function App() {
+  useEffect(() => {
+    initTheme();
+  }, []);
+
   return (
-    <AuthProvider>
-      <SignalRProvider>
-        <AppShell />
-      </SignalRProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <SystemProfileProvider>
+        <AuthProvider>
+          <SignalRProvider>
+            <AppShell />
+          </SignalRProvider>
+        </AuthProvider>
+      </SystemProfileProvider>
+    </ErrorBoundary>
   );
 }
 

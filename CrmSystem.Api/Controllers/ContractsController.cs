@@ -38,6 +38,7 @@ public class ContractsController : ControllerBase
     public async Task<ActionResult<IEnumerable<ContractReadDto>>> GetAll(
         [FromQuery] int? customerId,
         [FromQuery] int? opportunityId,
+        [FromQuery] int? companyId,
         [FromQuery] string? status,
         [FromQuery] string scope = "company")
     {
@@ -105,6 +106,9 @@ public class ContractsController : ControllerBase
         if (customerId.HasValue)
             query = query.Where(c => c.CustomerId == customerId.Value);
 
+        if (companyId.HasValue)
+            query = query.Where(c => c.Customer != null && c.Customer.CompanyId == companyId.Value);
+
         if (opportunityId.HasValue)
             query = query.Where(c => c.OpportunityId == opportunityId.Value);
 
@@ -133,7 +137,16 @@ public class ContractsController : ControllerBase
         }
         if (hasChanges) await _db.SaveChangesAsync();
 
-        var dtos = list.Select(c => MapToReadDto(c)).ToList();
+        var contractIds = list.Select(c => c.ContractId).ToList();
+        var invoices = await _db.Invoices
+            .Where(i => !i.IsDeleted && i.ContractId.HasValue && contractIds.Contains(i.ContractId.Value))
+            .Include(i => i.Payments)
+            .ToListAsync();
+        var invoiceMap = invoices
+            .GroupBy(i => i.ContractId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(i => i.CreatedAt).First());
+
+        var dtos = list.Select(c => MapToReadDto(c, invoiceMap.TryGetValue(c.ContractId, out var inv) ? inv : null)).ToList();
         return Ok(dtos);
     }
 
@@ -157,7 +170,11 @@ public class ContractsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
-        return Ok(MapToReadDto(contract));
+        var invoice = await _db.Invoices
+            .Include(i => i.Payments)
+            .FirstOrDefaultAsync(i => i.ContractId == id && !i.IsDeleted);
+
+        return Ok(MapToReadDto(contract, invoice));
     }
 
     [HttpPost]
@@ -165,6 +182,15 @@ public class ContractsController : ControllerBase
     {
         if (!_currentUser.UserId.HasValue)
             return Unauthorized();
+
+        if (dto.CustomerId <= 0)
+            return BadRequest(new { message = "Customer is required." });
+        if (string.IsNullOrWhiteSpace(dto.Title))
+            return BadRequest(new { message = "Contract title is required." });
+        if (dto.ContractValue < 0)
+            return BadRequest(new { message = "Contract value cannot be negative." });
+        if (dto.EndDate.Date < dto.StartDate.Date)
+            return BadRequest(new { message = "End Date cannot be earlier than Start Date." });
 
         var userId = _currentUser.UserId.Value;
 
@@ -248,6 +274,13 @@ public class ContractsController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateContractDto dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Title))
+            return BadRequest(new { message = "Contract title is required." });
+        if (dto.ContractValue < 0)
+            return BadRequest(new { message = "Contract value cannot be negative." });
+        if (dto.EndDate.Date < dto.StartDate.Date)
+            return BadRequest(new { message = "End Date cannot be earlier than Start Date." });
+
         var contract = await _db.Contracts.FirstOrDefaultAsync(c => c.ContractId == id && !c.IsDeleted);
         if (contract == null)
             return NotFound(new { message = "Contract not found." });
@@ -455,6 +488,70 @@ public class ContractsController : ControllerBase
         });
     }
 
+    [HttpPost("{id:int}/generate-invoice")]
+    public async Task<ActionResult> GenerateInvoiceForContract(int id)
+    {
+        var contract = await _db.Contracts
+            .Include(c => c.Customer)
+            .FirstOrDefaultAsync(c => c.ContractId == id && !c.IsDeleted);
+
+        if (contract == null) return NotFound(new { message = "Contract not found." });
+
+        var existingInvoice = await _db.Invoices
+            .FirstOrDefaultAsync(i => i.ContractId == id && !i.IsDeleted);
+
+        if (existingInvoice != null)
+        {
+            return Ok(new
+            {
+                message = "Invoice already exists for this contract.",
+                invoiceId = existingInvoice.InvoiceId,
+                invoiceNumber = existingInvoice.InvoiceNumber,
+                status = existingInvoice.Status,
+                totalAmount = existingInvoice.TotalAmount,
+                paymentUrl = $"/invoices/pay/{existingInvoice.InvoiceNumber}"
+            });
+        }
+
+        var invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{contract.ContractId:D4}";
+        if (await _db.Invoices.AnyAsync(i => i.InvoiceNumber == invoiceNumber))
+        {
+            invoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{contract.ContractId:D4}-{Guid.NewGuid().ToString("N")[..4].ToUpper()}";
+        }
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = invoiceNumber,
+            CustomerId = contract.CustomerId,
+            ContractId = contract.ContractId,
+            OpportunityId = contract.OpportunityId,
+            Amount = contract.ContractValue,
+            TotalAmount = contract.ContractValue,
+            TaxRate = 0m,
+            TaxAmount = 0m,
+            Status = "Sent",
+            IssueDate = DateTime.UtcNow,
+            DueDate = DateTime.UtcNow.AddDays(30),
+            PaymentUrl = $"/invoices/pay/{invoiceNumber}",
+            CreatedById = _currentUser.UserId ?? contract.CreatedById,
+            Notes = $"Commercial invoice generated for contract #{contract.ContractNumber} ({contract.Title})",
+            Terms = contract.TermsAndConditions ?? "Due within 30 days of contract execution."
+        };
+
+        _db.Invoices.Add(invoice);
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Commercial invoice generated successfully!",
+            invoiceId = invoice.InvoiceId,
+            invoiceNumber = invoice.InvoiceNumber,
+            status = invoice.Status,
+            totalAmount = invoice.TotalAmount,
+            paymentUrl = $"/invoices/pay/{invoice.InvoiceNumber}"
+        });
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
@@ -467,10 +564,50 @@ public class ContractsController : ControllerBase
         return NoContent();
     }
 
-    private static ContractReadDto MapToReadDto(Contract c)
+    private static ContractReadDto MapToReadDto(Contract c, Invoice? inv = null)
     {
         var token = c.SigningToken;
         if (string.IsNullOrEmpty(token)) token = Guid.NewGuid().ToString("N");
+
+        string? computedInvoiceStatus = inv?.Status;
+        decimal? amountPaid = null;
+        decimal? balanceDue = null;
+
+        if (inv != null)
+        {
+            var verifiedPayments = inv.Payments?.Where(p => p.Status == "Completed" && !p.IsDeleted).ToList() ?? new List<Payment>();
+            var paidSum = verifiedPayments.Sum(p => p.Amount);
+            var pendingVerification = inv.Payments?.Any(p => p.Status == "PendingVerification" && !p.IsDeleted) ?? false;
+            var bal = Math.Max(0m, inv.TotalAmount - paidSum);
+
+            amountPaid = paidSum;
+            balanceDue = bal;
+
+            if (inv.Status == "Cancelled")
+            {
+                computedInvoiceStatus = "Cancelled";
+            }
+            else if (inv.Status == "Refunded")
+            {
+                computedInvoiceStatus = "Refunded";
+            }
+            else if (bal <= 0.01m && paidSum > 0)
+            {
+                computedInvoiceStatus = "Paid";
+            }
+            else if (paidSum > 0 && bal > 0.01m)
+            {
+                computedInvoiceStatus = "PartiallyPaid";
+            }
+            else if (pendingVerification)
+            {
+                computedInvoiceStatus = "PendingVerification";
+            }
+            else
+            {
+                computedInvoiceStatus = inv.Status ?? "Sent";
+            }
+        }
 
         return new ContractReadDto
         {
@@ -502,6 +639,14 @@ public class ContractsController : ControllerBase
             CreatedById = c.CreatedById,
             CreatedByName = c.CreatedBy?.Name ?? "",
             CreatedAt = c.CreatedAt,
+            InvoiceId = inv?.InvoiceId,
+            InvoiceNumber = inv?.InvoiceNumber,
+            InvoiceStatus = computedInvoiceStatus,
+            InvoiceTotalAmount = inv?.TotalAmount,
+            InvoiceAmountPaid = amountPaid,
+            InvoiceBalanceDue = balanceDue,
+            InvoicePaidAt = inv?.PaidAt,
+            InvoicePaymentUrl = inv != null ? $"/invoices/pay/{inv.InvoiceNumber}" : null
         };
     }
 }

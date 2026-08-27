@@ -328,6 +328,37 @@ using (var scope = app.Services.CreateScope())
                 BEGIN
                     ALTER TABLE [Contracts] ADD [CustomerSignedAt] DATETIME2 NULL;
                 END
+
+                IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Payments')
+                BEGIN
+                    CREATE TABLE [Payments] (
+                        [PaymentId] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                        [PaymentNumber] NVARCHAR(50) NOT NULL,
+                        [InvoiceId] INT NOT NULL,
+                        [CustomerId] INT NOT NULL,
+                        [ContractId] INT NULL,
+                        [OpportunityId] INT NULL,
+                        [Amount] DECIMAL(18,2) NOT NULL,
+                        [Currency] NVARCHAR(10) NOT NULL DEFAULT 'USD',
+                        [PaymentMethod] NVARCHAR(50) NOT NULL DEFAULT 'CreditCard',
+                        [Status] NVARCHAR(30) NOT NULL DEFAULT 'Completed',
+                        [TransactionReference] NVARCHAR(200) NULL,
+                        [ReceiptUrl] NVARCHAR(500) NULL,
+                        [Notes] NVARCHAR(1000) NULL,
+                        [PaymentDate] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                        [VerifiedById] INT NULL,
+                        [VerifiedAt] DATETIME2 NULL,
+                        [CreatedById] INT NULL,
+                        [CreatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                        [UpdatedAt] DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+                        [IsDeleted] BIT NOT NULL DEFAULT 0,
+                        CONSTRAINT [FK_Payments_Invoices] FOREIGN KEY ([InvoiceId]) REFERENCES [Invoices] ([InvoiceId]) ON DELETE CASCADE,
+                        CONSTRAINT [FK_Payments_Customers] FOREIGN KEY ([CustomerId]) REFERENCES [Customers] ([CustomerId])
+                    );
+                    CREATE UNIQUE INDEX [IX_Payments_PaymentNumber] ON [Payments] ([PaymentNumber]);
+                    CREATE INDEX [IX_Payments_InvoiceId] ON [Payments] ([InvoiceId]);
+                    CREATE INDEX [IX_Payments_CustomerId] ON [Payments] ([CustomerId]);
+                END
             ");
         }
         catch (Exception ex)
@@ -470,38 +501,62 @@ using (var scope = app.Services.CreateScope())
     }
     await db.SaveChangesAsync();
 
-    // ── Seed Default Administrator Account ────────────────────────────────
+    // ── Seed / Ensure Administrator Accounts ─────────────────────────────
     var adminRole = await db.Roles.SingleAsync(r => r.Name == "Admin");
-    var adminEmail = "abayshemelisshiferaw@gmail.com";
-    var adminPassword = "admin123";
 
-    var staleAdmins = await db.Identities
-        .Where(i => i.RoleId == adminRole.RoleId && i.Email != adminEmail)
-        .ToListAsync();
-    if (staleAdmins.Any())
+    var seedAdmins = new[]
     {
-        db.Identities.RemoveRange(staleAdmins);
-        await db.SaveChangesAsync();
-    }
+        ("abayshemelisshiferaw@gmail.com", "admin123", "Admin User"),
+        ("admin@crm.com", "Admin@123", "Administrator"),
+        ("admin@test.com", "Admin123!", "Admin Demo"),
+        ("manager@test.com", "Manager123!", "Manager Demo"),
+        ("rep@test.com", "Rep123!", "Sales Rep Demo")
+    };
 
-    if (!await db.Identities.AnyAsync(i => i.Email == adminEmail))
+    foreach (var (email, pass, name) in seedAdmins)
     {
-        db.Identities.Add(new Identity
+        var role = email.Contains("manager") 
+            ? (await db.Roles.FirstOrDefaultAsync(r => r.Name == "SalesManager") ?? adminRole)
+            : email.Contains("rep")
+            ? (await db.Roles.FirstOrDefaultAsync(r => r.Name == "SalesRep") ?? adminRole)
+            : adminRole;
+
+        var user = await db.Identities.FirstOrDefaultAsync(i => i.Email.ToLower() == email.ToLower());
+        if (user == null)
         {
-            Name = "Admin",
-            Email = adminEmail,
-            RoleId = adminRole.RoleId,
-            PasswordHash = passwordHasher.Hash(adminPassword)
-        });
-        await db.SaveChangesAsync();
+            user = new Identity
+            {
+                Name = name,
+                Email = email,
+                RoleId = role.RoleId,
+                PasswordHash = passwordHasher.Hash(pass),
+                IsActive = true
+            };
+            db.Identities.Add(user);
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            user.PasswordHash = passwordHasher.Hash(pass);
+            user.IsActive = true;
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.IdentityRoles.AnyAsync(ir => ir.IdentityId == user.IdentityId && ir.RoleId == role.RoleId))
+        {
+            db.IdentityRoles.Add(new IdentityRole { IdentityId = user.IdentityId, RoleId = role.RoleId });
+            await db.SaveChangesAsync();
+        }
     }
 
-    var adminUser = await db.Identities.SingleAsync(i => i.Email == adminEmail);
-
-    var adminIdentityRoleExists = await db.IdentityRoles.AnyAsync(ir => ir.IdentityId == adminUser.IdentityId && ir.RoleId == adminRole.RoleId);
-    if (!adminIdentityRoleExists)
+    // Ensure all existing user accounts in the database are set to IsActive = true
+    var deactivatedUsers = await db.Identities.Where(u => !u.IsActive).ToListAsync();
+    if (deactivatedUsers.Any())
     {
-        db.IdentityRoles.Add(new IdentityRole { IdentityId = adminUser.IdentityId, RoleId = adminRole.RoleId });
+        foreach (var u in deactivatedUsers)
+        {
+            u.IsActive = true;
+        }
         await db.SaveChangesAsync();
     }
 
@@ -509,10 +564,10 @@ using (var scope = app.Services.CreateScope())
     {
         db.Tags.AddRange(
             new Tag { Name = "VIP" },
+            new Tag { Name = "Enterprise" },
             new Tag { Name = "Prospect" },
             new Tag { Name = "Important" }
         );
-        await db.SaveChangesAsync();
     }
 }
 

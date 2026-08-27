@@ -63,13 +63,21 @@ export const SIDEBAR_PAGES: SearchPageItem[] = [
   {
     id: 7,
     type: 'page',
-    title: 'Invoices & Payments',
-    subtitle: 'Billing, Stripe online checkout & payment status',
+    title: 'Invoices & Billing',
+    subtitle: 'Commercial invoices, tax calculations & payment status',
     route: '/invoices',
-    keywords: ['invoices', 'billing', 'payments', 'stripe', 'checkout', 'receipts', 'money']
+    keywords: ['invoices', 'billing', 'statements', 'tax', 'receipts', 'money']
   },
   {
     id: 8,
+    type: 'page',
+    title: 'Payment Transactions & Ledger',
+    subtitle: 'Real-time ledger of received customer payments, Stripe & wires',
+    route: '/payments',
+    keywords: ['payments', 'transactions', 'ledger', 'stripe', 'checkout', 'receipts', 'wire', 'card', 'paid', 'collections']
+  },
+  {
+    id: 9,
     type: 'page',
     title: 'Tasks & Calendar',
     subtitle: 'To-dos, follow-up calls & meeting scheduling',

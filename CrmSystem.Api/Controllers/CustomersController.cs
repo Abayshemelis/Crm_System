@@ -164,6 +164,19 @@ public class CustomersController : ControllerBase
             return Unauthorized();
         }
 
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return BadRequest(new { message = "First name is required." });
+        if (string.IsNullOrWhiteSpace(request.LastName))
+            return BadRequest(new { message = "Last name is required." });
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { message = "Email address is required." });
+
+        var normalizedEmail = request.Email.Trim().ToLower();
+        if (await _db.Customers.AnyAsync(c => !c.IsDeleted && c.Email.ToLower() == normalizedEmail))
+        {
+            return BadRequest(new { message = "A customer with this email address already exists." });
+        }
+
         var assignedRepId = await ResolveAssignedRepIdAsync(request.AssignedRepId);
         if (assignedRepId is null)
         {
@@ -228,6 +241,19 @@ public class CustomersController : ControllerBase
         if (!_currentUser.CanAccessOwnedRecord(customer.AssignedRepId))
         {
             return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.FirstName))
+            return BadRequest(new { message = "First name is required." });
+        if (string.IsNullOrWhiteSpace(request.LastName))
+            return BadRequest(new { message = "Last name is required." });
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { message = "Email address is required." });
+
+        var normalizedEmail = request.Email.Trim().ToLower();
+        if (await _db.Customers.AnyAsync(c => !c.IsDeleted && c.CustomerId != id && c.Email.ToLower() == normalizedEmail))
+        {
+            return BadRequest(new { message = "A customer with this email address already exists." });
         }
 
         var assignedRepId = await ResolveAssignedRepIdAsync(request.AssignedRepId);

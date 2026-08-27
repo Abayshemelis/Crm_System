@@ -16,12 +16,12 @@ import { QuoteModal } from '../components/opportunities/QuoteModal';
 import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { EmailComposerModal } from '../components/email/EmailComposerModal';
 import { showToast } from '../lib/toast';
-import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send, Package, ShoppingBag, CheckCircle2, AlertTriangle, FileSignature, Receipt, Eye, Link as LinkIcon, ExternalLink, Pencil, DollarSign, CreditCard, Clock } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Building2, Tag, X, Plus, History, Check, XCircle, Trash2, Calendar, FileText, User, RefreshCw, Send, Package, ShoppingBag, CheckCircle2, AlertTriangle, FileSignature, Receipt, Eye, Link as LinkIcon, ExternalLink, Pencil, DollarSign, CreditCard, Clock, Copy, ShieldCheck } from 'lucide-react';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
 import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
-import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../lib/dateUtils';
+import { getExpectedCloseDateStatus, getStandardCloseDatePresets, formatDisplayDate, getLocalDateString } from '../lib/dateUtils';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -144,7 +144,11 @@ export const OpportunityDetailScreen: React.FC = () => {
 
   // Invoice Pay Modal State
   const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentDate, setPaymentDate] = useState<string>(() => getLocalDateString(new Date()));
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
+  const [paymentBankName, setPaymentBankName] = useState('Commercial Bank of Ethiopia (Nigd Bank)');
+  const [paymentRef, setPaymentRef] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
 
@@ -464,20 +468,34 @@ export const OpportunityDetailScreen: React.FC = () => {
 
   const handleOpenPayInvoice = (inv: any) => {
     setPayingInvoice(inv);
+    const balance = inv.balanceDue ?? (inv.status === 'Paid' ? 0 : (inv.totalAmount || inv.amount));
+    setPaymentAmount(balance > 0 ? balance : (inv.totalAmount || inv.amount));
+    setPaymentDate(getLocalDateString(new Date()));
     setPaymentMethod('Bank Transfer');
+    setPaymentBankName('Commercial Bank of Ethiopia (Nigd Bank)');
+    setPaymentRef('');
     setPaymentNotes('');
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingInvoice) return;
+    if (paymentAmount <= 0) {
+      showToast('Payment amount must be greater than zero', 'error');
+      return;
+    }
     setProcessingPayment(true);
     try {
-      await api.post(`/api/invoices/${payingInvoice.invoiceId}/pay`, {
+      const showBank = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer';
+      const res = await api.post<any>(`/api/invoices/${payingInvoice.invoiceId}/pay`, {
+        amount: paymentAmount,
         paymentMethod,
-        notes: paymentNotes || null,
+        bankName: showBank ? paymentBankName : undefined,
+        paymentDate: paymentDate || undefined,
+        transactionReference: paymentRef.trim() || undefined,
+        notes: paymentNotes.trim() || undefined,
       });
-      showToast('Payment recorded successfully! Invoice marked as Paid.');
+      showToast(res.message || 'Payment recorded & verified into Company account!', 'success');
       setPayingInvoice(null);
       await loadData();
     } catch (err: any) {
@@ -485,6 +503,23 @@ export const OpportunityDetailScreen: React.FC = () => {
     } finally {
       setProcessingPayment(false);
     }
+  };
+
+  const handleSendPaymentRequest = async (inv: any) => {
+    try {
+      const res = await api.post<any>(`/api/invoices/${inv.invoiceId}/send-payment-request`, {});
+      showToast(res.message || `Payment request link sent to customer!`, 'success');
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to send payment request', 'error');
+    }
+  };
+
+  const handleCopyPaymentLink = (inv: any) => {
+    const origin = window.location.origin;
+    const url = `${origin}/invoices/pay/${inv.invoiceNumber}`;
+    navigator.clipboard.writeText(url);
+    showToast(`Payment portal link copied: ${url}`, 'success');
   };
 
   const handleSyncStripe = async (inv: any) => {
@@ -495,17 +530,6 @@ export const OpportunityDetailScreen: React.FC = () => {
       await loadData();
     } catch (err: any) {
       showToast(err?.message || 'Failed to sync with Stripe', 'error');
-    }
-  };
-
-  const handleStripePay = async (inv: any) => {
-    try {
-      const successUrl = `${window.location.origin}/opportunities/${id}?paid_session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${window.location.origin}/opportunities/${id}?cancel_session_id=true`;
-      const res = await api.post<{ url: string }>(`/api/invoices/${inv.invoiceId}/stripe-checkout?successUrl=${encodeURIComponent(successUrl)}&cancelUrl=${encodeURIComponent(cancelUrl)}`, {});
-      window.location.href = res.url;
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to initiate Stripe checkout', 'error');
     }
   };
 
@@ -803,7 +827,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               <div className="detail-row" style={{ alignItems: 'flex-start' }}>
                 <Calendar size={15} style={{ marginTop: '3px' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <span>Expected Close: <strong>{opportunity.expectedCloseDate ? new Date(opportunity.expectedCloseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</strong></span>
+                  <span>Expected Close: <strong>{formatDisplayDate(opportunity.expectedCloseDate)}</strong></span>
                   {opportunity.expectedCloseDate && (() => {
                     const status = getExpectedCloseDateStatus(opportunity.expectedCloseDate, isWonStage, isLostStage);
                     return (
@@ -1256,7 +1280,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                         </Button>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div className="bounded-scroll-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px' }}>
                         {contracts.map(contract => {
                           const isSigned = contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt;
                           return (
@@ -1297,8 +1321,8 @@ export const OpportunityDetailScreen: React.FC = () => {
 
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                                   <span>Value: <strong style={{ color: '#10b981' }}>${contract.contractValue?.toLocaleString()}</strong></span>
-                                  <span>Start: {contract.startDate ? new Date(contract.startDate).toLocaleDateString() : '—'}</span>
-                                  <span>End: {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : '—'}</span>
+                                  <span>Start: {formatDisplayDate(contract.startDate)}</span>
+                                  <span>End: {formatDisplayDate(contract.endDate)}</span>
                                   {contract.signedByName && <span>Signed By: <strong>{contract.signedByName}</strong></span>}
                                 </div>
                               </div>
@@ -1402,12 +1426,18 @@ export const OpportunityDetailScreen: React.FC = () => {
                         </Button>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div className="bounded-scroll-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px' }}>
                         {invoices.map((inv: any) => {
-                          const isPaid = inv.status?.toLowerCase() === 'paid';
-                          const statusBg = isPaid ? 'rgba(16, 185, 129, 0.15)' : inv.status === 'Sent' ? 'rgba(99, 102, 241, 0.15)' : inv.status === 'Overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)';
-                          const statusColor = isPaid ? '#10b981' : inv.status === 'Sent' ? '#818cf8' : inv.status === 'Overdue' ? '#ef4444' : '#f59e0b';
-                          const statusBorder = isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : inv.status === 'Sent' ? '1px solid rgba(99, 102, 241, 0.3)' : inv.status === 'Overdue' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)';
+                          const invStatus = (inv.status || '').toLowerCase();
+                          const isPaid = invStatus === 'paid' || (inv.balanceDue !== undefined && inv.balanceDue <= 0.01 && (inv.amountPaid || 0) > 0);
+                          const isPartiallyPaid = invStatus === 'partiallypaid' || ((inv.amountPaid || 0) > 0 && (inv.balanceDue || 0) > 0.01);
+                          const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+                          const isPendingVerification = invStatus === 'pendingverification';
+                          const isPayable = !isPaid && !isCancelledOrRefunded && !isPendingVerification;
+
+                          const statusBg = isPaid ? 'rgba(16, 185, 129, 0.15)' : isPartiallyPaid ? 'rgba(99, 102, 241, 0.15)' : inv.status === 'Sent' ? 'rgba(99, 102, 241, 0.15)' : isCancelledOrRefunded ? 'rgba(239, 68, 68, 0.15)' : inv.status === 'Overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+                          const statusColor = isPaid ? '#10b981' : isPartiallyPaid ? '#818cf8' : inv.status === 'Sent' ? '#818cf8' : isCancelledOrRefunded ? '#ef4444' : inv.status === 'Overdue' ? '#ef4444' : '#f59e0b';
+                          const statusBorder = isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : isPartiallyPaid ? '1px solid rgba(99, 102, 241, 0.3)' : inv.status === 'Sent' ? '1px solid rgba(99, 102, 241, 0.3)' : isCancelledOrRefunded ? '1px solid rgba(239, 68, 68, 0.3)' : inv.status === 'Overdue' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)';
 
                           return (
                             <div
@@ -1438,7 +1468,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                                       border: statusBorder
                                     }}
                                   >
-                                    {inv.status}
+                                    {isPaid ? 'Paid' : isPartiallyPaid ? 'Partially Paid' : isPendingVerification ? 'Pending Verification' : isCancelledOrRefunded ? inv.status : inv.status}
                                   </span>
                                   {inv.contract?.contractNumber && (
                                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
@@ -1448,57 +1478,51 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                                   <span>Total: <strong style={{ color: '#10b981', fontSize: '0.9rem' }}>${(inv.totalAmount ?? inv.amount)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                  {inv.amountPaid > 0 && <span style={{ color: '#10b981' }}>Paid: ${Number(inv.amountPaid).toLocaleString()}</span>}
+                                  {inv.balanceDue > 0 && <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Due: ${Number(inv.balanceDue).toLocaleString()}</span>}
                                   {inv.taxAmount > 0 && <span>(Tax: ${inv.taxAmount.toLocaleString()})</span>}
-                                  <span>Issue: {inv.issueDate ? new Date(inv.issueDate).toLocaleDateString() : '—'}</span>
-                                  <span>Due: {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—'}</span>
+                                  <span>Issue: {formatDisplayDate(inv.issueDate)}</span>
+                                  <span>Due: {formatDisplayDate(inv.dueDate)}</span>
                                   {isPaid && inv.paymentMethod && <span>Paid via: <strong>{inv.paymentMethod}</strong></span>}
                                 </div>
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                                {inv.paymentUrl && !isPaid && (
-                                  <a
-                                    href={inv.paymentUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      padding: '0.35rem 0.75rem',
-                                      borderRadius: '6px',
-                                      fontSize: '0.78rem',
-                                      fontWeight: 600,
-                                      background: '#6366f1',
-                                      color: '#ffffff',
-                                      textDecoration: 'none',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '0.35rem'
-                                    }}
+                                {isPayable && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleSendPaymentRequest(inv)}
+                                    style={{ fontSize: '0.8rem' }}
+                                    title="Send payment request link to customer"
                                   >
-                                    <CreditCard size={13} /> Pay Online <ExternalLink size={11} />
-                                  </a>
+                                    <Send size={13} style={{ marginRight: 3, color: 'var(--accent-primary)' }} /> Send Link
+                                  </Button>
                                 )}
 
-                                {!isPaid && (
+                                {isPayable && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCopyPaymentLink(inv)}
+                                    style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                                    title="Copy customer payment portal link"
+                                  >
+                                    <Copy size={13} style={{ marginRight: 3 }} /> {isPartiallyPaid ? 'Copy Partial Link' : 'Copy Link'}
+                                  </Button>
+                                )}
+
+                                {!isPaid && !isCancelledOrRefunded && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleOpenPayInvoice(inv)}
                                     style={{ border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.8rem' }}
-                                    title="Record payment received"
+                                    title="Record payment received from customer"
                                   >
-                                    <DollarSign size={13} style={{ marginRight: 3 }} /> Pay
+                                    <DollarSign size={13} style={{ marginRight: 3 }} /> Record Payment
                                   </Button>
                                 )}
-
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleSyncStripe(inv)}
-                                  style={{ border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
-                                  title="Sync payment with Stripe"
-                                >
-                                  <RefreshCw size={13} style={{ marginRight: 3 }} /> Sync
-                                </Button>
 
                                 <Button
                                   variant="ghost"
@@ -1549,20 +1573,22 @@ export const OpportunityDetailScreen: React.FC = () => {
                     <button
                       type="button"
                       className="btn-outline-sm"
-                      onClick={() => { setEditTask(null); setShowTaskModal(true); }}
+                      onClick={() => navigate(`/tasks/new?opportunityId=${opportunity.opportunityId}${opportunity.customerId ? `&customerId=${opportunity.customerId}` : ''}`)}
                     >
                       <Plus size={14} /> New Task
                     </button>
                   </div>
-                  <TaskListGroup
-                    overdue={groupedTasks.overdue}
-                    dueToday={groupedTasks.dueToday}
-                    upcoming={groupedTasks.upcoming}
-                    completed={groupedTasks.completed}
-                    onTaskComplete={handleTaskComplete}
-                    onTaskDelete={loadData}
-                    onTaskClick={(t) => { setEditTask(t); setShowTaskModal(true); }}
-                  />
+                  <div className="bounded-scroll-container" style={{ maxHeight: '480px' }}>
+                    <TaskListGroup
+                      overdue={groupedTasks.overdue}
+                      dueToday={groupedTasks.dueToday}
+                      upcoming={groupedTasks.upcoming}
+                      completed={groupedTasks.completed}
+                      onTaskComplete={handleTaskComplete}
+                      onTaskDelete={loadData}
+                      onTaskClick={(t) => navigate(`/tasks/${t.crmTaskId}/edit`)}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1579,25 +1605,6 @@ export const OpportunityDetailScreen: React.FC = () => {
           </Card>
         </div>
       </div>
-
-      {showTaskModal && (
-        <TaskFormModal
-          task={editTask}
-          opportunityId={opportunity.opportunityId}
-          currentUserId={currentUser?.userId ?? 0}
-          users={users.length > 0 ? users : (currentUser ? [{ id: currentUser.userId, name: currentUser.name }] : [])}
-          activities={allActivities.map(a => ({ id: a.activityId, name: a.subject }))}
-          activityTypes={activityTypes.map(at => ({ id: at.id, name: at.name }))}
-          statuses={taskStatuses}
-          onSaved={handleTaskSaved}
-          onDeleted={() => {
-            setShowTaskModal(false);
-            setEditTask(null);
-            loadData();
-          }}
-          onClose={() => { setShowTaskModal(false); setEditTask(null); }}
-        />
-      )}
 
       {showQuoteModal && opportunity && (
         <QuoteModal
@@ -1624,36 +1631,46 @@ export const OpportunityDetailScreen: React.FC = () => {
 
       {/* Create Contract Modal */}
       {showCreateContractModal && opportunity && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
-            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <FileSignature size={18} style={{ color: '#818cf8' }} /> {contracts.length > 0 ? 'Edit Commercial Contract' : 'Create Commercial Contract'}
-              </h3>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(129, 140, 248, 0.1) 100%)',
+                  color: 'var(--accent-primary)',
+                  padding: '0.5rem',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  display: 'flex'
+                }}>
+                  <FileSignature size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {contracts.length > 0 ? 'Edit Commercial Contract' : 'Create Commercial Contract'}
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Draft a legal agreement linked to this deal
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowCreateContractModal(false)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
             {contracts.length > 0 && (
-              <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '6px', fontSize: '0.78rem', color: '#818cf8', marginBottom: '1rem' }}>
+              <div style={{ padding: '0.75rem 1rem', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '10px', fontSize: '0.82rem', color: '#818cf8', marginBottom: '1.25rem' }}>
                 ℹ️ Contract <strong>{contracts[0].contractNumber}</strong> is already attached to this deal. Submitting will update the existing contract.
               </div>
             )}
 
             <form onSubmit={handleCreateContractSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Contract Title *
                 </label>
                 <Input
@@ -1666,7 +1683,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Contract Value ($) *
                   </label>
                   <Input
@@ -1679,25 +1696,25 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Customer Account
                   </label>
-                  <div style={{ padding: '0.55rem 0.75rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.85rem', color: '#f8fafc', border: '1px solid #334155' }}>
-                    {opportunity.customerFirstName} {opportunity.customerLastName}
+                  <div style={{ padding: '0.55rem 0.85rem', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text-primary)', border: '1px solid var(--border-color)', fontWeight: 600 }}>
+                    👤 {opportunity.customerFirstName} {opportunity.customerLastName}
                   </div>
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  Standard Terms & Conditions
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Standard Terms &amp; Conditions
                 </label>
                 <textarea
                   value={newContractTerms}
                   onChange={e => setNewContractTerms(e.target.value)}
                   rows={3}
                   className="input-field"
-                  style={{ width: '100%', fontSize: '0.82rem' }}
+                  style={{ width: '100%', fontSize: '0.82rem', background: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)', borderRadius: '8px' }}
                 />
               </div>
 
@@ -1705,7 +1722,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Button type="button" variant="ghost" onClick={() => setShowCreateContractModal(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={creatingContract}>
+                <Button type="submit" variant="primary" disabled={creatingContract} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)' }}>
                   {creatingContract ? 'Creating…' : 'Generate Contract'}
                 </Button>
               </div>
@@ -1716,31 +1733,41 @@ export const OpportunityDetailScreen: React.FC = () => {
 
       {/* Edit Contract Modal */}
       {editingContract && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
-            width: '100%', maxWidth: '540px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Pencil size={18} style={{ color: '#818cf8' }} /> Edit Contract ({editingContract.contractNumber})
-              </h3>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(129, 140, 248, 0.1) 100%)',
+                  color: 'var(--accent-primary)',
+                  padding: '0.5rem',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  display: 'flex'
+                }}>
+                  <Pencil size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Edit Contract ({editingContract.contractNumber})
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Update commercial agreement details
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditingContract(null)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleEditContractSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Contract Title *
                 </label>
                 <Input
@@ -1752,7 +1779,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Contract Value ($) *
                   </label>
                   <Input
@@ -1765,7 +1792,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Contract Status
                   </label>
                   <SelectDown
@@ -1784,7 +1811,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Start Date
                   </label>
                   <Input
@@ -1794,7 +1821,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     End Date
                   </label>
                   <Input
@@ -1806,20 +1833,20 @@ export const OpportunityDetailScreen: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  Terms & Conditions
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  Terms &amp; Conditions
                 </label>
                 <textarea
                   value={editContractTerms}
                   onChange={e => setEditContractTerms(e.target.value)}
                   rows={2}
                   className="input-field"
-                  style={{ width: '100%', fontSize: '0.82rem' }}
+                  style={{ width: '100%', fontSize: '0.82rem', background: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)', borderRadius: '8px' }}
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Internal Notes
                 </label>
                 <Input
@@ -1833,7 +1860,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Button type="button" variant="ghost" onClick={() => setEditingContract(null)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={savingContract}>
+                <Button type="submit" variant="primary" disabled={savingContract} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)' }}>
                   {savingContract ? 'Saving…' : 'Save Changes'}
                 </Button>
               </div>
@@ -1844,32 +1871,42 @@ export const OpportunityDetailScreen: React.FC = () => {
 
       {/* Create Invoice Modal */}
       {showCreateInvoiceModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
-            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Receipt size={18} style={{ color: '#10b981' }} /> Create Billing Invoice
-              </h3>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                  color: '#10b981',
+                  padding: '0.5rem',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  display: 'flex'
+                }}>
+                  <Receipt size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Create Billing Invoice
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Issue commercial billing invoice for this deal
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowCreateInvoiceModal(false)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleCreateInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Invoice Amount ($) *
                   </label>
                   <Input
@@ -1882,7 +1919,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Tax Rate (%)
                   </label>
                   <Input
@@ -1898,7 +1935,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               {contracts.length > 0 && (
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Link to Legal Contract
                   </label>
                   <SelectDown
@@ -1914,7 +1951,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Issue Date
                   </label>
                   <Input
@@ -1925,7 +1962,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Due Date
                   </label>
                   <Input
@@ -1938,7 +1975,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Notes
                 </label>
                 <Input
@@ -1948,9 +1985,9 @@ export const OpportunityDetailScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ padding: '0.6rem 0.85rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.82rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', border: '1px solid #334155' }}>
+              <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
                 <span>Grand Total (incl. Tax):</span>
-                <strong style={{ color: '#10b981', fontSize: '0.95rem' }}>
+                <strong style={{ color: '#10b981', fontSize: '1.15rem' }}>
                   ${(newInvoiceAmount + (newInvoiceAmount * (newInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </strong>
               </div>
@@ -1959,7 +1996,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Button type="button" variant="ghost" onClick={() => setShowCreateInvoiceModal(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={creatingInvoice} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
+                <Button type="submit" variant="primary" disabled={creatingInvoice} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)' }}>
                   {creatingInvoice ? 'Generating…' : 'Generate Invoice'}
                 </Button>
               </div>
@@ -1970,32 +2007,42 @@ export const OpportunityDetailScreen: React.FC = () => {
 
       {/* Edit Invoice Modal */}
       {editingInvoice && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
-            width: '100%', maxWidth: '520px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Pencil size={18} style={{ color: '#10b981' }} /> Edit Invoice ({editingInvoice.invoiceNumber})
-              </h3>
+        <div className="crm-modal-overlay">
+          <div className="crm-modal-container">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                  color: '#10b981',
+                  padding: '0.5rem',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  display: 'flex'
+                }}>
+                  <Pencil size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Edit Invoice ({editingInvoice.invoiceNumber})
+                  </h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    Modify invoice line amounts and schedule
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditingInvoice(null)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleEditInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Invoice Amount ($) *
                   </label>
                   <Input
@@ -2008,7 +2055,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Tax Rate (%)
                   </label>
                   <Input
@@ -2023,7 +2070,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Invoice Status
                 </label>
                 <SelectDown
@@ -2041,7 +2088,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Issue Date
                   </label>
                   <Input
@@ -2052,7 +2099,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                     Due Date
                   </label>
                   <Input
@@ -2065,7 +2112,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
                   Notes
                 </label>
                 <Input
@@ -2075,9 +2122,9 @@ export const OpportunityDetailScreen: React.FC = () => {
                 />
               </div>
 
-              <div style={{ padding: '0.6rem 0.85rem', background: '#0f172a', borderRadius: '6px', fontSize: '0.82rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', border: '1px solid #334155' }}>
+              <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
                 <span>Calculated Total (incl. Tax):</span>
-                <strong style={{ color: '#10b981', fontSize: '0.95rem' }}>
+                <strong style={{ color: '#10b981', fontSize: '1.15rem' }}>
                   ${(editInvoiceAmount + (editInvoiceAmount * (editInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </strong>
               </div>
@@ -2086,7 +2133,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Button type="button" variant="ghost" onClick={() => setEditingInvoice(null)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={savingInvoice}>
+                <Button type="submit" variant="primary" disabled={savingInvoice} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)' }}>
                   {savingInvoice ? 'Saving…' : 'Save Changes'}
                 </Button>
               </div>
@@ -2095,79 +2142,176 @@ export const OpportunityDetailScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Record Payment Modal */}
-      {payingInvoice && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
-        }}>
-          <div style={{
-            background: '#1e293b', borderRadius: '1rem', border: '1px solid #334155',
-            width: '100%', maxWidth: '480px', padding: '1.5rem', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <DollarSign size={18} style={{ color: '#10b981' }} /> Record Payment for {payingInvoice.invoiceNumber}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setPayingInvoice(null)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
+      {/* RECORD / VERIFY CUSTOMER PAYMENT MODAL */}
+      {payingInvoice && (() => {
+        const remainingBal = payingInvoice.balanceDue ?? (payingInvoice.status === 'Paid' ? 0 : (payingInvoice.totalAmount || payingInvoice.amount));
+        const isBankMethod = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer';
+
+        return (
+          <div className="crm-modal-overlay">
+            <div className="crm-modal-container" style={{ maxWidth: '520px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: '#10b981',
+                    padding: '0.5rem',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    display: 'flex'
+                  }}>
+                    <ShieldCheck size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Record &amp; Verify Payment
+                    </h3>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Invoice #{payingInvoice.invoiceNumber} · Internal Ledger Verification
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPayingInvoice(null)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Internal Verification Notice */}
+              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
+                <div>
+                  <strong style={{ color: 'var(--text-primary)' }}>Internal Verification:</strong> Record that the <strong>Customer (Payer)</strong> has made a verified payment to <strong>Our Company (Receiver)</strong>.
+                </div>
+              </div>
+
+              {/* Payer vs Receiver Card */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>👤 Payer (Customer)</div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>
+                    {payingInvoice.customerName || (opportunity ? `${opportunity.customerFirstName} ${opportunity.customerLastName}` : 'Customer')}
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                    {payingInvoice.companyName || payingInvoice.customerEmail || opportunity?.customerEmail}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>🏢 Receiver (Our Company)</div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>Enterprise CRM Solutions</div>
+                  <div style={{ fontSize: '0.76rem', color: '#10b981', fontWeight: 600 }}>Balance: ${remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                </div>
+              </div>
+
+              <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="crm-form-2col">
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Amount Paid ($) *
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={remainingBal > 0 ? remainingBal : (payingInvoice.totalAmount || payingInvoice.amount)}
+                      value={paymentAmount}
+                      onChange={e => setPaymentAmount(Number(e.target.value))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Payment Date *
+                    </label>
+                    <Input
+                      type="date"
+                      value={paymentDate}
+                      onChange={e => setPaymentDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Payment Method (How Customer Paid) *
+                  </label>
+                  <SearchableSelect
+                    value={paymentMethod}
+                    onChange={val => setPaymentMethod(String(val))}
+                    options={[
+                      { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
+                      { value: 'Stripe', label: '💳 Stripe (Credit / Debit Card)' },
+                      { value: 'Cash', label: '💵 Cash Settlement' },
+                      { value: 'Check', label: '📑 Business Check / Cheque' },
+                      { value: 'Telebirr / CBE Birr', label: '📱 Telebirr / CBE Birr' },
+                      { value: 'SWIFT Wire Transfer', label: '🌐 SWIFT International Wire' },
+                      { value: 'Other', label: '⚡ Other Supported Method' }
+                    ]}
+                  />
+                </div>
+
+                {isBankMethod && (
+                  <div>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                      Bank Name (Customer's / Receiving Bank)
+                    </label>
+                    <SearchableSelect
+                      value={paymentBankName}
+                      onChange={val => setPaymentBankName(String(val))}
+                      options={[
+                        { value: 'Commercial Bank of Ethiopia (Nigd Bank)', label: 'Commercial Bank of Ethiopia (Nigd Bank)' },
+                        { value: 'Awash Bank', label: 'Awash Bank' },
+                        { value: 'Bank of Abyssinia', label: 'Bank of Abyssinia' },
+                        { value: 'Dashen Bank', label: 'Dashen Bank' },
+                        { value: 'Nib International Bank', label: 'Nib International Bank' },
+                        { value: 'Zemen Bank', label: 'Zemen Bank' },
+                        { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
+                        { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
+                        { value: 'Other Supported Bank', label: 'Other Supported Bank' }
+                      ]}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Transaction / Check Reference (Optional)
+                  </label>
+                  <Input
+                    value={paymentRef}
+                    onChange={e => setPaymentRef(e.target.value)}
+                    placeholder="e.g. Bank Ref #TXN-928374, Stripe ID, or Check #4092"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    Accounting Remarks (Optional)
+                  </label>
+                  <Input
+                    value={paymentNotes}
+                    onChange={e => setPaymentNotes(e.target.value)}
+                    placeholder="e.g. Deposit payment / Verified against bank statement"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <Button type="button" variant="ghost" onClick={() => setPayingInvoice(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" disabled={processingPayment} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)' }}>
+                    <CheckCircle2 size={16} style={{ marginRight: 6 }} /> {processingPayment ? 'Recording…' : 'Confirm & Verify Payment'}
+                  </Button>
+                </div>
+              </form>
             </div>
-
-            <div style={{ padding: '0.75rem 1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Payment Amount:</span>
-              <strong style={{ fontSize: '1.15rem', color: '#10b981' }}>
-                ${(payingInvoice.totalAmount ?? payingInvoice.amount)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </strong>
-            </div>
-
-            <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  Payment Method *
-                </label>
-                <SelectDown
-                  value={paymentMethod}
-                  onChange={val => setPaymentMethod(String(val))}
-                  options={[
-                    { value: 'Bank Transfer', label: 'Bank Transfer (Wire / ACH)' },
-                    { value: 'Credit Card', label: 'Credit Card' },
-                    { value: 'Check', label: 'Check' },
-                    { value: 'Cash', label: 'Cash' },
-                    { value: 'Stripe', label: 'Stripe' },
-                    { value: 'Other', label: 'Other' }
-                  ]}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  Payment Notes / Reference
-                </label>
-                <Input
-                  value={paymentNotes}
-                  onChange={e => setPaymentNotes(e.target.value)}
-                  placeholder="e.g. Check #4021 or Transfer Ref 8847"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <Button type="button" variant="ghost" onClick={() => setPayingInvoice(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={processingPayment} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}>
-                  {processingPayment ? 'Recording…' : 'Confirm & Mark Paid'}
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Contract View & E-Signature Modal */}
       {selectedContractForModal && (

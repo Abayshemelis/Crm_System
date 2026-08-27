@@ -125,21 +125,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profileImage: cachedAvatar || null,
     });
 
-    // Default the active working role from localStorage or highest available role
-    const savedRole = localStorage.getItem('selectedRole') as 'Admin' | 'Manager' | 'SalesRep' | null;
+    // Default the active working role — stored per-user so different accounts never share a role preference
     const finalRoles = roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'];
+    const userRoleKey = userId ? `crm_role_${userId}` : null;
+    const savedRole = userRoleKey
+      ? (localStorage.getItem(userRoleKey) as 'Admin' | 'Manager' | 'SalesRep' | null)
+      : null;
+
     if (savedRole && finalRoles.includes(savedRole)) {
+      // Restore the user's previously chosen role preference
       setSelectedRole(savedRole);
-    } else if (finalRoles.includes('Admin')) {
-      setSelectedRole('Admin');
-      localStorage.setItem('selectedRole', 'Admin');
     } else if (finalRoles.includes('Manager')) {
+      // Manager takes precedence — a user with Manager role should start as Manager,
+      // even if they also have Admin. They can switch to Admin view in the profile.
       setSelectedRole('Manager');
-      localStorage.setItem('selectedRole', 'Manager');
+      if (userRoleKey) localStorage.setItem(userRoleKey, 'Manager');
+    } else if (finalRoles.includes('Admin')) {
+      // Pure Admin-only accounts (no Manager role)
+      setSelectedRole('Admin');
+      if (userRoleKey) localStorage.setItem(userRoleKey, 'Admin');
     } else {
       setSelectedRole('SalesRep');
-      localStorage.setItem('selectedRole', 'SalesRep');
+      if (userRoleKey) localStorage.setItem(userRoleKey, 'SalesRep');
     }
+    // Clean up the old shared global key so it no longer contaminates new logins
+    localStorage.removeItem('selectedRole');
   }, []);
 
   // Sync profile data from server
@@ -190,6 +200,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
     }
   }, [token, hydrateUser, syncServerProfile]);
+
+  // Listen for background token refreshes triggered by api.ts interceptor
+  useEffect(() => {
+    const handleTokenRefreshed = () => {
+      const newToken = localStorage.getItem('token');
+      if (newToken && newToken !== token) {
+        setToken(newToken);
+      }
+    };
+    window.addEventListener('auth:token-refreshed', handleTokenRefreshed);
+    return () => window.removeEventListener('auth:token-refreshed', handleTokenRefreshed);
+  }, [token]);
 
   // ── 5. LOGIN ACTION ─────────────────────────────────────────────────────────
   const login = (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => {
@@ -301,7 +323,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchRole = (role: 'Admin' | 'Manager' | 'SalesRep') => {
     if (user?.roles.includes(role)) {
       setSelectedRole(role);
-      localStorage.setItem('selectedRole', role);
+      const userRoleKey = user.userId ? `crm_role_${user.userId}` : null;
+      if (userRoleKey) localStorage.setItem(userRoleKey, role);
       // Dispatch custom event to notify all components to refetch with new role
       window.dispatchEvent(new CustomEvent('app:role-switched', { detail: { role } }));
     }

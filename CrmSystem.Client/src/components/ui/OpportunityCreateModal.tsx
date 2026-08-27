@@ -5,6 +5,7 @@ import { DatePicker } from './DatePicker';
 import { CustomerSearchSelect } from './CustomerSearchSelect';
 import { SearchableSelect } from './SearchableSelect';
 import { api } from '../../lib/api';
+import { validateName, validatePositiveNumber, validateRequiredSelect, validateMaxLength } from '../../lib/validators';
 import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../../lib/dateUtils';
 import '../../screens/screens.css';
@@ -88,12 +89,23 @@ export const OpportunityCreateModal: React.FC<OpportunityCreateModalProps> = ({
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!customerId) newErrors.customerId = 'Please select an existing customer.';
-    if (!title.trim()) newErrors.title = 'Title is required.';
-    if (!stageId) newErrors.stageId = 'Stage is required.';
-    if (!estimatedValue.trim()) newErrors.estimatedValue = 'Estimated value is required.';
-    else if (Number(estimatedValue) < 0) newErrors.estimatedValue = 'Estimated value must be positive.';
-    if (!ownerId) newErrors.ownerId = 'Owner is required.';
+    const custErr = validateRequiredSelect(customerId, 'Customer');
+    if (custErr) newErrors.customerId = custErr;
+
+    const titleErr = validateName(title, 'Opportunity title', 2, 150);
+    if (titleErr) newErrors.title = titleErr;
+
+    const stageErr = validateRequiredSelect(stageId, 'Pipeline stage');
+    if (stageErr) newErrors.stageId = stageErr;
+
+    const valErr = validatePositiveNumber(estimatedValue, 'Estimated deal value', true);
+    if (valErr) newErrors.estimatedValue = valErr;
+
+    const ownerErr = validateRequiredSelect(ownerId, 'Deal owner');
+    if (ownerErr) newErrors.ownerId = ownerErr;
+
+    const descErr = validateMaxLength(description, 1000, 'Description');
+    if (descErr) newErrors.description = descErr;
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

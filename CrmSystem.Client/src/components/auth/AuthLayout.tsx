@@ -79,9 +79,9 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
       </header>
 
       {/* ── 4. Centered Login Card ── */}
-      <main className="auth-center-content">
-        <div className="login-card-wrapper animate-fade-in">
-          <Card className="login-card glass-panel">
+      <main className="auth-center-content" style={{ maxWidth: '540px', width: '100%' }}>
+        <div className="login-card-wrapper animate-fade-in" style={{ width: '100%' }}>
+          <Card className="login-card glass-panel" style={{ maxWidth: '540px', width: '100%' }}>
             <div className="login-header">
               <div className="brand-logo-container">
                 <div className="brand-logo-glow" />

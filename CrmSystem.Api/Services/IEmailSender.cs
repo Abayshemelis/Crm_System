@@ -14,6 +14,20 @@ public class SmtpEmailSender : IEmailSender
 {
     private readonly IConfiguration _configuration;
 
+    public bool IsConfigured
+    {
+        get
+        {
+            var host = _configuration["Smtp:Host"];
+            var username = _configuration["Smtp:Username"];
+            var password = _configuration["Smtp:Password"]?.Replace(" ", "").Trim();
+            return !string.IsNullOrWhiteSpace(host) &&
+                   !string.IsNullOrWhiteSpace(username) &&
+                   !string.IsNullOrWhiteSpace(password) &&
+                   !username.Contains("your-mailtrap", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     public SmtpEmailSender(IConfiguration configuration)
     {
         _configuration = configuration;
@@ -41,8 +55,8 @@ public class SmtpEmailSender : IEmailSender
         if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) ||
             username.Contains("your-mailtrap", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine($"[Email] Dev Mode / Credentials missing. Email to {toEmail} with subject '{subject}' logged locally.");
-            return;
+            Console.WriteLine($"[Email] Credentials missing. Email to {toEmail} with subject '{subject}' logged locally.");
+            throw new InvalidOperationException("Email provider (SMTP / Resend) credentials are not configured in appsettings.json. Please configure your SMTP server or Resend API key to deliver real emails.");
         }
 
         try

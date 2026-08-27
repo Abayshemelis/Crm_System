@@ -6,10 +6,15 @@ import { Input } from '../components/ui/Input';
 import {
   Palette, Plus, Trash2, Edit2, Check, X,
   Layers, Tag, Globe, List, Bell, Activity, Package,
-  Sparkles, Sun, Moon, Eye
+  Sparkles, Sun, Moon, Eye, Building2,
+  Mail, Phone, MapPin, Hash, Clock, Image, Save, Building, Upload
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useSystemProfile } from '../context/SystemProfileContext';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { PhoneInput } from '../components/ui/PhoneInput';
+import { COUNTRIES, CURRENCIES, TIMEZONES } from '../lib/constants';
 import './screens.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -37,7 +42,7 @@ interface Product {
 interface ProductCategory { id: number; name: string; }
 interface ProductStatus { id: number; name: string; isSelectable: boolean; }
 
-type MainTab = 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme' | 'custom-fields';
+type MainTab = 'system-profile' | 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme' | 'custom-fields';
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
 
 import { ThemePreset, ATTRACTIVE_THEMES, applyThemePreset } from '../lib/theme';
@@ -273,8 +278,136 @@ const toast = (message: string, type: 'success' | 'error' = 'success') =>
 // ═══════════════════════════════════════════════════════════════════════════════
 export const SettingsScreen: React.FC = () => {
   const { isManagerOrAboveSelected } = useAuth();
-  const [activeTab, setActiveTab] = useState<MainTab>('pipeline');
+  const [activeTab, setActiveTab] = useState<MainTab>('system-profile');
   const [statusSubTab, setStatusSubTab] = useState<StatusSubTab>('lead');
+
+  // System Profile State
+  const { profile, refreshProfile } = useSystemProfile();
+  const [crmName, setCrmName] = useState('');
+  const [crmShortName, setCrmShortName] = useState('');
+  const [crmLogo, setCrmLogo] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [website, setWebsite] = useState('');
+  const [address, setAddress] = useState('');
+  const [country, setCountry] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [timezone, setTimezone] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (profile) {
+      setCrmName(profile.systemName || '');
+      setCrmShortName(profile.companyName || '');
+      setCrmLogo(profile.logoUrl || '');
+      setEmail(profile.email || '');
+      setPhone(profile.phone || '');
+      setWebsite(profile.website || '');
+      setAddress(profile.address || '');
+      setCountry(profile.country || '');
+      setCurrency(profile.currency || '');
+      setTimezone(profile.timezone || '');
+    }
+  }, [profile]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File is too large. Maximum size is 5MB.');
+      return;
+    }
+
+    try {
+      setUploadingLogo(true);
+      const res = await api.uploadSystemLogo(file);
+      setCrmLogo(res.url);
+    } catch (err: any) {
+      console.error('Failed to upload logo', err);
+      alert('Failed to upload logo: ' + err.message);
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const validateSystemProfile = () => {
+    const newErrors: Record<string, string> = {};
+    if (!crmName || !crmName.trim()) {
+      newErrors.systemName = 'System Name is required.';
+    } else if (crmName.trim().length > 100) {
+      newErrors.systemName = 'System Name cannot exceed 100 characters.';
+    }
+    
+    if (crmShortName && crmShortName.trim().length > 100) {
+      newErrors.companyName = 'Company Name cannot exceed 100 characters.';
+    }
+    
+    if (email && email.trim()) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        newErrors.email = 'Please enter a valid email address.';
+      } else if (email.trim().length > 150) {
+        newErrors.email = 'Email cannot exceed 150 characters.';
+      }
+    }
+    
+    if (website && website.trim()) {
+      if (!/^https?:\/\/.+\..+/.test(website.trim())) {
+        newErrors.website = 'Please enter a valid website URL.';
+      } else if (website.trim().length > 200) {
+        newErrors.website = 'Website URL cannot exceed 200 characters.';
+      }
+    }
+
+    if (phone && phone.trim()) {
+      if (!/^\+?[1-9]\d{1,14}$/.test(phone.replace(/[\s-]/g, ''))) {
+        newErrors.phone = 'Please enter a valid phone number format (e.g. +251...).';
+      }
+    }
+
+    if (address && address.trim().length > 250) {
+      newErrors.address = 'Address cannot exceed 250 characters.';
+    }
+
+    if (crmLogo && crmLogo.trim()) {
+      if (!crmLogo.startsWith('/uploads') && !/^https?:\/\//.test(crmLogo.trim())) {
+        newErrors.logo = 'Please enter a valid image URL or upload an image.';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSaveSystemProfile = async () => {
+    if (!validateSystemProfile()) {
+      toast('Please correct the highlighted errors.', 'error');
+      return;
+    }
+    try {
+      await api.updateSystemProfile({
+        systemName: crmName,
+        companyName: crmShortName,
+        logoUrl: crmLogo,
+        email,
+        phone,
+        website,
+        address,
+        country,
+        currency,
+        timezone
+      });
+      await refreshProfile();
+      toast('System profile saved successfully!');
+    } catch (err: any) {
+      toast(err.message || 'Failed to save system profile.', 'error');
+    }
+  };
 
   // ── Theme State ──
   const [activePreset, setActivePreset] = useState<ThemePreset>(() => {
@@ -669,6 +802,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'system-profile', label: 'System Profile', icon: <Building2 size={15} /> },
     { id: 'pipeline', label: 'Pipeline Stages', icon: <Layers size={15} /> },
     { id: 'tags', label: 'Tags', icon: <Tag size={15} /> },
     { id: 'products', label: 'Products', icon: <Package size={15} /> },
@@ -729,6 +863,185 @@ export const SettingsScreen: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* ── System Profile ──────────────────────────────────────────────────── */}
+      {activeTab === 'system-profile' && (
+        <Card className="glass-panel" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '2rem 2rem 1.5rem', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'rgba(99, 102, 241, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
+                <Building2 size={24} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>System Profile</h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0.25rem 0 0' }}>
+                  Manage the primary identity and global configuration for this CRM instance.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Card.Content style={{ padding: '2rem' }}>
+            {isManagerOrAboveSelected ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: '800px' }}>
+                
+                {/* Identity Section */}
+                <div style={{ background: 'var(--bg-tertiary)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
+                    <Building size={16} color="#3b82f6" /> Organization Identity
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>CRM System Name *</label>
+                      <Input value={crmName} onChange={e => setCrmName(e.target.value)} error={errors.systemName} placeholder="e.g. KENOVA CRM" style={{ background: 'var(--bg-primary)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Organization Name</label>
+                      <Input value={crmShortName} onChange={e => setCrmShortName(e.target.value)} error={errors.companyName} placeholder="e.g. KENOVA" style={{ background: 'var(--bg-primary)' }} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Image size={14} /> Logo Image (Local Upload or URL)
+                      </label>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '250px' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <Button 
+                              variant="secondary" 
+                              onClick={() => fileInputRef.current?.click()} 
+                              disabled={uploadingLogo}
+                              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+                            >
+                              <Upload size={16} /> {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                            </Button>
+                            <input 
+                              type="file" 
+                              accept="image/png, image/jpeg, image/gif, image/webp, image/svg+xml"
+                              ref={fileInputRef} 
+                              style={{ display: 'none' }} 
+                              onChange={handleLogoUpload} 
+                            />
+                            <div style={{ flex: 1, minWidth: '150px' }}>
+                              <Input value={crmLogo} onChange={e => setCrmLogo(e.target.value)} error={errors.logo} placeholder="Or enter image URL here (e.g. https://...)" style={{ background: 'var(--bg-primary)', width: '100%' }} />
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Maximum file size: 5MB. Supported formats: PNG, JPG, WEBP, GIF, SVG.</span>
+                        </div>
+                        {crmLogo && (
+                          <div style={{ width: '60px', height: '60px', borderRadius: '8px', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px', border: '1px solid var(--border-color)', flexShrink: 0 }}>
+                            <img src={crmLogo} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Contact Section */}
+                <div style={{ background: 'var(--bg-tertiary)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
+                    <Mail size={16} color="#a855f7" /> Contact Information
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Mail size={14} /> Official Email
+                      </label>
+                      <Input value={email} onChange={e => setEmail(e.target.value)} error={errors.email} placeholder="contact@example.com" style={{ background: 'var(--bg-primary)' }} />
+                    </div>
+                    <div>
+                      <PhoneInput 
+                        label="Phone Number"
+                        value={phone} 
+                        onChange={setPhone} 
+                        error={errors.phone} 
+                        className="bg-primary"
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Globe size={14} /> Website URL (Optional)
+                      </label>
+                      <Input value={website} onChange={e => setWebsite(e.target.value)} error={errors.website} placeholder="https://example.com" style={{ background: 'var(--bg-primary)' }} />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Regional Section */}
+                <div style={{ background: 'var(--bg-tertiary)', borderRadius: '12px', padding: '1.5rem', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--text-primary)' }}>
+                    <MapPin size={16} color="#10b981" /> Regional Settings
+                  </h3>
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                      <MapPin size={14} /> Headquarters Address
+                    </label>
+                    <Input value={address} onChange={e => setAddress(e.target.value)} error={errors.address} placeholder="123 Main St, City, State, ZIP" style={{ background: 'var(--bg-primary)' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Globe size={14} /> Country
+                      </label>
+                      <SearchableSelect
+                        value={country}
+                        onChange={setCountry}
+                        options={COUNTRIES.map(c => ({ value: c, label: c }))}
+                        placeholder="Select Country"
+                        className="bg-primary"
+                        style={{ width: '100%' }}
+                        error={errors.country}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Hash size={14} /> Base Currency
+                      </label>
+                      <SearchableSelect
+                        value={currency}
+                        onChange={setCurrency}
+                        options={CURRENCIES}
+                        placeholder="Select Currency"
+                        className="bg-primary"
+                        style={{ width: '100%' }}
+                        error={errors.currency}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Clock size={14} /> Default Timezone
+                      </label>
+                      <SearchableSelect
+                        value={timezone}
+                        onChange={setTimezone}
+                        options={TIMEZONES}
+                        placeholder="Select Timezone"
+                        className="bg-primary"
+                        style={{ width: '100%' }}
+                        error={errors.timezone}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                  <Button variant="primary" onClick={handleSaveSystemProfile} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', fontSize: '0.9rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)', border: 'none' }}>
+                    <Save size={16} /> Save System Profile
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
+                <Building2 size={64} style={{ margin: '0 auto 1.5rem', opacity: 0.15 }} />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 0.5rem' }}>Restricted Access</h3>
+                <p style={{ maxWidth: '400px', margin: '0 auto', lineHeight: 1.5 }}>
+                  You do not have the required permissions to modify the System Profile. Please contact a System Administrator if changes are needed.
+                </p>
+              </div>
+            )}
+          </Card.Content>
+        </Card>
+      )}
 
       {/* ── Pipeline Stages ─────────────────────────────────────────────────── */}
       {activeTab === 'pipeline' && (

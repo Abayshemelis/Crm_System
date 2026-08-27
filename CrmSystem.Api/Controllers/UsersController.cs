@@ -148,16 +148,16 @@ public class UsersController : ControllerBase
 
         var isAdmin = User.IsInRole("Admin");
 
-        // Only Admin can create Manager users
-        if (role.Name == "Manager" && !isAdmin)
+        // Managers can only create Sales Representatives
+        if (!isAdmin && role.Name != "SalesRep")
         {
             return Forbid();
         }
 
-        // Prevent creating Admin users
+        // Prevent creating Admin users directly
         if (role.Name == "Admin")
         {
-            return BadRequest(new { message = "Cannot create Admin users." });
+            return BadRequest(new { message = "Cannot create Admin users directly." });
         }
 
         var user = new Identity
@@ -214,16 +214,27 @@ public class UsersController : ControllerBase
 
         var isAdmin = User.IsInRole("Admin");
 
-        // Only Admin can assign Manager role
-        if (role.Name == "Manager" && !isAdmin)
+        // Managers can only assign Sales Representative role
+        if (!isAdmin && role.Name != "SalesRep")
         {
             return Forbid();
         }
 
-        // Prevent assigning Admin role
+        // Prevent assigning Admin role (this endpoint is for basic role assignment, use /roles for Admin)
         if (role.Name == "Admin")
         {
-            return BadRequest(new { message = "Cannot assign Admin role." });
+            return BadRequest(new { message = "Cannot assign Admin role via this endpoint." });
+        }
+
+        // Prevent removing the last Admin role
+        var wasAdmin = await _db.IdentityRoles.AnyAsync(ir => ir.IdentityId == id && ir.Role!.Name == "Admin");
+        if (wasAdmin && role.Name != "Admin")
+        {
+            var activeAdminCount = await _db.IdentityRoles.CountAsync(ir => ir.Role!.Name == "Admin" && ir.Identity!.IsActive);
+            if (activeAdminCount <= 1)
+            {
+                return BadRequest(new { message = "Cannot remove the last active Admin role." });
+            }
         }
 
         // Sync single-role change to IdentityRoles (clear existing, add new)
@@ -273,7 +284,7 @@ public class UsersController : ControllerBase
 
         var isAdmin = User.IsInRole("Admin");
 
-        // Only Admin can assign Manager or Admin roles
+        // Managers can only assign Sales Representative role
         if (!isAdmin)
         {
             if (roles.Any(r => r.Name == "Manager" || r.Name == "Admin"))
@@ -286,6 +297,19 @@ public class UsersController : ControllerBase
         if (roles.Any(r => r.Name == "Admin") && !isAdmin)
         {
             return BadRequest(new { message = "Cannot assign Admin role." });
+        }
+
+        // Prevent removing the last Admin role
+        var wasAdmin = await _db.IdentityRoles.AnyAsync(ir => ir.IdentityId == id && ir.Role!.Name == "Admin");
+        var willBeAdmin = roles.Any(r => r.Name == "Admin");
+        
+        if (wasAdmin && !willBeAdmin)
+        {
+            var activeAdminCount = await _db.IdentityRoles.CountAsync(ir => ir.Role!.Name == "Admin" && ir.Identity!.IsActive);
+            if (activeAdminCount <= 1)
+            {
+                return BadRequest(new { message = "Cannot remove the last active Admin role." });
+            }
         }
 
         // Sync IdentityRoles: remove existing, add new
@@ -329,10 +353,42 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateStatusRequest request)
     {
-        var user = await _db.Identities.FindAsync(id);
+        var user = await _db.Identities
+            .Include(i => i.IdentityRoles)
+            .ThenInclude(ir => ir.Role)
+            .FirstOrDefaultAsync(i => i.IdentityId == id);
+            
         if (user is null)
         {
             return NotFound();
+        }
+
+        var currentUserId = GetCurrentUserId();
+
+        // Prevent self-status change
+        if (user.IdentityId == currentUserId)
+        {
+            return BadRequest(new { message = "You cannot change your own account status." });
+        }
+
+        var isAdmin = User.IsInRole("Admin");
+        var isTargetAdmin = user.IdentityRoles.Any(ir => ir.Role!.Name == "Admin");
+        var isTargetManager = user.IdentityRoles.Any(ir => ir.Role!.Name == "Manager");
+
+        // Managers cannot deactivate/activate Admins or Managers
+        if (!isAdmin && (isTargetAdmin || isTargetManager))
+        {
+            return Forbid();
+        }
+
+        // Prevent deactivating the last active Admin
+        if (!request.IsActive && isTargetAdmin && user.IsActive)
+        {
+            var activeAdminCount = await _db.IdentityRoles.CountAsync(ir => ir.Role!.Name == "Admin" && ir.Identity!.IsActive);
+            if (activeAdminCount <= 1)
+            {
+                return BadRequest(new { message = "Cannot deactivate the last active Admin." });
+            }
         }
 
         user.IsActive = request.IsActive;
@@ -345,7 +401,11 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "ManagerOrAbove")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var user = await _db.Identities.FindAsync(id);
+        var user = await _db.Identities
+            .Include(i => i.IdentityRoles)
+            .ThenInclude(ir => ir.Role)
+            .FirstOrDefaultAsync(i => i.IdentityId == id);
+            
         if (user is null)
         {
             return NotFound();
@@ -357,6 +417,26 @@ public class UsersController : ControllerBase
         if (user.IdentityId == currentUserId)
         {
             return BadRequest(new { message = "Cannot delete your own account." });
+        }
+
+        var isAdmin = User.IsInRole("Admin");
+        var isTargetAdmin = user.IdentityRoles.Any(ir => ir.Role!.Name == "Admin");
+        var isTargetManager = user.IdentityRoles.Any(ir => ir.Role!.Name == "Manager");
+
+        // Managers cannot delete Admins or Managers
+        if (!isAdmin && (isTargetAdmin || isTargetManager))
+        {
+            return Forbid();
+        }
+
+        // Prevent deleting the last Admin
+        if (isTargetAdmin)
+        {
+            var adminCount = await _db.IdentityRoles.CountAsync(ir => ir.Role!.Name == "Admin");
+            if (adminCount <= 1)
+            {
+                return BadRequest(new { message = "Cannot delete the last Admin account." });
+            }
         }
 
         // 1. Remove child security records
@@ -373,44 +453,30 @@ public class UsersController : ControllerBase
         _db.Notifications.RemoveRange(notifications);
 
         // 2. Reassign domain entity references to current Admin user to avoid FK constraint violations
-        var customers = await _db.Customers.IgnoreQueryFilters().Where(c => c.AssignedRepId == id).ToListAsync();
-        foreach (var c in customers) c.AssignedRepId = currentUserId;
+        // We use raw SQL to guarantee all updates hit the database directly, bypassing EF Core tracking/batching issues
+        // which previously caused FK constraint conflicts during cascade deletes.
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Leads SET AssignedRepId = {0} WHERE AssignedRepId = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Leads SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Leads SET ConvertedById = {0} WHERE ConvertedById = {1}", currentUserId, id);
+        
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Opportunities SET OwnerId = {0} WHERE OwnerId = {1}", currentUserId, id);
+        
+        await _db.Database.ExecuteSqlRawAsync("UPDATE CrmTasks SET AssignedToId = {0} WHERE AssignedToId = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE CrmTasks SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Activities SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE AuditLogs SET ChangedById = {0} WHERE ChangedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE StageHistories SET ChangedById = {0} WHERE ChangedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Attachments SET UploadedById = {0} WHERE UploadedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Invoices SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
 
-        var companies = await _db.Companies.IgnoreQueryFilters().Where(c => c.AssignedRepId == id).ToListAsync();
-        foreach (var c in companies) c.AssignedRepId = currentUserId;
-
-        var leads = await _db.Leads.IgnoreQueryFilters().Where(l => l.AssignedRepId == id || l.CreatedById == id || l.ConvertedById == id).ToListAsync();
-        foreach (var l in leads)
-        {
-            if (l.AssignedRepId == id) l.AssignedRepId = currentUserId;
-            if (l.CreatedById == id) l.CreatedById = currentUserId;
-            if (l.ConvertedById == id) l.ConvertedById = currentUserId;
-        }
-
-        var opportunities = await _db.Opportunities.IgnoreQueryFilters().Where(o => o.OwnerId == id).ToListAsync();
-        foreach (var o in opportunities) o.OwnerId = currentUserId;
-
-        var tasks = await _db.CrmTasks.IgnoreQueryFilters().Where(t => t.AssignedToId == id || t.CreatedById == id).ToListAsync();
-        foreach (var t in tasks)
-        {
-            if (t.AssignedToId == id) t.AssignedToId = currentUserId;
-            if (t.CreatedById == id) t.CreatedById = currentUserId;
-        }
-
-        var activities = await _db.Activities.IgnoreQueryFilters().Where(a => a.CreatedById == id).ToListAsync();
-        foreach (var a in activities) a.CreatedById = currentUserId;
-
-        var auditLogs = await _db.AuditLogs.IgnoreQueryFilters().Where(a => a.ChangedById == id).ToListAsync();
-        foreach (var a in auditLogs) a.ChangedById = currentUserId;
-
-        var stageHistories = await _db.StageHistories.IgnoreQueryFilters().Where(s => s.ChangedById == id).ToListAsync();
-        foreach (var s in stageHistories) s.ChangedById = currentUserId;
-
-        var attachments = await _db.Attachments.IgnoreQueryFilters().Where(a => a.UploadedById == id).ToListAsync();
-        foreach (var a in attachments) a.UploadedById = currentUserId;
-
-        var invoices = await _db.Invoices.IgnoreQueryFilters().Where(i => i.CreatedById == id).ToListAsync();
-        foreach (var i in invoices) i.CreatedById = currentUserId;
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Contracts SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Payments SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Payments SET VerifiedById = {0} WHERE VerifiedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Customers SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Customers SET AssignedRepId = {0} WHERE AssignedRepId = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Companies SET CreatedById = {0} WHERE CreatedById = {1}", currentUserId, id);
+        await _db.Database.ExecuteSqlRawAsync("UPDATE Companies SET AssignedRepId = {0} WHERE AssignedRepId = {1}", currentUserId, id);
 
         // 3. Remove user identity record
         _db.Identities.Remove(user);

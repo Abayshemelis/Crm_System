@@ -13,6 +13,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.css">
+  <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      window.MobileDragDrop.polyfill({
+        dragImageTranslateOverride: window.MobileDragDrop.scrollBehaviourDragImageTranslateOverride
+      });
+    });
+  </script>
 </head>
 
 <body>

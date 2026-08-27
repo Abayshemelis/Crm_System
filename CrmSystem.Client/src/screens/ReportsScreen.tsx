@@ -13,7 +13,7 @@ import {
   ArrowUpRight, ArrowDownRight, Users, UserCheck,
   CheckCircle2, AlertCircle, Medal, Trophy, ShieldAlert, Calendar,
   Search, LayoutGrid, List, Crown, Award, FileText, Printer, UploadCloud,
-  X, Sparkles, SlidersHorizontal, Check
+  X, Sparkles, SlidersHorizontal, Check, Receipt, CreditCard
 } from 'lucide-react';
 import './reports.css';
 
@@ -69,10 +69,17 @@ interface FollowUpSlaData {
 interface InvoiceReportData {
   totalCollected: number;
   totalPending: number;
+  totalOverdue?: number;
   totalCancelled: number;
   totalInvoiced: number;
   paidCount: number;
   pendingCount: number;
+  overdueCount?: number;
+  aging0to30?: number;
+  aging31to60?: number;
+  aging61to90?: number;
+  aging90Plus?: number;
+  paymentMethods?: Array<{ name: string; amount: number; count: number; value: number }>;
   byMonth: Array<{ month: string; collected: number; pending: number; count: number }>;
 }
 
@@ -946,6 +953,12 @@ export const ReportsScreen: React.FC = () => {
     }
   }, [dataScope]);
 
+  useEffect(() => {
+    if (isManagerOrAbove) {
+      setDataScope('team');
+    }
+  }, [isManagerOrAbove]);
+
   useEffect(() => { load(startDate, endDate); }, [startDate, endDate, load]);
 
   const applyPreset = (p: typeof PRESETS[number]) => {
@@ -1283,19 +1296,21 @@ export const ReportsScreen: React.FC = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '0.85rem' }}>
                     <div>
                       <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.06em' }}>
-                        QUARTERLY REVENUE TARGET GAUGE
+                        COLLECTION EFFICIENCY &amp; REVENUE REALIZATION
                       </span>
                       <h3 style={{ margin: '0.3rem 0 0 0', fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                         {invoiceReport ? fmt$(invoiceReport.totalCollected) : '$0'}{' '}
-                        <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>of $120,000.00 Goal</span>
+                        <span style={{ fontSize: '1rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          of {invoiceReport && invoiceReport.totalInvoiced > 0 ? fmt$(invoiceReport.totalInvoiced) : '$0.00'} Total Invoiced
+                        </span>
                       </h3>
                     </div>
                     <span style={{ padding: '0.4rem 1rem', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 800, background: '#059669', color: '#ffffff' }}>
-                      🎯 77.9% Target Completed
+                      🎯 {invoiceReport && invoiceReport.totalInvoiced > 0 ? fmtPct((invoiceReport.totalCollected / invoiceReport.totalInvoiced) * 100) : '0%'} Collection Rate
                     </span>
                   </div>
                   <div style={{ height: 12, background: 'var(--bg-tertiary)', borderRadius: 6, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${invoiceReport && invoiceReport.totalCollected > 0 ? Math.min((invoiceReport.totalCollected / 120000) * 100, 100) : 77.9}%`, background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)', borderRadius: 6 }}></div>
+                    <div style={{ height: '100%', width: `${invoiceReport && invoiceReport.totalInvoiced > 0 ? Math.min((invoiceReport.totalCollected / invoiceReport.totalInvoiced) * 100, 100) : 0}%`, background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)', borderRadius: 6, transition: 'width 0.4s ease' }}></div>
                   </div>
                 </div>
 
@@ -1340,7 +1355,7 @@ export const ReportsScreen: React.FC = () => {
                     Accounts Receivable (AR) Aging Buckets
                   </h3>
                   <p style={{ margin: '0 0 1.25rem 0', color: 'var(--text-secondary)', fontSize: '0.88rem', fontWeight: 500 }}>
-                    Outstanding invoice balance distribution by days overdue
+                    Real-time outstanding invoice balance distribution by days overdue
                   </p>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
@@ -1349,7 +1364,7 @@ export const ReportsScreen: React.FC = () => {
                         CURRENT (0 - 30 DAYS)
                       </div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
-                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.7) : '$0'}
+                        {invoiceReport ? fmt$(invoiceReport.aging0to30 ?? 0) : '$0'}
                       </div>
                       <div style={{ marginTop: '0.4rem' }}>
                         <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#059669', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -1363,7 +1378,7 @@ export const ReportsScreen: React.FC = () => {
                         31 - 60 DAYS OVERDUE
                       </div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
-                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.2) : '$0'}
+                        {invoiceReport ? fmt$(invoiceReport.aging31to60 ?? 0) : '$0'}
                       </div>
                       <div style={{ marginTop: '0.4rem' }}>
                         <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#d97706', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -1377,7 +1392,7 @@ export const ReportsScreen: React.FC = () => {
                         61 - 90 DAYS OVERDUE
                       </div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
-                        {invoiceReport ? fmt$(invoiceReport.totalPending * 0.1) : '$0'}
+                        {invoiceReport ? fmt$(invoiceReport.aging61to90 ?? 0) : '$0'}
                       </div>
                       <div style={{ marginTop: '0.4rem' }}>
                         <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#dc2626', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
@@ -1391,11 +1406,11 @@ export const ReportsScreen: React.FC = () => {
                         90+ DAYS OVERDUE
                       </div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '0.4rem', color: 'var(--text-primary)' }}>
-                        $0.00
+                        {invoiceReport ? fmt$(invoiceReport.aging90Plus ?? 0) : '$0'}
                       </div>
                       <div style={{ marginTop: '0.4rem' }}>
                         <span style={{ padding: '0.2rem 0.55rem', borderRadius: '4px', background: '#64748b', color: '#ffffff', fontSize: '0.75rem', fontWeight: 800 }}>
-                          Zero Default Risk
+                          {invoiceReport && (invoiceReport.aging90Plus ?? 0) > 0 ? 'High Risk' : 'Zero Default Risk'}
                         </span>
                       </div>
                     </div>
@@ -1436,44 +1451,51 @@ export const ReportsScreen: React.FC = () => {
                   {/* Payment Channel Composition Donut Chart */}
                   <div className="rpt-card">
                     <h3 style={{ margin: '0 0 0.4rem 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>Payment Method Settlement Composition</h3>
-                    <p style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)', fontSize: '0.88rem', fontWeight: 500 }}>Collection breakdown across payment gateways</p>
+                    <p style={{ margin: '0 0 1rem 0', color: 'var(--text-secondary)', fontSize: '0.88rem', fontWeight: 500 }}>Real collection breakdown across recorded payment methods</p>
                     
-                    <div style={{ height: '180px', width: '100%' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={[
-                              { name: 'Stripe Credit Card', value: 45, fill: '#4338ca' },
-                              { name: 'Bank Wire / ACH', value: 40, fill: '#059669' },
-                              { name: 'Check / Cash', value: 15, fill: '#d97706' },
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={75}
-                            paddingAngle={4}
-                            dataKey="value"
-                          >
-                            <Cell fill="#4338ca" />
-                            <Cell fill="#059669" />
-                            <Cell fill="#d97706" />
-                          </Pie>
-                          <Tooltip formatter={(v: any) => [`${v}% Share`, 'Channel Share']} contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '0.5rem', color: 'var(--text-primary)' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {invoiceReport?.paymentMethods && invoiceReport.paymentMethods.length > 0 ? (
+                      <div>
+                        <div style={{ height: '180px', width: '100%' }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={invoiceReport.paymentMethods}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={50}
+                                outerRadius={75}
+                                paddingAngle={4}
+                                dataKey="value"
+                              >
+                                {invoiceReport.paymentMethods.map((_, idx) => {
+                                  const colors = ['#4338ca', '#059669', '#d97706', '#8b5cf6', '#ec4899', '#06b6d4'];
+                                  return <Cell key={idx} fill={colors[idx % colors.length]} />;
+                                })}
+                              </Pie>
+                              <Tooltip formatter={(v: any) => [`${v}% Share`, 'Channel Share']} contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '0.5rem', color: 'var(--text-primary)' }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#4338ca' }}></span> Stripe Card (45%)
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#059669' }}></span> Bank ACH (40%)
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#d97706' }}></span> Check/Cash (15%)
-                      </span>
-                    </div>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', fontSize: '0.82rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                          {invoiceReport.paymentMethods.map((pm, idx) => {
+                            const colors = ['#4338ca', '#059669', '#d97706', '#8b5cf6', '#ec4899', '#06b6d4'];
+                            return (
+                              <span key={pm.name} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-primary)', fontWeight: 700 }}>
+                                <span style={{ width: 10, height: 10, borderRadius: '50%', background: colors[idx % colors.length] }}></span>
+                                {pm.name} ({pm.value}%)
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <Receipt size={32} style={{ margin: '0 auto 0.5rem auto', opacity: 0.4 }} />
+                        <p style={{ margin: 0, fontWeight: 600 }}>No payment transactions recorded in this period</p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem' }}>When payments are completed or verified, channel breakdown will appear here.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

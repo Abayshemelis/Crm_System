@@ -7,27 +7,35 @@ import { Input } from '../components/ui/Input';
 import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2, Users, UserCheck } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2, Users, UserCheck, CreditCard } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
+import { validateName, validatePositiveNumber, validateRequiredSelect, validateDateRange } from '../lib/validators';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
 const ContractActionMenu: React.FC<{
   contract: ContractItem;
   onCopyLink: (c: ContractItem) => void;
+  onCopyPaymentLink?: (c: ContractItem) => void;
   onSendEmail: (c: ContractItem) => void;
   onEdit: (c: ContractItem) => void;
   onDelete: (c: ContractItem) => void;
   onInvoice: (c: ContractItem) => void;
   onView: (c: ContractItem) => void;
-}> = ({ contract, onCopyLink, onSendEmail, onEdit, onDelete, onInvoice, onView }) => {
+}> = ({ contract, onCopyLink, onCopyPaymentLink, onSendEmail, onEdit, onDelete, onInvoice, onView }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const isSigned = contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt || !!contract.signedByName;
+  const hasInvoice = !!contract.invoiceId || !!contract.invoiceNumber;
+  const invStatus = (contract.invoiceStatus || '').toLowerCase();
+  const isPaid = invStatus === 'paid' || (contract.invoiceBalanceDue !== undefined && contract.invoiceBalanceDue <= 0.01 && (contract.invoiceAmountPaid || 0) > 0);
+  const isPartiallyPaid = invStatus === 'partiallypaid' || ((contract.invoiceAmountPaid || 0) > 0 && (contract.invoiceBalanceDue || 0) > 0.01);
+  const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
+  const isPayable = hasInvoice && !isPaid && !isCancelledOrRefunded && invStatus !== 'pendingverification';
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -51,7 +59,7 @@ const ContractActionMenu: React.FC<{
       </button>
 
       {open && (
-        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px' }}>
+        <div className="crm-action-menu-dropdown animate-fade-in" style={{ right: 0, top: '100%', marginTop: '4px', minWidth: '220px' }}>
           <button
             type="button"
             className="crm-action-menu-item"
@@ -76,6 +84,21 @@ const ContractActionMenu: React.FC<{
             <LinkIcon size={14} style={{ color: '#6366f1' }} /> Copy Signing Link
           </button>
 
+          {isPayable && onCopyPaymentLink && (
+            <button
+              type="button"
+              className="crm-action-menu-item"
+              onClick={(e) => { e.stopPropagation(); onCopyPaymentLink(contract); setOpen(false); }}
+            >
+              <CreditCard size={14} style={{ color: '#10b981' }} />
+              <span>
+                {isPartiallyPaid
+                  ? `Copy Pay Link (${contract.invoiceBalanceDue ? `$${contract.invoiceBalanceDue.toLocaleString()} Due` : 'Partial'})`
+                  : 'Copy Payment Link'}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             className="crm-action-menu-item"
@@ -90,7 +113,7 @@ const ContractActionMenu: React.FC<{
               className="crm-action-menu-item"
               onClick={(e) => { e.stopPropagation(); onInvoice(contract); setOpen(false); }}
             >
-              <Receipt size={14} style={{ color: '#10b981' }} /> Generate Invoice
+              <Receipt size={14} style={{ color: '#10b981' }} /> {hasInvoice ? (isPaid ? 'View Paid Invoice' : 'View Commercial Invoice') : 'Generate Invoice'}
             </button>
           )}
 
@@ -153,8 +176,8 @@ export const ContractsScreen: React.FC = () => {
   const [loadingEditOpps, setLoadingEditOpps] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const fetchContracts = useCallback(async () => {
-    setIsLoading(true);
+  const fetchContracts = useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
       const q = new URLSearchParams();
       if (!isManagerOrAboveSelected || dataScope === 'personal') {
@@ -163,24 +186,24 @@ export const ContractsScreen: React.FC = () => {
         q.append('scope', 'company');
       }
       const data = await api.get<ContractItem[]>(`/api/contracts?${q.toString()}`);
-      setContracts(data);
+      setContracts(data || []);
     } catch {
-      showToast('Failed to load contracts', 'error');
+      if (isInitial) showToast('Failed to load contracts', 'error');
     } finally {
-      setIsLoading(false);
+      if (isInitial) setIsLoading(false);
     }
   }, [dataScope, isManagerOrAboveSelected, selectedRole]);
 
   useEffect(() => {
-    fetchContracts();
+    fetchContracts(true);
 
-    // Auto-refresh contracts whenever staff switches back to the CRM tab
-    const handleFocus = () => fetchContracts();
+    // Auto-refresh contracts whenever staff switches back to the CRM tab (silent, no blinking)
+    const handleFocus = () => fetchContracts(false);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('app:role-switched', handleFocus);
 
-    // Live-polling every 8 seconds to auto-detect client e-signatures in real-time
-    const interval = setInterval(fetchContracts, 8000);
+    // Silent background poll every 15s to update signatures/statuses without re-rendering skeleton or blinking
+    const interval = setInterval(() => fetchContracts(false), 15000);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -217,15 +240,19 @@ export const ContractsScreen: React.FC = () => {
       .catch((err) => {
         console.error('Failed to load opportunities:', err);
       })
-      .finally(() => setLoadingOpps(false));
   }, [newCustomerId]);
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustomerId || !newTitle.trim()) {
-      showToast('Please select a customer and enter a contract title.', 'error');
-      return;
-    }
+    const custErr = validateRequiredSelect(newCustomerId, 'Customer');
+    if (custErr) { showToast(custErr, 'error'); return; }
+
+    const titleErr = validateName(newTitle, 'Contract title', 2, 150);
+    if (titleErr) { showToast(titleErr, 'error'); return; }
+
+    const valErr = validatePositiveNumber(newValue, 'Contract value', true);
+    if (valErr) { showToast(valErr, 'error'); return; }
+
     setCreating(true);
     try {
       const existingOppContract = newOpportunityId > 0 ? contracts.find(c => c.opportunityId === newOpportunityId) : null;
@@ -286,7 +313,18 @@ export const ContractsScreen: React.FC = () => {
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingContract) return;
-    if (!editTitle.trim()) { showToast('Title is required', 'error'); return; }
+    
+    const titleErr = validateName(editTitle, 'Contract title', 2, 150);
+    if (titleErr) { showToast(titleErr, 'error'); return; }
+
+    const valErr = validatePositiveNumber(editValue, 'Contract value', true);
+    if (valErr) { showToast(valErr, 'error'); return; }
+
+    if (editStartDate && editEndDate) {
+      const dateErr = validateDateRange(editStartDate, editEndDate, 'Start date', 'End date');
+      if (dateErr) { showToast(dateErr, 'error'); return; }
+    }
+
     setSaving(true);
     try {
       await api.put(`/api/contracts/${editingContract.contractId}`, {
@@ -323,26 +361,24 @@ export const ContractsScreen: React.FC = () => {
 
   const handleGenerateInvoice = async (c: ContractItem) => {
     try {
-      const res = await api.post<any>('/api/invoices', {
-        customerId: c.customerId,
-        contractId: c.contractId,
-        opportunityId: c.opportunityId ?? null,
-        amount: c.contractValue,
-        taxRate: 10,
-        issueDate: new Date().toISOString(),
-        dueDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-        notes: `Generated from Contract #${c.contractNumber} (${c.title})`,
-        terms: 'Standard commercial billing terms apply. Payment Net 30 days.',
-      });
+      const res = await api.post<any>(`/api/contracts/${c.contractId}/generate-invoice`, {});
+      showToast(res?.message || `Invoice #${res?.invoiceNumber || ''} generated successfully!`, 'success');
+      fetchContracts();
       if (res?.invoiceNumber) {
-        showToast(`Invoice #${res.invoiceNumber} opened!`);
+        navigate(`/invoices?search=${encodeURIComponent(res.invoiceNumber)}`);
       } else {
-        showToast('Invoice ready!');
+        navigate('/invoices');
       }
-      navigate('/invoices');
-    } catch {
-      showToast('Failed to process invoice for contract', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to process invoice for contract', 'error');
     }
+  };
+
+  const handleCopyPaymentLink = (c: ContractItem) => {
+    const invNumber = c.invoiceNumber || `INV-${c.contractNumber.replace('CNT-', '')}`;
+    const url = `${window.location.origin}/invoices/pay/${invNumber}`;
+    navigator.clipboard.writeText(url);
+    showToast('Customer payment link copied to clipboard!');
   };
 
   const handleCopyPublicLink = (c: ContractItem) => {
@@ -478,7 +514,7 @@ export const ContractsScreen: React.FC = () => {
             Draft commercial agreements, share customer e-signature links, and generate billing invoices
           </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)', fontWeight: 600 }}>
+        <Button onClick={() => navigate('/contracts/new')} style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)', fontWeight: 600 }}>
           <Plus size={18} style={{ marginRight: 6 }} /> Create New Contract
         </Button>
       </div>
@@ -503,7 +539,7 @@ export const ContractsScreen: React.FC = () => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             <div style={{ background: '#10b981', color: '#fff', width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flexShrink: 0 }}>4</div>
-            <div><strong>1-Click Invoice</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Convert signed deal to invoice</span></div>
+            <div><strong>Instant Invoice &amp; Payment</strong><br /><span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Client pays instantly via Stripe/Card</span></div>
           </div>
         </div>
       </div>
@@ -681,6 +717,7 @@ export const ContractsScreen: React.FC = () => {
                       <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Contract Value</th>
                       <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Status</th>
                       <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Signatory Record</th>
+                      <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice &amp; Settlement</th>
                       <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
@@ -751,12 +788,109 @@ export const ContractsScreen: React.FC = () => {
                             return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>⚪ Draft (Unsigned)</span>;
                           })()}
                         </td>
+                        <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
+                          {c.invoiceNumber ? (() => {
+                            const invStatus = (c.invoiceStatus || '').toLowerCase();
+                            const isPaid = invStatus === 'paid' || (c.invoiceBalanceDue !== undefined && c.invoiceBalanceDue <= 0.01 && (c.invoiceAmountPaid || 0) > 0);
+                            const isPartiallyPaid = invStatus === 'partiallypaid' || ((c.invoiceAmountPaid || 0) > 0 && (c.invoiceBalanceDue || 0) > 0.01);
+                            const isPendingVerification = invStatus === 'pendingverification';
+                            const isCancelled = invStatus === 'cancelled';
+                            const isRefunded = invStatus === 'refunded';
+
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                <span style={{
+                                  padding: '0.2rem 0.55rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  background: isPaid ? 'rgba(16, 185, 129, 0.15)' : isPartiallyPaid ? 'rgba(99, 102, 241, 0.15)' : isPendingVerification ? 'rgba(56, 189, 248, 0.15)' : isCancelled || isRefunded ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: isPaid ? '#10b981' : isPartiallyPaid ? '#818cf8' : isPendingVerification ? '#38bdf8' : isCancelled || isRefunded ? '#ef4444' : '#f59e0b',
+                                  border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : isPartiallyPaid ? '1px solid rgba(99, 102, 241, 0.3)' : isPendingVerification ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  width: 'fit-content'
+                                }}>
+                                  <span>{isPaid ? '✅ Paid' : isPartiallyPaid ? '💳 Partially Paid' : isPendingVerification ? '⏳ Pending Verification' : isCancelled ? '🚫 Cancelled' : isRefunded ? '↩️ Refunded' : '💳 Invoiced'}</span>
+                                  <span style={{ opacity: 0.8 }}>({c.invoiceNumber})</span>
+                                </span>
+
+                                {!isPaid && !isCancelled && !isRefunded && !isPendingVerification ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyPaymentLink(c)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'var(--accent-primary)',
+                                      fontSize: '0.75rem',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      textAlign: 'left',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem'
+                                    }}
+                                  >
+                                    <CreditCard size={11} />
+                                    <span>{isPartiallyPaid && c.invoiceBalanceDue ? `Copy Pay Link ($${c.invoiceBalanceDue.toLocaleString()} Due)` : 'Copy Pay Link'}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/invoices?search=${encodeURIComponent(c.invoiceNumber || '')}`)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: 'var(--text-muted)',
+                                      fontSize: '0.74rem',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      textAlign: 'left',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '0.25rem'
+                                    }}
+                                  >
+                                    <Receipt size={11} /> View Invoice Details
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })() : (contractIsSigned(c) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateInvoice(c)}
+                              style={{
+                                background: 'rgba(99, 102, 241, 0.12)',
+                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                color: 'var(--accent-primary)',
+                                padding: '0.25rem 0.6rem',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem'
+                              }}
+                            >
+                              <Receipt size={12} /> Generate Invoice
+                            </button>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Pending sign</span>
+                          ))}
+                        </td>
                         <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
                           <ContractActionMenu
                             contract={c}
                             onCopyLink={handleCopyPublicLink}
+                            onCopyPaymentLink={handleCopyPaymentLink}
                             onSendEmail={handleSendSigningEmail}
-                            onEdit={openEdit}
+                            onEdit={(contractItem) => navigate(`/contracts/${contractItem.contractId}/edit`)}
                             onDelete={handleDeleteContract}
                             onInvoice={handleGenerateInvoice}
                             onView={setSelectedContract}
@@ -776,8 +910,8 @@ export const ContractsScreen: React.FC = () => {
                     padding: '1.25rem',
                     display: 'flex', flexDirection: 'column', gap: '0.65rem',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                      <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.85rem' }}>{c.contractNumber}</div>
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '1rem' }}>{c.title}</div>
                         <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
@@ -786,10 +920,10 @@ export const ContractsScreen: React.FC = () => {
                       </div>
                       {statusBadge(c)}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', margin: '0.25rem 0' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.1rem' }}>${c.contractValue.toLocaleString()}</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', margin: '0.25rem 0' }}>
+                      <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.1rem', whiteSpace: 'nowrap' }}>${c.contractValue.toLocaleString()}</span>
                       {c.opportunityTitle && (
-                        <span style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 600, fontSize: '0.78rem' }}>
+                        <span style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 600, fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           💼 {c.opportunityTitle}
                         </span>
                       )}
@@ -798,8 +932,9 @@ export const ContractsScreen: React.FC = () => {
                       <ContractActionMenu
                         contract={c}
                         onCopyLink={handleCopyPublicLink}
+                        onCopyPaymentLink={handleCopyPaymentLink}
                         onSendEmail={handleSendSigningEmail}
-                        onEdit={openEdit}
+                        onEdit={(contractItem) => navigate(`/contracts/${contractItem.contractId}/edit`)}
                         onDelete={handleDeleteContract}
                         onInvoice={handleGenerateInvoice}
                         onView={setSelectedContract}
@@ -821,230 +956,6 @@ export const ContractsScreen: React.FC = () => {
           onUpdate={fetchContracts}
           onInvoice={handleGenerateInvoice}
         />
-      )}
-
-      {/* Edit Contract Modal */}
-      {editingContract && (
-        <div className="crm-modal-overlay">
-          <div className="crm-modal-container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem' }}>✏️ Edit Contract</h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', marginTop: '0.2rem', fontWeight: 600 }}>
-                  {editingContract.contractNumber}
-                </div>
-              </div>
-              <button onClick={() => setEditingContract(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', lineHeight: 1 }}>×</button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-              {/* Contract Status */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  📌 Contract Status
-                </label>
-                <SearchableSelect
-                  value={editStatus}
-                  onChange={val => setEditStatus(String(val))}
-                  options={[
-                    { value: 'Draft', label: 'Draft' },
-                    { value: 'SentForSignature', label: 'Sent for Signature' },
-                    { value: 'Signed', label: 'Signed' },
-                    { value: 'Active', label: 'Active' },
-                    { value: 'Cancelled', label: 'Cancelled' },
-                    { value: 'Expired', label: 'Expired' }
-                  ]}
-                />
-              </div>
-
-              {/* Linked Deal */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  🔗 Linked Deal / Opportunity
-                  <span style={{ fontWeight: 400, marginLeft: '0.4rem', color: 'var(--text-muted)' }}>(optional)</span>
-                </label>
-                <SearchableSelect
-                  value={editOpportunityId ?? 0}
-                  onChange={val => {
-                    const id = parseInt(String(val), 10);
-                    setEditOpportunityId(id > 0 ? id : null);
-                  }}
-                  options={[
-                    { value: 0, label: '— No deal linked —' },
-                    ...editOpps.map(o => ({ value: String(o.id), label: o.title }))
-                  ]}
-                  placeholder="— No deal linked —"
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Contract Title *</label>
-                <Input
-                  value={editTitle}
-                  onChange={e => setEditTitle(e.target.value)}
-                  placeholder="Contract title"
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Contract Value ($)</label>
-                <Input
-                  type="number"
-                  value={editValue}
-                  onChange={e => setEditValue(Number(e.target.value))}
-                />
-              </div>
-
-              <div className="crm-form-2col">
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Start Date</label>
-                  <Input
-                    type="date"
-                    value={editStartDate}
-                    onChange={e => setEditStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>End Date</label>
-                  <Input
-                    type="date"
-                    value={editEndDate}
-                    onChange={e => setEditEndDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>Notes &amp; Internal Comments</label>
-                <Input
-                  value={editNotes}
-                  onChange={e => setEditNotes(e.target.value)}
-                  placeholder="Internal notes or terms summary"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <Button type="button" variant="secondary" onClick={() => setEditingContract(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="primary" disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create Contract Modal */}
-      {showCreateModal && (
-        <div className="crm-modal-overlay">
-          <div className="crm-modal-container">
-            <h3 style={{ margin: '0 0 1.25rem 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>
-              📜 Create New Commercial Contract
-            </h3>
-            <form onSubmit={handleCreateContract} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-
-              {/* Customer */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  1. Select Client *
-                </label>
-                <SearchableSelect
-                  value={newCustomerId}
-                  onChange={val => setNewCustomerId(Number(val))}
-                  options={[
-                    { value: 0, label: '— Choose a customer —' },
-                    ...customers.map(c => ({ value: String(c.id), label: c.name }))
-                  ]}
-                  placeholder="— Choose a customer —"
-                />
-              </div>
-
-              {/* Opportunity */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  2. Linked Deal / Opportunity
-                  <span style={{ fontWeight: 400, marginLeft: '0.4rem', color: 'var(--text-muted)' }}>(optional — auto-fills title &amp; value)</span>
-                </label>
-                <SearchableSelect
-                  value={newOpportunityId}
-                  onChange={val => {
-                    const selectedId = parseInt(String(val), 10);
-                    setNewOpportunityId(selectedId);
-                    if (selectedId > 0) {
-                      const found = opportunities.find(o => o.id === selectedId);
-                      if (found) {
-                        setNewTitle(found.title);
-                        if (found.value > 0) setNewValue(found.value);
-                        // Always auto-fill customer from the selected deal
-                        if (found.customerId && found.customerId > 0) {
-                          setNewCustomerId(found.customerId);
-                        }
-                      }
-                    }
-                  }}
-                  options={[
-                    { 
-                      value: 0, 
-                      label: loadingOpps ? '⏳ Loading deals…' : opportunities.length === 0 ? 'No deals available' : '— Select a related deal —' 
-                    },
-                    ...opportunities.map(o => ({ value: String(o.id), label: o.title }))
-                  ]}
-                  placeholder="— Select a related deal —"
-                />
-                {!loadingOpps && opportunities.length > 0 && (
-                  <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>
-                    ✓ {opportunities.length} deal{opportunities.length > 1 ? 's' : ''} available — select one to auto-link
-                  </div>
-                )}
-                {newOpportunityId > 0 && contracts.some(c => c.opportunityId === newOpportunityId) && (
-                  <div style={{ fontSize: '0.75rem', color: '#818cf8', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '0.35rem 0.65rem', borderRadius: '6px', marginTop: '0.4rem' }}>
-                    ℹ️ This deal is already linked to contract <strong>{contracts.find(c => c.opportunityId === newOpportunityId)?.contractNumber}</strong>. Submitting will update &amp; reuse the existing contract.
-                  </div>
-                )}
-                {newCustomerId > 0 && !loadingOpps && opportunities.length === 0 && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                    No active deals found. You can still enter the title manually below.
-                  </div>
-                )}
-              </div>
-
-              {/* Title */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  3. Contract Title *
-                </label>
-                <Input
-                  placeholder="e.g. Master Enterprise Services Agreement"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                />
-              </div>
-
-              {/* Value */}
-              <div>
-                <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                  4. Contract Value ($)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="10000"
-                  value={newValue}
-                  onChange={e => setNewValue(Number(e.target.value))}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                <Button variant="secondary" type="button" onClick={() => setShowCreateModal(false)}>Cancel</Button>
-                <Button variant="primary" type="submit" disabled={creating}>
-                  {creating ? 'Creating…' : '✍️ Generate Contract Draft'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </Layout>
   );

@@ -1,11 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { FileText, CheckCircle, ShieldCheck, PenTool, Printer, AlertTriangle, Calendar, DollarSign, Building } from 'lucide-react';
+import { 
+  FileText, CheckCircle, ShieldCheck, PenTool, Printer, AlertTriangle, 
+  Calendar, DollarSign, Building, CreditCard, Landmark, ExternalLink, 
+  ArrowRight, Check, Copy, Sparkles, Receipt
+} from 'lucide-react';
+import { formatDisplayDate } from '../lib/dateUtils';
 import './screens.css';
 
 interface PublicContract {
@@ -37,6 +42,12 @@ interface PublicContract {
   notes?: string;
   createdByName: string;
   createdAt: string;
+  invoiceId?: number;
+  invoiceNumber?: string;
+  invoiceStatus?: string;
+  invoiceTotalAmount?: number;
+  invoicePaidAt?: string;
+  invoicePaymentUrl?: string;
 }
 
 export const PublicContractSignScreen: React.FC = () => {
@@ -44,6 +55,8 @@ export const PublicContractSignScreen: React.FC = () => {
   const [contract, setContract] = useState<PublicContract | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showBankDetails, setShowBankDetails] = useState(false);
+  const [copiedBank, setCopiedBank] = useState(false);
 
   // Signature state
   const [signMode, setSignMode] = useState<'draw' | 'type'>('draw');
@@ -198,7 +211,12 @@ export const PublicContractSignScreen: React.FC = () => {
         customerSignedAt: res.signedAt || new Date().toISOString(),
         signatureDataUrl: signatureUrl,
         signedByName: signerName.trim(),
-        signedAt: res.signedAt || new Date().toISOString()
+        signedAt: res.signedAt || new Date().toISOString(),
+        invoiceId: res.invoiceId,
+        invoiceNumber: res.invoiceNumber,
+        invoiceStatus: res.invoiceStatus || 'Sent',
+        invoiceTotalAmount: res.invoiceTotalAmount,
+        invoicePaymentUrl: res.paymentUrl
       } : null);
 
       setSignedSuccess(true);
@@ -212,6 +230,14 @@ export const PublicContractSignScreen: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const copyBankInfo = () => {
+    const text = `Beneficiary: Enterprise CRM Inc.\nBank: Global Commercial Bank\nAccount / IBAN: US89370400440532013000\nSWIFT / BIC: GCBIUS33\nReference: ${contract?.invoiceNumber || contract?.contractNumber || 'Contract Payment'}`;
+    navigator.clipboard.writeText(text);
+    setCopiedBank(true);
+    showToast('Bank transfer details copied to clipboard!', 'success');
+    setTimeout(() => setCopiedBank(false), 3000);
   };
 
   if (isLoading) {
@@ -242,6 +268,9 @@ export const PublicContractSignScreen: React.FC = () => {
   const isCustomerSigned = !!(contract.customerSignatureDataUrl || contract.signatureDataUrl || signedSuccess);
   const isCompanySigned = !!contract.companySignatureDataUrl;
   const isFullySigned = isCustomerSigned && isCompanySigned;
+  const isPaid = contract.invoiceStatus?.toLowerCase() === 'paid';
+  const effectiveInvoiceNumber = contract.invoiceNumber || `INV-${contract.contractNumber.replace('CNT-', '')}`;
+  const effectivePayUrl = contract.invoicePaymentUrl || `/invoices/pay/${effectiveInvoiceNumber}`;
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', color: '#f8fafc', padding: '2rem 1rem', fontFamily: 'Segoe UI, sans-serif' }}>
@@ -254,7 +283,7 @@ export const PublicContractSignScreen: React.FC = () => {
             <div style={{ width: 36, height: 36, background: '#6366f1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800 }}>⚡</div>
             <div>
               <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>CRM Enterprise Portal</span>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Secure Document E-Signature Center</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Secure Document E-Signature &amp; Settlement Center</div>
             </div>
           </div>
           <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '20px', cursor: 'pointer', fontSize: '0.85rem' }}>
@@ -274,6 +303,209 @@ export const PublicContractSignScreen: React.FC = () => {
                 Thank you, <strong>{contract.customerSignedByName || contract.signedByName || contract.customerName}</strong>. This legal agreement was digitally executed on {new Date(contract.customerSignedAt || contract.signedAt || Date.now()).toLocaleString()}.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ── AUTOMATED POST-CONTRACT PAYMENT GATEWAY CARD ── */}
+        {isCustomerSigned && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)',
+            border: isPaid ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(99, 102, 241, 0.4)',
+            borderRadius: '16px',
+            padding: '1.75rem',
+            marginBottom: '2rem',
+            boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.6)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.25rem 0.65rem', borderRadius: '99px', background: isPaid ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)', color: isPaid ? '#34d399' : '#818cf8', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                  <Sparkles size={13} />
+                  <span>{isPaid ? 'Payment Complete' : 'Next Step: Settlement & Payment'}</span>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: '#ffffff' }}>
+                  {isPaid ? 'Invoice Settled & Paid' : 'Complete Contract Payment'}
+                </h3>
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                  Commercial Invoice <strong>#{effectiveInvoiceNumber}</strong> has been generated for Contract <strong>#{contract.contractNumber}</strong>.
+                </p>
+              </div>
+
+              <div style={{ textAlign: 'right', background: 'rgba(255,255,255,0.05)', padding: '0.75rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Amount Due</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#ffffff' }}>
+                  ${contract.contractValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: isPaid ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
+                  {isPaid ? '● Fully Settled' : '● Due upon execution'}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Action Buttons */}
+            {!isPaid ? (
+              <div>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+                  <Link
+                    to={effectivePayUrl}
+                    style={{
+                      flex: '1 1 240px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.6rem',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                      color: '#ffffff',
+                      textDecoration: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      padding: '0.85rem 1.5rem',
+                      borderRadius: '10px',
+                      boxShadow: '0 8px 20px -4px rgba(99, 102, 241, 0.5)',
+                      transition: 'all 0.2s ease',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <CreditCard size={18} />
+                    <span>Pay with Card / Apple Pay (${contract.contractValue.toLocaleString()})</span>
+                    <ArrowRight size={16} />
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowBankDetails(!showBankDetails)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#f8fafc',
+                      fontWeight: 600,
+                      fontSize: '0.88rem',
+                      padding: '0.85rem 1.25rem',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <Landmark size={16} />
+                    <span>{showBankDetails ? 'Hide Wire Details' : 'Bank Wire / ACH'}</span>
+                  </button>
+
+                  <Link
+                    to={effectivePayUrl}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.4rem',
+                      background: 'transparent',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#94a3b8',
+                      textDecoration: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '10px'
+                    }}
+                  >
+                    <Receipt size={15} />
+                    <span>View Tax Invoice</span>
+                  </Link>
+                </div>
+
+                {/* Bank Wire Accordion Box */}
+                {showBankDetails && (
+                  <div style={{
+                    marginTop: '1.25rem',
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    padding: '1.25rem',
+                    animation: 'fadeIn 0.2s ease-out'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Landmark size={15} style={{ color: '#818cf8' }} />
+                        <span>Direct Company Bank Transfer Details</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={copyBankInfo}
+                        style={{
+                          background: 'rgba(255,255,255,0.08)',
+                          border: 'none',
+                          color: '#818cf8',
+                          padding: '0.3rem 0.65rem',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem'
+                        }}
+                      >
+                        {copiedBank ? <Check size={12} /> : <Copy size={12} />}
+                        <span>{copiedBank ? 'Copied!' : 'Copy Wire Info'}</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.82rem' }}>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>Beneficiary Name</div>
+                        <div style={{ fontWeight: 600, color: '#ffffff' }}>Enterprise CRM Solutions Inc.</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>Bank Name</div>
+                        <div style={{ fontWeight: 600, color: '#ffffff' }}>Global Commercial Bank N.A.</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>Account / IBAN</div>
+                        <div style={{ fontWeight: 600, color: '#ffffff', fontFamily: 'monospace' }}>US89370400440532013000</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>SWIFT / BIC Code</div>
+                        <div style={{ fontWeight: 600, color: '#ffffff', fontFamily: 'monospace' }}>GCBIUS33</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>Payment Reference</div>
+                        <div style={{ fontWeight: 700, color: '#818cf8', fontFamily: 'monospace' }}>{effectiveInvoiceNumber}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#10b981', fontSize: '0.9rem', fontWeight: 600 }}>
+                  <ShieldCheck size={20} />
+                  <span>Payment was received &amp; verified. Thank you for your business!</span>
+                </div>
+                <Link
+                  to={effectivePayUrl}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    textDecoration: 'none'
+                  }}
+                >
+                  <Receipt size={15} />
+                  <span>Download Paid Tax Invoice Receipt</span>
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
@@ -308,14 +540,14 @@ export const PublicContractSignScreen: React.FC = () => {
 
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.3rem' }}>EFFECTIVE DATES</div>
-              <div style={{ fontSize: '0.85rem', color: '#334155' }}><strong>Start Date:</strong> {new Date(contract.startDate).toLocaleDateString()}</div>
-              <div style={{ fontSize: '0.85rem', color: '#334155' }}><strong>End Date:</strong> {new Date(contract.endDate).toLocaleDateString()}</div>
+              <div style={{ fontSize: '0.85rem', color: '#334155' }}><strong>Start Date:</strong> {formatDisplayDate(contract.startDate)}</div>
+              <div style={{ fontSize: '0.85rem', color: '#334155' }}><strong>End Date:</strong> {formatDisplayDate(contract.endDate)}</div>
             </div>
 
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.3rem' }}>ISSUING REPRESENTATIVE</div>
               <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#0f172a' }}>{contract.createdByName}</div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Issued on {new Date(contract.createdAt).toLocaleDateString()}</div>
+              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Issued on {formatDisplayDate(contract.createdAt)}</div>
             </div>
           </div>
 
@@ -386,7 +618,7 @@ export const PublicContractSignScreen: React.FC = () => {
         </div>
 
         {/* Signature Form (If Not Yet Signed) */}
-        {!signedSuccess && contract.status !== 'Signed' && (
+        {!signedSuccess && contract.status !== 'Signed' && !isCustomerSigned && (
           <Card style={{ padding: '2rem', background: '#1e293b', border: '1px solid #334155' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
               <PenTool size={22} style={{ color: '#818cf8' }} />

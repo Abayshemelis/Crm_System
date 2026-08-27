@@ -8,6 +8,7 @@ import { RoleBadge } from '../components/ui/RoleBadge';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../lib/toast';
+import { validateName, validateEmail, validateRequiredSelect } from '../lib/validators';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -27,7 +28,7 @@ interface RoleItem {
 }
 
 export const UsersScreen: React.FC = () => {
-  const { isManagerOrAboveSelected, selectedRole } = useAuth();
+  const { isManagerOrAboveSelected, selectedRole, user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,8 +79,23 @@ export const UsersScreen: React.FC = () => {
   };
 
   const handleCreateUser = async () => {
-    if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim() || !newUserRoleId) {
-      showToast('Please fill in all required fields.', 'error');
+    const nameErr = validateName(newUserName, 'User full name', 2, 100);
+    if (nameErr) {
+      showToast(nameErr, 'error');
+      return;
+    }
+    const emailErr = validateEmail(newUserEmail, true, 'User email');
+    if (emailErr) {
+      showToast(emailErr, 'error');
+      return;
+    }
+    const roleErr = validateRequiredSelect(newUserRoleId, 'User role');
+    if (roleErr) {
+      showToast(roleErr, 'error');
+      return;
+    }
+    if (!newUserPassword.trim() || newUserPassword.length < 8) {
+      showToast('Password must be at least 8 characters long', 'error');
       return;
     }
     try {
@@ -345,20 +361,9 @@ export const UsersScreen: React.FC = () => {
               <div
                 key={user.id}
                 className="user-row-card animate-fade-in"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '1rem',
-                  padding: '1rem 1.25rem',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-highlight)',
-                  transition: 'all 0.2s ease-in-out'
-                }}
               >
                 {/* User Info */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: '220px', flex: '1 1 220px' }}>
+                <div className="user-info-section">
                   <div style={{
                     width: '44px',
                     height: '44px',
@@ -382,9 +387,9 @@ export const UsersScreen: React.FC = () => {
                 </div>
 
                 {/* Roles */}
-                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap', flex: '1 1 180px' }}>
+                <div className="user-roles-section">
                   {editingUserId === user.id && isManagerOrAboveSelected ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'var(--bg-primary)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--accent-primary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'var(--bg-primary)', padding: '0.4rem 0.75rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--accent-primary)', width: '100%' }}>
                       {roles.map(role => (
                         <label key={role.id} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
                           <input
@@ -398,12 +403,14 @@ export const UsersScreen: React.FC = () => {
                           <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{role.name}</span>
                         </label>
                       ))}
-                      <Button size="sm" onClick={() => handleUpdateRole(user.id)} title="Save Roles">
-                        <Check size={14} />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingUserId(null); setEditingRoleIds([]); }}>
-                        <X size={14} />
-                      </Button>
+                      <div style={{ display: 'flex', gap: '0.3rem', marginLeft: 'auto' }}>
+                        <Button size="sm" onClick={() => handleUpdateRole(user.id)} title="Save Roles">
+                          <Check size={14} />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingUserId(null); setEditingRoleIds([]); }}>
+                          <X size={14} />
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     user.roles && user.roles.length > 0 ? (
@@ -414,66 +421,83 @@ export const UsersScreen: React.FC = () => {
                   )}
                 </div>
 
-                {/* Status Indicator */}
-                <div style={{ minWidth: '100px', textAlign: 'center' }}>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.3rem 0.75rem',
-                      borderRadius: '9999px',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      background: user.isActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                      color: user.isActive ? '#10b981' : '#ef4444',
-                      border: `1px solid ${user.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
-                    }}
-                  >
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.isActive ? '#10b981' : '#ef4444' }} />
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-
-                {/* Actions */}
-                {isManagerOrAboveSelected && (
-                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                    {(selectedRole === 'Admin' || user.role !== 'Manager') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const selectedIds = (user.roles && user.roles.length > 0)
-                            ? roles.filter(r => user.roles.includes(r.name)).map(r => r.id)
-                            : (user.roleId ? [user.roleId] : []);
-                          setEditingUserId(user.id);
-                          setEditingRoleIds(selectedIds);
-                        }}
-                        title="Edit User Roles"
-                      >
-                        <Shield size={15} />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleStatus(user.id, user.isActive)}
-                      title={user.isActive ? 'Deactivate User' : 'Activate User'}
-                      style={{ color: user.isActive ? '#ef4444' : '#10b981' }}
+                {/* Status Indicator & Actions */}
+                <div className="user-actions-section">
+                  <div style={{ minWidth: '85px', textAlign: 'center' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        padding: '0.3rem 0.75rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        background: user.isActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        color: user.isActive ? '#10b981' : '#ef4444',
+                        border: `1px solid ${user.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                      }}
                     >
-                      {user.isActive ? <X size={15} /> : <Check size={15} />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                      title="Delete User"
-                      style={{ color: '#ef4444' }}
-                    >
-                      <Trash2 size={15} />
-                    </Button>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.isActive ? '#10b981' : '#ef4444' }} />
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
-                )}
+
+                  {/* Actions */}
+                  {isManagerOrAboveSelected && (() => {
+                    const isSelf = currentUser?.userId === user.id;
+                    const isTargetAdmin = user.roles?.includes('Admin') || user.role === 'Admin';
+                    const isTargetManager = user.roles?.includes('Manager') || user.role === 'Manager';
+                    
+                    // Managers cannot manage Admins or Managers
+                    const canManage = selectedRole === 'Admin' || (!isTargetAdmin && !isTargetManager);
+                    
+                    if (!canManage) return null;
+
+                    return (
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        {!isSelf && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const selectedIds = (user.roles && user.roles.length > 0)
+                                ? roles.filter(r => user.roles.includes(r.name)).map(r => r.id)
+                                : (user.roleId ? [user.roleId] : []);
+                              setEditingUserId(user.id);
+                              setEditingRoleIds(selectedIds);
+                            }}
+                            title="Edit User Roles"
+                          >
+                            <Shield size={15} />
+                          </Button>
+                        )}
+                        {!isSelf && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleStatus(user.id, user.isActive)}
+                            title={user.isActive ? 'Deactivate User' : 'Activate User'}
+                            style={{ color: user.isActive ? '#ef4444' : '#10b981' }}
+                          >
+                            {user.isActive ? <X size={15} /> : <Check size={15} />}
+                          </Button>
+                        )}
+                        {!isSelf && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id)}
+                            title="Delete User"
+                            style={{ color: '#ef4444' }}
+                          >
+                            <Trash2 size={15} />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             ))}
           </div>

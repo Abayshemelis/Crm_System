@@ -119,40 +119,20 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             </span>
             
             {showPresets && (
-                <div className="date-range-presets">
-                    <button
-                        type="button"
-                        className={`date-range-preset-btn ${activePreset === 'all' || (!startDate && !endDate) ? 'active' : ''}`}
-                        onClick={() => applyPreset('all')}
-                        title="Show all dates"
-                    >
-                        All
-                    </button>
-                    <button
-                        type="button"
-                        className={`date-range-preset-btn ${activePreset === 'today' ? 'active' : ''}`}
-                        onClick={() => applyPreset('today')}
-                        title="Filter to today"
-                    >
-                        Today
-                    </button>
-                    <button
-                        type="button"
-                        className={`date-range-preset-btn ${activePreset === 'month' ? 'active' : ''}`}
-                        onClick={() => applyPreset('month')}
-                        title="Filter to this month"
-                    >
-                        This Month
-                    </button>
-                    <button
-                        type="button"
-                        className={`date-range-preset-btn ${activePreset === 'last30' ? 'active' : ''}`}
-                        onClick={() => applyPreset('last30')}
-                        title="Filter to last 30 days"
-                    >
-                        Last 30 Days
-                    </button>
-                </div>
+                <select
+                    className="rpt-filter-select"
+                    style={{ border: 'none', background: 'transparent', fontWeight: 600, color: 'var(--text-primary)', outline: 'none' }}
+                    value={activePreset === '' ? (startDate || endDate ? '' : 'all') : activePreset}
+                    onChange={(e) => applyPreset(e.target.value as any)}
+                >
+                    <option value="all">All Dates</option>
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="quarter">This Quarter</option>
+                    <option value="last30">Last 30 Days</option>
+                    {activePreset === '' && (startDate || endDate) && <option value="">Custom Range</option>}
+                </select>
             )}
 
             <div className="date-range-inputs-group">

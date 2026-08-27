@@ -36,6 +36,14 @@ export interface ContractItem {
   signingToken?: string;
   createdByName: string;
   createdAt: string;
+  invoiceId?: number;
+  invoiceNumber?: string;
+  invoiceStatus?: string;
+  invoiceTotalAmount?: number;
+  invoiceAmountPaid?: number;
+  invoiceBalanceDue?: number;
+  invoicePaidAt?: string;
+  invoicePaymentUrl?: string;
 }
 
 interface ContractModalProps {

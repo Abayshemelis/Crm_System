@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  Users, Building2, UserCircle, Settings, LogIn,
-  Kanban, CheckSquare, BarChart2, X, Receipt,
-  LayoutDashboard, Target, FileText, History,
-  LogOut, Camera
+  LayoutDashboard, Users, Target, Kanban, FileText,
+  Receipt, CheckSquare, BarChart2, UserCircle,
+  Building2, LogIn, LogOut, Settings, X, CreditCard,
+  History, Activity, Trophy, ShieldCheck, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSystemProfile } from '../../context/SystemProfileContext';
 import { UserProfileModal } from './UserProfileModal';
 import './layout.css';
 
@@ -43,7 +44,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: 'reports',
-    label: 'Overview Reports',
+    label: 'Report Overview',
     icon: BarChart2,
     to: '/reports',
     authRequired: false,
@@ -51,82 +52,103 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     key: 'customers',
-    label: 'Customers',
+    label: 'Customer',
     icon: Users,
     to: '/customers',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/customers/reports', label: 'Customer Reports', isReport: true }
+      { to: '/reports/customers', label: 'Customer Report', isReport: true }
     ]
   },
   {
     key: 'companies',
-    label: 'Companies',
+    label: 'Company',
     icon: Building2,
     to: '/companies',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/companies/reports', label: 'Company Reports', isReport: true }
+      { to: '/reports/companies', label: 'Company Report', isReport: true }
     ]
   },
   {
     key: 'leads',
-    label: 'Leads',
+    label: 'Lead',
     icon: Target,
     to: '/leads',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/leads/reports', label: 'Lead Reports', isReport: true }
+      { to: '/reports/leads', label: 'Lead Report', isReport: true }
     ]
   },
   {
     key: 'pipeline',
-    label: 'Pipeline',
+    label: 'Opportunity / Deal',
     icon: Kanban,
     to: '/pipeline',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/pipeline/reports', label: 'Pipeline Reports', isReport: true }
+      { to: '/reports/opportunities', label: 'Deal Report', isReport: true }
     ]
   },
   {
     key: 'contracts',
-    label: 'Contracts',
+    label: 'Contract',
     icon: FileText,
     to: '/contracts',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/contracts/reports', label: 'Contract Reports', isReport: true }
+      { to: '/reports/contracts', label: 'Contract Report', isReport: true }
     ]
   },
   {
     key: 'invoices',
-    label: 'Invoices',
+    label: 'Invoice',
     icon: Receipt,
     to: '/invoices',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/invoices/reports', label: 'Invoice Reports', isReport: true }
+      { to: '/reports/invoices', label: 'Invoice Report', isReport: true }
+    ]
+  },
+  {
+    key: 'payments',
+    label: 'Payment',
+    icon: CreditCard,
+    to: '/payments',
+    authRequired: true,
+    managerOnly: false,
+    subItems: [
+      { to: '/reports/payments', label: 'Payment Report', isReport: true }
     ]
   },
   {
     key: 'tasks',
-    label: 'Tasks',
+    label: 'Task',
     icon: CheckSquare,
     to: '/tasks',
     authRequired: true,
     managerOnly: false,
     subItems: [
-      { to: '/tasks/reports', label: 'Task Reports', isReport: true }
+      { to: '/reports/tasks', label: 'Task Report', isReport: true }
     ]
   },
-
+  {
+    key: 'users',
+    label: 'User',
+    icon: UserCircle,
+    to: '/users',
+    authRequired: true,
+    managerOnly: true,
+    subItems: [
+      { to: '/users/reports', label: 'User Report', isReport: true }
+    ]
+  },
   {
     key: 'audit-logs',
     label: 'System History',
@@ -135,19 +157,16 @@ const NAV_SECTIONS: NavSection[] = [
     authRequired: true,
     managerOnly: true,
     subItems: [
-      { to: '/audit-logs/reports', label: 'History Reports', isReport: true }
+      { to: '/reports/system-history', label: 'System History Report', isReport: true }
     ]
   },
   {
-    key: 'users',
-    label: 'Users',
-    icon: UserCircle,
-    to: '/users',
+    key: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    to: '/settings',
     authRequired: true,
-    managerOnly: true,
-    subItems: [
-      { to: '/users/reports', label: 'Rep Leaderboard', isReport: true }
-    ]
+    managerOnly: true
   }
 ];
 
@@ -157,9 +176,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const { isManagerOrAboveSelected, user, logout, selectedRole } = useAuth();
+  const { profile } = useSystemProfile();
   const location = useLocation();
   const currentPath = location.pathname;
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [hoveredTooltip, setHoveredTooltip] = useState<{ label: string; top: number; left: number } | null>(null);
+  const [isCrmMenuOpen, setIsCrmMenuOpen] = useState(false);
+  
+  const crmMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideCrm = (e: MouseEvent) => {
+      if (crmMenuRef.current && !crmMenuRef.current.contains(e.target as Node)) {
+        setIsCrmMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideCrm);
+    return () => document.removeEventListener('mousedown', handleOutsideCrm);
+  }, []);
+
+  // CRM Config (from Context)
+  const crmName = profile?.systemName || 'KENOVA CRM';
+  const crmLogo = profile?.logoUrl || '';
+
+  // Short role label matching the active session role
+  const profileTitle =
+    selectedRole === 'Admin'
+      ? 'Admin'
+      : selectedRole === 'Manager'
+      ? 'Manager'
+      : 'Sales Rep';
+
+  const handleMouseEnter = (label: string, e: React.MouseEvent<HTMLElement>) => {
+    if (collapsed) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setHoveredTooltip({
+        label,
+        top: rect.top + rect.height / 2,
+        left: rect.right + 12,
+      });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHoveredTooltip(null);
+  };
+
+  const toggleSection = (key: string, e: React.MouseEvent) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [key]: prev[key] !== undefined ? !prev[key] : false
+    }));
+  };
 
   const getInitials = (name: string) => {
     if (!name) return 'U';
@@ -178,9 +247,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       <aside className={sidebarClass} aria-label="Main navigation">
         {/* Brand */}
-        <div className="sidebar-brand">
-          <Building2 className="brand-icon" aria-hidden="true" />
-          <span className="brand-text">CRM</span>
+        <div className="sidebar-brand" ref={crmMenuRef}>
+          <button 
+            className="crm-profile-btn" 
+            onClick={() => setIsCrmMenuOpen(prev => !prev)}
+            title="CRM Settings & Profile"
+            style={{ width: '100%', justifyContent: collapsed ? 'center' : 'flex-start', padding: collapsed ? '6px' : '6px 12px 6px 8px' }}
+          >
+            {crmLogo ? (
+              <img src={crmLogo} alt={`${crmName} Logo`} className="crm-logo-img" />
+            ) : (
+              <div className="crm-logo-fallback">
+                <Building2 size={16} />
+              </div>
+            )}
+            
+            {!collapsed && (
+              <>
+                <div className="crm-profile-text" style={{ flex: 1 }}>
+                  <span className="crm-name" style={{ display: 'block' }}>{crmName}</span>
+                </div>
+                <ChevronDown size={14} className="crm-dropdown-icon" />
+              </>
+            )}
+          </button>
+
+          {isCrmMenuOpen && (
+            <div className="crm-dropdown-menu">
+              <div className="crm-dropdown-header">
+                <p className="crm-dropdown-name">{crmName}</p>
+                <p className="crm-dropdown-subtitle">System Profile</p>
+              </div>
+              <div className="crm-dropdown-body">
+                <NavLink 
+                  to="/settings" 
+                  className={`crm-dropdown-item ${(user?.roles.includes('Admin') || user?.roles.includes('Manager')) ? '' : 'disabled'}`}
+                  onClick={(e) => {
+                    setIsCrmMenuOpen(false);
+                    if (!user?.roles.includes('Admin') && !user?.roles.includes('Manager')) {
+                      e.preventDefault();
+                    }
+                  }}
+                  title={(user?.roles.includes('Admin') || user?.roles.includes('Manager')) ? 'Go to CRM Settings' : 'Contact an Admin to access settings'}
+                >
+                  <Settings size={16} />
+                  <span>CRM Settings</span>
+                </NavLink>
+              </div>
+            </div>
+          )}
+
           {/* Close button – only visible on mobile/tablet */}
           <button
             className="sidebar-close-btn"
@@ -200,31 +316,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const Icon = section.icon;
             const hasSubItems = Boolean(section.subItems && section.subItems.length > 0);
 
-            // Check if section or any sub-item is currently active (clicked/navigated)
+            // Check if section or any sub-item is currently active
             const isSectionActive =
               currentPath === section.to ||
-              (section.to !== '/dashboard' && currentPath.startsWith(section.to + '/')) ||
-              (section.key === 'pipeline' && currentPath.startsWith('/opportunities'));
+              (section.to !== '/' && section.to !== '/reports' && currentPath.startsWith(section.to + '/')) ||
+              (section.key === 'customers' && (currentPath.startsWith('/customers') || currentPath === '/reports/customers')) ||
+              (section.key === 'companies' && (currentPath.startsWith('/companies') || currentPath === '/reports/companies')) ||
+              (section.key === 'leads' && (currentPath.startsWith('/leads') || currentPath === '/reports/leads')) ||
+              (section.key === 'pipeline' && (currentPath.startsWith('/pipeline') || currentPath.startsWith('/opportunities') || currentPath === '/reports/pipeline' || currentPath === '/reports/opportunities')) ||
+              (section.key === 'contracts' && (currentPath.startsWith('/contracts') || currentPath === '/reports/contracts')) ||
+              (section.key === 'invoices' && (currentPath.startsWith('/invoices') || currentPath === '/reports/invoices')) ||
+              (section.key === 'payments' && (currentPath.startsWith('/payments') || currentPath === '/reports/payments')) ||
+              (section.key === 'tasks' && (currentPath.startsWith('/tasks') || currentPath === '/reports/tasks')) ||
+              (section.key === 'users' && (currentPath.startsWith('/users') || currentPath === '/users/reports' || currentPath === '/reports/team')) ||
+              (section.key === 'audit-logs' && (currentPath.startsWith('/audit-logs') || currentPath === '/reports/system-history')) ||
+              (section.key === 'settings' && currentPath.startsWith('/settings'));
 
-            // Only expand when active (clicked/navigated into) and not collapsed
-            const isExpanded = !collapsed && hasSubItems && isSectionActive;
+            // Section is expanded if actively on it (unless explicitly toggled closed) or if toggled open
+            const isExpanded = !collapsed && hasSubItems && (expandedSections[section.key] ?? isSectionActive);
 
             return (
               <div
                 key={section.key}
                 className={`sidebar-section-block ${isSectionActive ? 'section-active' : ''} ${isExpanded ? 'is-expanded' : ''}`}
               >
-                {/* Primary Main Navigation Link (Acts as default view for the section) */}
+                {/* Primary Main Navigation Link */}
                 <NavLink
                   to={section.to}
                   className={`sidebar-link ${isSectionActive ? 'active' : ''}`}
-                  title={collapsed ? section.label : undefined}
+                  aria-label={section.label}
+                  onMouseEnter={(e) => handleMouseEnter(section.label, e)}
+                  onMouseLeave={handleMouseLeave}
+                  onClick={(e) => {
+                    handleMouseLeave();
+                    if (hasSubItems && isSectionActive) {
+                      toggleSection(section.key, e);
+                    }
+                  }}
                 >
-                  <Icon className="link-icon" size={18} aria-hidden="true" />
+                  <Icon className="link-icon" size={collapsed ? 22 : 19} aria-hidden="true" />
                   <span className="link-text">{section.label}</span>
                 </NavLink>
 
-                {/* Sub-Navigation Items (e.g. Reports, Stage Settings) */}
+                {/* Sub-Navigation Items */}
                 {hasSubItems && !collapsed && (
                   <div className={`sidebar-touch-expand-drawer ${isExpanded ? 'open' : ''}`}>
                     <div className="sidebar-tree-container">
@@ -233,7 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {section.subItems!.map((sub) => {
                           const isSubActive =
                             currentPath === sub.to ||
-                            (sub.to !== section.to && currentPath.startsWith(sub.to + '/'));
+                            (sub.to !== '/reports' && currentPath.startsWith(sub.to + '/'));
 
                           return (
                             <NavLink
@@ -259,77 +393,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <NavLink
                 to="/login"
                 className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-                title={collapsed ? 'Sign In' : undefined}
+                aria-label="Sign In"
+                onMouseEnter={(e) => handleMouseEnter('Sign In', e)}
+                onMouseLeave={handleMouseLeave}
+                onClick={handleMouseLeave}
               >
-                <LogIn className="link-icon" size={18} aria-hidden="true" />
+                <LogIn className="link-icon" size={collapsed ? 22 : 19} aria-hidden="true" />
                 <span className="link-text">Sign In</span>
               </NavLink>
             </div>
           )}
         </nav>
 
-        {/* Footer (Settings & User Profile with Sign Out) */}
-        <div className="sidebar-footer">
-          {user && isManagerOrAboveSelected && (
-            <NavLink
-              to="/settings"
-              className={({ isActive }) => `sidebar-link sidebar-settings-link ${isActive ? 'active' : ''}`}
-              title={collapsed ? 'Settings' : undefined}
-            >
-              <Settings className="link-icon" size={18} aria-hidden="true" />
-              <span className="link-text">Settings</span>
-            </NavLink>
-          )}
-
-          {user && (
-            <div className={`sidebar-user-card ${collapsed ? 'collapsed' : ''}`}>
+        {/* Admin / Profile Icon Button after Settings */}
+        {user && (
+          <div className="sidebar-footer">
+            <div className="sidebar-admin-btn-container">
               <button
                 type="button"
-                className="sidebar-user-avatar-btn"
-                onClick={() => setIsProfileModalOpen(true)}
-                title="Click to edit profile photo"
-                aria-label="Edit profile photo"
-              >
-                <div className="sidebar-user-avatar">
-                  {user.profileImage ? (
-                    <img src={user.profileImage} alt={user.name} className="sidebar-avatar-img" />
-                  ) : (
-                    <span className="sidebar-avatar-initials">{getInitials(user.name)}</span>
-                  )}
-                  <span className="sidebar-avatar-badge" title="Change photo">
-                    <Camera size={10} />
-                  </span>
-                </div>
-              </button>
-
-              {!collapsed && (
-                <div className="sidebar-user-meta" onClick={() => setIsProfileModalOpen(true)}>
-                  <span className="sidebar-user-name" title={user.name}>{user.name}</span>
-                  <span className="sidebar-user-role">
-                    {selectedRole === 'SalesRep' ? 'Sales Rep' : selectedRole}
-                  </span>
-                </div>
-              )}
-
-              <button
-                type="button"
-                className="sidebar-logout-btn"
+                className="sidebar-admin-icon-btn"
                 onClick={() => {
-                  if (onClose) onClose();
-                  logout();
+                  handleMouseLeave();
+                  setIsProfileModalOpen(true);
                 }}
-                title="Sign Out"
-                aria-label="Sign Out"
+                aria-label={profileTitle}
+                onMouseEnter={(e) => handleMouseEnter(profileTitle, e)}
+                onMouseLeave={handleMouseLeave}
               >
-                <LogOut size={17} />
-                {!collapsed && <span>Sign Out</span>}
+                {user.profileImage ? (
+                  <div className="sidebar-admin-avatar-wrap">
+                    <img
+                      src={user.profileImage}
+                      alt={user.name}
+                      className="sidebar-admin-avatar-img"
+                    />
+                    {selectedRole === 'Admin' && (
+                      <span className="sidebar-admin-shield-dot">
+                        <ShieldCheck size={11} />
+                      </span>
+                    )}
+                  </div>
+                ) : selectedRole === 'Admin' ? (
+                  <div className="sidebar-admin-fallback-icon">
+                    <ShieldCheck size={18} />
+                  </div>
+                ) : (
+                  <div className="sidebar-admin-fallback-icon">
+                    <span>{getInitials(user.name)}</span>
+                  </div>
+                )}
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </aside>
 
-      {/* User Profile Modal */}
+      {/* Floating Tooltip in Collapsed Sidebar */}
+      {collapsed && hoveredTooltip && (
+        <div
+          className="sidebar-floating-portal-tooltip"
+          style={{
+            top: `${hoveredTooltip.top}px`,
+            left: `${hoveredTooltip.left}px`,
+          }}
+          role="tooltip"
+        >
+          {hoveredTooltip.label}
+        </div>
+      )}
+
+      {/* Profile Modal */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}

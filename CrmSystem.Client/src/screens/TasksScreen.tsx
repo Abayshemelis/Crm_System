@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { TaskListGroup, TaskReadDto } from '../components/tasks/TaskListGroup';
 import { CalendarGrid } from '../components/tasks/CalendarGrid';
-import { TaskFormModal } from '../components/tasks/TaskFormModal';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { List, Calendar, Plus, CheckSquare, Users } from 'lucide-react';
+import { List, Calendar, Plus } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { showToast } from '../lib/toast';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
@@ -15,10 +15,10 @@ import './screens.css';
 interface TaskGrouped { overdue: TaskReadDto[]; dueToday: TaskReadDto[]; upcoming: TaskReadDto[]; completed?: TaskReadDto[]; }
 interface CalendarDay { day: number; taskCount: number; tasks: TaskReadDto[]; }
 interface Lookup { id: number; name: string; }
-interface TaskStatus extends Lookup { isTerminal: boolean; }
 interface User extends Lookup {}
 
 export const TasksScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { user, isManagerOrAboveSelected } = useAuth();
   const isManager = isManagerOrAboveSelected;
 
@@ -28,27 +28,10 @@ export const TasksScreen: React.FC = () => {
   const [calDays, setCalDays] = useState<CalendarDay[]>([]);
   const [calDate, setCalDate] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editTask, setEditTask] = useState<TaskReadDto | null>(null);
-  const [prefillDate, setPrefillDate] = useState<string | undefined>(undefined);
-  const [statuses, setStatuses] = useState<TaskStatus[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [customers, setCustomers] = useState<Lookup[]>([]);
-  const [opportunities, setOpportunities] = useState<Lookup[]>([]);
-  const [activities, setActivities] = useState<Lookup[]>([]);
-  const [activityTypes, setActivityTypes] = useState<Lookup[]>([]);
   const [selectedRep, setSelectedRep] = useState<string>('me');
 
   const myId = user?.userId;
-
-  // Ensure current user is always included in the users list
-  const effectiveUsers = useMemo(() => {
-    const list = [...users];
-    if (myId && !list.some(u => Number(u.id) === Number(myId))) {
-      list.unshift({ id: myId, name: `${user?.name || 'Me'} (Me)` });
-    }
-    return list;
-  }, [users, myId, user?.name]);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -85,7 +68,7 @@ export const TasksScreen: React.FC = () => {
     try {
       let repParam = '';
       if (selectedRep === 'all') {
-        repParam = ''; // fetch all team members on calendar
+        repParam = '';
       } else if (selectedRep !== 'me') {
         repParam = `&assignedToId=${selectedRep}`;
       } else if (myId) {
@@ -97,10 +80,6 @@ export const TasksScreen: React.FC = () => {
   }, [calDate, selectedRep, myId]);
 
   useEffect(() => {
-    api.get<{ id: number; name: string; isTerminal: boolean }[]>('/api/taskstatuses').then(res =>
-      setStatuses(res.map(s => ({ id: s.id, name: s.name, isTerminal: s.isTerminal })))
-    ).catch(() => {});
-
     api.get<any[]>('/api/users').then(res => {
       const usersData = res ?? [];
       const mapped = usersData
@@ -111,67 +90,38 @@ export const TasksScreen: React.FC = () => {
         .filter(u => u.id != null && u.id !== 0);
       setUsers(mapped);
     }).catch(() => {});
-
-    api.get<{ data: Array<{ customerId: number; firstName: string; lastName: string }> }>('/api/customers?page=1&pageSize=100')
-      .then(res => setCustomers((res.data ?? []).map(c => ({ id: c.customerId, name: `${c.firstName} ${c.lastName}` }))))
-      .catch(() => {});
-
-    api.get<any[]>('/api/opportunities')
-      .then(res => setOpportunities((res ?? []).map(o => ({ id: o.opportunityId, name: o.title }))))
-      .catch(() => {});
-
-    api.get<any[]>('/api/activities')
-      .then(res => setActivities((res ?? []).map(a => ({ id: a.activityId, name: a.subject }))))
-      .catch(() => {});
-
-    api.get<any[]>('/api/activitytypes')
-      .then(res => {
-        const mapped = (res ?? []).map(at => ({ id: at.id ?? at.Id, name: at.name ?? at.Name }));
-        setActivityTypes(mapped);
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
   useEffect(() => { if (view === 'calendar') fetchCalendar(); }, [view, fetchCalendar]);
 
-  const handleTaskComplete = (id: number) => {
-    setGrouped(g => ({
-      overdue: g.overdue.filter(t => t.crmTaskId !== id),
-      dueToday: g.dueToday.filter(t => t.crmTaskId !== id),
-      upcoming: g.upcoming.filter(t => t.crmTaskId !== id),
-    }));
-  };
-
-  const handleTaskSaved = (_task: TaskReadDto) => {
-    setShowModal(false);
-    setEditTask(null);
-    setPrefillDate(undefined);
-    fetchTasks();
-    if (view === 'calendar') fetchCalendar();
-  };
-
-  const handleTaskDeleted = (id: number) => {
-    setGrouped(g => ({
-      overdue: g.overdue.filter(t => t.crmTaskId !== id),
-      dueToday: g.dueToday.filter(t => t.crmTaskId !== id),
-      upcoming: g.upcoming.filter(t => t.crmTaskId !== id),
-    }));
-    setShowModal(false);
-    setEditTask(null);
-    if (view === 'calendar') fetchCalendar();
+  const handleTaskComplete = async (taskId: number) => {
+    try {
+      await api.patch(`/api/tasks/${taskId}/complete`, {});
+      showToast('Task marked as completed.', 'success');
+      fetchTasks();
+      if (view === 'calendar') fetchCalendar();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to complete task', 'error');
+    }
   };
 
   const handleTaskClick = (task: TaskReadDto) => {
-    setPrefillDate(undefined);
-    setEditTask(task);
-    setShowModal(true);
+    navigate(`/tasks/${task.crmTaskId}/edit`);
+  };
+
+  const handleTaskDeleted = (deletedId: number) => {
+    setGrouped(prev => ({
+      overdue: prev.overdue.filter(t => t.crmTaskId !== deletedId),
+      dueToday: prev.dueToday.filter(t => t.crmTaskId !== deletedId),
+      upcoming: prev.upcoming.filter(t => t.crmTaskId !== deletedId),
+    }));
+    setCompletedTasks(prev => prev.filter(t => t.crmTaskId !== deletedId));
+    if (view === 'calendar') fetchCalendar();
   };
 
   const handleNewTask = (isoDate: string) => {
-    setEditTask(null);
-    setPrefillDate(isoDate);
-    setShowModal(true);
+    navigate(`/tasks/new?dueDate=${encodeURIComponent(isoDate)}`);
   };
 
   const handleTaskDrop = async (taskId: number, newDateStr: string) => {
@@ -229,7 +179,7 @@ export const TasksScreen: React.FC = () => {
           <button
             type="button"
             className="btn-primary"
-            onClick={() => { setEditTask(null); setPrefillDate(undefined); setShowModal(true); }}
+            onClick={() => navigate('/tasks/new')}
           >
             <Plus size={15} /> New Task
           </button>
@@ -265,23 +215,6 @@ export const TasksScreen: React.FC = () => {
           )}
         </Card>
       </div>
-
-      {showModal && (
-        <TaskFormModal
-          task={editTask}
-          prefillDueDate={prefillDate}
-          currentUserId={myId ?? 0}
-          users={effectiveUsers}
-          customers={customers}
-          opportunities={opportunities}
-          activities={activities}
-          activityTypes={activityTypes}
-          statuses={statuses}
-          onSaved={handleTaskSaved}
-          onDeleted={handleTaskDeleted}
-          onClose={() => { setShowModal(false); setEditTask(null); setPrefillDate(undefined); }}
-        />
-      )}
     </Layout>
   );
 };

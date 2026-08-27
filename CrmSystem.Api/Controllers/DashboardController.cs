@@ -118,8 +118,8 @@ public class DashboardController : ControllerBase
         var overdueTasks = await _db.CrmTasks.Include(t => t.CrmTaskStatus).Where(t => (t.CustomerId == null || t.Customer != null) && (t.LeadId == null || t.Lead != null) && (t.OpportunityId == null || (t.Opportunity != null && (t.Opportunity.CustomerId == null || t.Opportunity.Customer != null)))).Where(t => (t.CrmTaskStatus == null || !t.CrmTaskStatus.IsTerminal) && t.DueDate < today).CountAsync();
 
         var totalClosed = wonOpportunities + lostOpportunities;
-        var winRate = totalClosed > 0 ? Math.Round((double)wonOpportunities / totalClosed * 100, 1) : 94.2;
-        var averageDealSize = wonOpportunities > 0 ? Math.Round(totalRevenue / wonOpportunities) : 15400.0;
+        var winRate = totalClosed > 0 ? Math.Round((double)wonOpportunities / totalClosed * 100, 1) : 0.0;
+        var averageDealSize = wonOpportunities > 0 ? Math.Round(totalRevenue / wonOpportunities) : 0.0;
 
         return Ok(new
         {
@@ -255,20 +255,57 @@ public class DashboardController : ControllerBase
         var wonOpportunitiesQuery = opportunitiesQuery
             .Include(o => o.OpportunityStage)
             .Where(o => o.OpportunityStage != null && o.OpportunityStage.IsWon);
-        var totalRevenue = await wonOpportunitiesQuery.SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
+        var totalWonRevenue = await wonOpportunitiesQuery.SumAsync(o => (double?)o.EstimatedValue) ?? 0.0;
+
+        // Also check completed payments from database
+        var totalCollectedPayments = await _db.Payments
+            .Where(p => !p.IsDeleted && p.Status == "Completed")
+            .SumAsync(p => (double?)p.Amount) ?? 0.0;
+
+        var totalRevenue = Math.Max(totalWonRevenue, totalCollectedPayments);
 
         // ── 6-Month Monthly Revenue Grouping ───────────────────────────────────
-        var sixMonthsAgo = today.AddMonths(-6);
-        var revenueByMonth = await wonOpportunitiesQuery
-            .Where(o => o.ActualCloseDate.HasValue && o.ActualCloseDate.Value >= sixMonthsAgo)
-            .GroupBy(o => new { Year = o.ActualCloseDate!.Value.Year, Month = o.ActualCloseDate!.Value.Month })
-            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-            .Select(g => new
+        var sixMonthsAgo = today.AddMonths(-5);
+        var firstDayOfWindow = new DateTime(sixMonthsAgo.Year, sixMonthsAgo.Month, 1);
+
+        var wonOppsInWindow = await wonOpportunitiesQuery
+            .Where(o => (o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt) >= firstDayOfWindow)
+            .Select(o => new
             {
-                Month = $"{g.Key.Year}-{g.Key.Month:D2}",
-                Revenue = g.Sum(o => (double?)o.EstimatedValue) ?? 0.0
+                Date = o.ActualCloseDate ?? o.UpdatedAt ?? o.CreatedAt,
+                Value = (double)o.EstimatedValue
             })
             .ToListAsync();
+
+        var paymentsInWindow = await _db.Payments
+            .Where(p => !p.IsDeleted && p.Status == "Completed" && p.PaymentDate >= firstDayOfWindow)
+            .Select(p => new
+            {
+                Date = p.PaymentDate,
+                Value = (double)p.Amount
+            })
+            .ToListAsync();
+
+        var sixMonthsList = Enumerable.Range(0, 6)
+            .Select(i => firstDayOfWindow.AddMonths(i))
+            .Select(d => new
+            {
+                Year = d.Year,
+                Month = d.Month,
+                MonthKey = $"{d.Year}-{d.Month:D2}"
+            })
+            .ToList();
+
+        var revenueByMonth = sixMonthsList.Select(m =>
+        {
+            var oppSum = wonOppsInWindow.Where(o => o.Date.Year == m.Year && o.Date.Month == m.Month).Sum(o => o.Value);
+            var paySum = paymentsInWindow.Where(p => p.Date.Year == m.Year && p.Date.Month == m.Month).Sum(p => p.Value);
+            return new
+            {
+                Month = m.MonthKey,
+                Revenue = Math.Max(oppSum, paySum)
+            };
+        }).ToList();
 
         // ── Lead Conversion Rate ──────────────────────────────────────────────
         var convertedLeadsCount = await leadsQuery.Where(l => l.LeadStatus != null && l.LeadStatus.IsTerminal && l.LeadStatus.Name == "Converted").CountAsync();

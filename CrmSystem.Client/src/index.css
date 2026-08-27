@@ -1,10 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #15131a;
-  --bg-secondary: #1f1c25;
-  --bg-tertiary: #2a2632;
-  --page-background: #15131a;
+  --bg-primary: #18181b;
+  --bg-secondary: #27272a;
+  --bg-tertiary: #3f3f46;
+  --page-background: #18181b;
   --accent-primary: #f59e0b;
   --accent-hover: #d97706;
   --accent-glow: rgba(245, 158, 11, 0.4);
@@ -15,7 +15,7 @@
   --border-highlight: rgba(245, 158, 11, 0.35);
   --error: #ef4444;
   --success: #10b981;
-  --glass-bg: rgba(31, 28, 37, 0.92);
+  --glass-bg: rgba(39, 39, 42, 0.92);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: blur(12px);
   --sidebar-text-primary: #f8fafc;

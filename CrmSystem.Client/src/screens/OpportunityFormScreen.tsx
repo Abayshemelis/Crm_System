@@ -8,6 +8,7 @@ import { DatePicker } from '../components/ui/DatePicker';
 import { CustomerSearchSelect } from '../components/ui/CustomerSearchSelect';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { Skeleton } from '../components/ui/Skeleton';
+import { validateName, validatePositiveNumber, validateRequiredSelect, validateMaxLength } from '../lib/validators';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { ArrowLeft, DollarSign, Calendar, Target, User as UserIcon, TrendingUp, AlertCircle, Clock } from 'lucide-react';
@@ -100,15 +101,23 @@ export const OpportunityFormScreen: React.FC = () => {
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!customerId) newErrors.customerId = 'Please select a customer.';
-    if (!title.trim()) newErrors.title = 'Opportunity title is required.';
-    if (!stageId) newErrors.stageId = 'Pipeline stage is required.';
-    if (!estimatedValue.trim()) {
-      newErrors.estimatedValue = 'Estimated value is required.';
-    } else if (isNaN(Number(estimatedValue)) || Number(estimatedValue) < 0) {
-      newErrors.estimatedValue = 'Value must be a valid positive number.';
-    }
-    if (!ownerId) newErrors.ownerId = 'Deal owner is required.';
+    const custErr = validateRequiredSelect(customerId, 'Customer');
+    if (custErr) newErrors.customerId = custErr;
+
+    const titleErr = validateName(title, 'Opportunity title', 2, 150);
+    if (titleErr) newErrors.title = titleErr;
+
+    const stageErr = validateRequiredSelect(stageId, 'Pipeline stage');
+    if (stageErr) newErrors.stageId = stageErr;
+
+    const valErr = validatePositiveNumber(estimatedValue, 'Estimated deal value', true);
+    if (valErr) newErrors.estimatedValue = valErr;
+
+    const ownerErr = validateRequiredSelect(ownerId, 'Deal owner');
+    if (ownerErr) newErrors.ownerId = ownerErr;
+
+    const descErr = validateMaxLength(description, 1000, 'Description');
+    if (descErr) newErrors.description = descErr;
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

@@ -413,39 +413,40 @@ export const DashboardScreen: React.FC = () => {
             </div>
 
             {/* 5 Primary Compact KPI Cards Row */}
+            {/* 5 Primary Balanced & Modern KPI Cards Row */}
             <div className="dashboard-kpi-grid">
                 {statCards.map((card, i) => (
                     <div
                         key={card.title}
-                        className="dashboard-kpi-card glass-panel animate-fade-in"
+                        className="dashboard-kpi-card animate-fade-in"
                         style={{ 
                             animationDelay: `${i * 0.03}s`,
-                            color: card.color
-                        }}
+                            '--card-accent': card.color
+                        } as React.CSSProperties}
                         onClick={() => handleStatCardAction(card)}
                         title={`Click to view ${card.title} details`}
                     >
-                        <div className="dashboard-kpi-content">
-                            <div className="dashboard-kpi-title">
-                                {card.title}
+                        <div className="dashboard-kpi-header">
+                            <span className="dashboard-kpi-title">{card.title}</span>
+                            <div 
+                                className="dashboard-kpi-icon-wrap"
+                                style={{ 
+                                    background: `color-mix(in srgb, ${card.color} 12%, transparent)`,
+                                    color: card.color,
+                                    border: `1px solid color-mix(in srgb, ${card.color} 22%, transparent)`
+                                }}
+                            >
+                                {React.createElement(card.icon, { size: 16, strokeWidth: 2.2 })}
                             </div>
+                        </div>
+
+                        <div className="dashboard-kpi-body">
                             <div className="dashboard-kpi-value">
                                 {isLoading ? '—' : card.format === 'currency' ? formatCurrency(card.value) : card.format === 'percentage' ? formatPercentage(card.value) : card.value}
                             </div>
                             <div className="dashboard-kpi-sub">
                                 {card.footer || card.description}
                             </div>
-                        </div>
-
-                        <div 
-                            className="dashboard-kpi-icon-wrap"
-                            style={{ 
-                                background: `color-mix(in srgb, ${card.color} 14%, transparent)`,
-                                color: card.color,
-                                border: `1px solid color-mix(in srgb, ${card.color} 26%, transparent)`
-                            }}
-                        >
-                            {React.createElement(card.icon, { size: 18 })}
                         </div>
                     </div>
                 ))}
@@ -472,7 +473,7 @@ export const DashboardScreen: React.FC = () => {
                         </div>
 
                         <div style={{ padding: '1rem 1.25rem 0.5rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 100px), 1fr))', gap: '0.65rem', marginBottom: '1rem' }}>
                                 <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '0.65rem', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Won Revenue</div>
                                     <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981', marginTop: '0.15rem' }}>
@@ -496,14 +497,7 @@ export const DashboardScreen: React.FC = () => {
                             {/* Historical Revenue Chart */}
                             <div style={{ marginTop: '0.25rem' }}>
                                 <SimpleChart
-                                    data={filteredStats?.revenueByMonth && filteredStats.revenueByMonth.length > 0 ? filteredStats.revenueByMonth : [
-                                        { month: '2026-03', revenue: 12000 },
-                                        { month: '2026-04', revenue: 18500 },
-                                        { month: '2026-05', revenue: 14200 },
-                                        { month: '2026-06', revenue: 29000 },
-                                        { month: '2026-07', revenue: 24500 },
-                                        { month: '2026-08', revenue: filteredStats?.totalRevenue ?? 35000 }
-                                    ]}
+                                    data={filteredStats?.revenueByMonth ?? []}
                                     height={130}
                                 />
                             </div>

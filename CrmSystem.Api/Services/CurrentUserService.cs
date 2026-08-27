@@ -38,17 +38,27 @@ public class CurrentUserService : ICurrentUserService
 
             var values = User?.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
             var parsedRoles = values
-                .Select(v => Enum.TryParse<UserRole>(v, out var role) ? role : (UserRole?)null)
+                .Select(v => {
+                    if (string.Equals(v, "Administrator", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "SuperAdmin", StringComparison.OrdinalIgnoreCase)) return UserRole.Admin;
+                    if (string.Equals(v, "SalesManager", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "Manager", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "TeamLead", StringComparison.OrdinalIgnoreCase)) return UserRole.Manager;
+                    if (string.Equals(v, "SalesRep", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "Sales Representative", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "Representative", StringComparison.OrdinalIgnoreCase) || string.Equals(v, "User", StringComparison.OrdinalIgnoreCase)) return UserRole.SalesRep;
+                    return Enum.TryParse<UserRole>(v, true, out var role) ? role : (UserRole?)null;
+                })
                 .Where(r => r.HasValue)
                 .Select(r => r!.Value)
                 .ToList();
 
-            if (!string.IsNullOrWhiteSpace(headerRole) && Enum.TryParse<UserRole>(headerRole, true, out var selectedRole))
+            if (!string.IsNullOrWhiteSpace(headerRole))
             {
-                // If user is Admin or has that role, allow role simulation/selection
-                if (parsedRoles.Contains(UserRole.Admin) || parsedRoles.Contains(selectedRole))
+                UserRole? selectedRole = null;
+                if (string.Equals(headerRole, "Administrator", StringComparison.OrdinalIgnoreCase) || string.Equals(headerRole, "Admin", StringComparison.OrdinalIgnoreCase)) selectedRole = UserRole.Admin;
+                else if (string.Equals(headerRole, "SalesManager", StringComparison.OrdinalIgnoreCase) || string.Equals(headerRole, "Manager", StringComparison.OrdinalIgnoreCase)) selectedRole = UserRole.Manager;
+                else if (string.Equals(headerRole, "SalesRep", StringComparison.OrdinalIgnoreCase)) selectedRole = UserRole.SalesRep;
+                else if (Enum.TryParse<UserRole>(headerRole, true, out var r)) selectedRole = r;
+
+                if (selectedRole.HasValue && (parsedRoles.Contains(UserRole.Admin) || parsedRoles.Contains(selectedRole.Value)))
                 {
-                    return new List<UserRole> { selectedRole };
+                    return new List<UserRole> { selectedRole.Value };
                 }
             }
 

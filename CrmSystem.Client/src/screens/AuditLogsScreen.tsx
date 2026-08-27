@@ -25,14 +25,15 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
-  FileText,
   FileSpreadsheet,
   BarChart3,
   Table as TableIcon,
-  ExternalLink,
-  Sparkles,
-  Download,
-  Eye
+  Eye,
+  PlusCircle,
+  Edit3,
+  ShieldCheck,
+  Clock,
+  X
 } from 'lucide-react';
 import './reports/cleanReports.css';
 
@@ -157,6 +158,8 @@ export const AuditLogsScreen: React.FC = () => {
     setPage(1);
   };
 
+  const hasActiveFilters = entityTypeName !== 'All' || auditActionTypeName !== 'All' || changedById !== 'All' || search.trim() !== '' || fromDate !== '' || toDate !== '';
+
   const handleClearHistory = async () => {
     setIsClearing(true);
     try {
@@ -179,7 +182,7 @@ export const AuditLogsScreen: React.FC = () => {
 
   const handleDeleteSingleLog = async (e: React.MouseEvent, logId: number) => {
     e.stopPropagation();
-    if (!await confirmAction('Delete this audit log entry?')) return;
+    if (!await confirmAction('Delete this audit record?')) return;
     try {
       await api.delete(`/api/audit-logs/${logId}`);
       showToast('Audit record deleted.', 'success');
@@ -190,9 +193,9 @@ export const AuditLogsScreen: React.FC = () => {
   };
 
   // Metrics summary
-  const deletionCount = logs.filter(l => l.auditActionTypeName === 'Delete').length;
-  const updateCount = logs.filter(l => l.auditActionTypeName === 'Update' || l.auditActionTypeName === 'StageChange').length;
-  const createCount = logs.filter(l => l.auditActionTypeName === 'Create' || l.auditActionTypeName === 'Convert').length;
+  const deletionCount = useMemo(() => logs.filter(l => l.auditActionTypeName === 'Delete').length, [logs]);
+  const updateCount = useMemo(() => logs.filter(l => l.auditActionTypeName === 'Update' || l.auditActionTypeName === 'StageChange').length, [logs]);
+  const createCount = useMemo(() => logs.filter(l => l.auditActionTypeName === 'Create' || l.auditActionTypeName === 'Convert').length, [logs]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '—';
@@ -206,22 +209,41 @@ export const AuditLogsScreen: React.FC = () => {
     });
   };
 
+  const formatRelativeTime = (dateString: string) => {
+    if (!dateString) return '';
+    const now = new Date();
+    const d = new Date(dateString);
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
   const getActionBadge = (action: string) => {
     switch (action) {
       case 'Delete':
-        return { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.25)', icon: Trash2 };
+        return { bg: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.28)', icon: Trash2, label: 'DELETION' };
       case 'Create':
-        return { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16, 185, 129, 0.25)', icon: CheckCircle2 };
+        return { bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16, 185, 129, 0.28)', icon: CheckCircle2, label: 'CREATE' };
       case 'Update':
       case 'StageChange':
-        return { bg: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: 'rgba(59, 130, 246, 0.25)', icon: RefreshCw };
+        return { bg: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: 'rgba(59, 130, 246, 0.28)', icon: RefreshCw, label: action === 'StageChange' ? 'STAGE CHANGE' : 'UPDATE' };
       case 'Assign':
-        return { bg: 'rgba(168, 85, 247, 0.12)', color: '#a855f7', border: 'rgba(168, 85, 247, 0.25)', icon: User };
+        return { bg: 'rgba(168, 85, 247, 0.12)', color: '#a855f7', border: 'rgba(168, 85, 247, 0.28)', icon: User, label: 'ASSIGN' };
       case 'Convert':
-        return { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.25)', icon: Activity };
+        return { bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.28)', icon: Activity, label: 'CONVERT' };
       default:
-        return { bg: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.25)', icon: Info };
+        return { bg: 'rgba(148, 163, 184, 0.12)', color: '#94a3b8', border: 'rgba(148, 163, 184, 0.28)', icon: Info, label: action.toUpperCase() };
     }
+  };
+
+  const getUserInitials = (name: string) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
   };
 
   // CSV Export
@@ -257,20 +279,28 @@ export const AuditLogsScreen: React.FC = () => {
 
   return (
     <Layout>
-      <div className="clean-report-container">
-        {/* Header */}
-        <div className="clean-report-header">
-          <div className="clean-header-top">
-            <div className="clean-breadcrumb-group">
-              <button onClick={() => navigate('/dashboard')} className="clean-back-btn">
-                <ArrowLeft size={15} /> Dashboard
-              </button>
-              <span className="clean-badge clean-badge-primary">
-                System History & Security
-              </span>
+      <div className="sh-container">
+        {/* ── 1. Modern Header ─────────────────────────────────────────── */}
+        <div className="sh-header-card">
+          <div className="sh-header-top">
+            <div className="sh-header-title-group">
+              <div className="sh-header-icon-wrap">
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}>
+                  <h1 className="sh-header-title">System History & Security Trail</h1>
+                  <span className="clean-badge clean-badge-primary" style={{ fontSize: '0.68rem', padding: '2px 7px' }}>
+                    IMMUTABLE AUDIT
+                  </span>
+                </div>
+                <p className="sh-header-desc">
+                  Chronological trail recording user actions, entity creations, field mutations, and deletions.
+                </p>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <div className="sh-actions-group">
               <button
                 onClick={() => navigate('/audit-logs/reports')}
                 className="clean-btn-primary"
@@ -281,7 +311,7 @@ export const AuditLogsScreen: React.FC = () => {
               <button
                 onClick={handleExportCSV}
                 className="clean-btn-secondary"
-                title="Download CSV Trail"
+                title="Download CSV Audit Trail"
               >
                 <FileSpreadsheet size={15} /> Export CSV
               </button>
@@ -298,190 +328,184 @@ export const AuditLogsScreen: React.FC = () => {
               <button
                 onClick={() => fetchAuditLogs()}
                 className="clean-btn-secondary"
-                style={{ padding: '6px 10px' }}
+                style={{ padding: '7px 11px' }}
                 title="Refresh Audit Trail"
               >
                 <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
               </button>
             </div>
           </div>
-
-          <div className="clean-title-group">
-            <h1 className="clean-report-title">
-              <History size={28} style={{ color: '#6366f1' }} />
-              System History & Audit Log
-            </h1>
-            <p className="clean-report-desc">
-              Comprehensive immutable audit trail recording sales activities, entity creations, field-level mutations, and deletions.
-            </p>
-          </div>
         </div>
 
-        {/* 4 Clean Metric Cards */}
-        <div className="clean-stat-grid">
-          {/* Total Actions */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Total Logged Actions</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
-                <Activity size={17} />
+        {/* ── 2. Compact, Easy-to-Scan KPI Cards ─────────────────────── */}
+        <div className="sh-stat-grid">
+          {/* Total Logged Actions */}
+          <div className="sh-stat-card">
+            <div className="sh-stat-top">
+              <span className="sh-stat-label">Total Audit Records</span>
+              <div className="sh-stat-icon" style={{ background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1' }}>
+                <Activity size={16} />
               </div>
             </div>
-            <div className="clean-stat-value">{totalCount}</div>
-            <div className="clean-stat-footer">
+            <div className="sh-stat-val">{totalCount.toLocaleString()}</div>
+            <div className="sh-stat-sub">
               <span className="clean-pill-delta clean-pill-blue">All Time</span>
-              <span>Total database audit entries</span>
+              <span>Events logged across CRM</span>
             </div>
           </div>
 
-          {/* Created & Converted */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Creations & Conversions</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
-                <CheckCircle2 size={17} />
+          {/* Creations */}
+          <div className="sh-stat-card">
+            <div className="sh-stat-top">
+              <span className="sh-stat-label">Creations & Inserts</span>
+              <div className="sh-stat-icon" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>
+                <PlusCircle size={16} />
               </div>
             </div>
-            <div className="clean-stat-value" style={{ color: '#10b981' }}>{createCount}</div>
-            <div className="clean-stat-footer">
+            <div className="sh-stat-val" style={{ color: '#10b981' }}>{createCount}</div>
+            <div className="sh-stat-sub">
               <span className="clean-pill-delta clean-pill-green">Inserts</span>
-              <span>New records added</span>
+              <span>New records on page</span>
             </div>
           </div>
 
-          {/* Updates */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Updates & Field Edits</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
-                <RefreshCw size={17} />
+          {/* Updates & Mutations */}
+          <div className="sh-stat-card">
+            <div className="sh-stat-top">
+              <span className="sh-stat-label">Field Mutations</span>
+              <div className="sh-stat-icon" style={{ background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6' }}>
+                <Edit3 size={16} />
               </div>
             </div>
-            <div className="clean-stat-value" style={{ color: '#3b82f6' }}>{updateCount}</div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta clean-pill-blue">Mutations</span>
-              <span>State & field updates</span>
+            <div className="sh-stat-val" style={{ color: '#3b82f6' }}>{updateCount}</div>
+            <div className="sh-stat-sub">
+              <span className="clean-pill-delta clean-pill-blue">Updates</span>
+              <span>State & field edits</span>
             </div>
           </div>
 
           {/* Deletions */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Deletions (On Page)</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444' }}>
-                <Trash2 size={17} />
+          <div className="sh-stat-card">
+            <div className="sh-stat-top">
+              <span className="sh-stat-label">Deletions & Purges</span>
+              <div className="sh-stat-icon" style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444' }}>
+                <ShieldAlert size={16} />
               </div>
             </div>
-            <div className="clean-stat-value" style={{ color: '#ef4444' }}>{deletionCount}</div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta" style={{ background: 'rgba(239,68,68,0.14)', color: '#ef4444' }}>Purged</span>
-              <span>Deleted entity records</span>
+            <div className="sh-stat-val" style={{ color: '#ef4444' }}>{deletionCount}</div>
+            <div className="sh-stat-sub">
+              <span className="clean-pill-delta" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>Deleted</span>
+              <span>Purged entity records</span>
             </div>
           </div>
         </div>
 
-        {/* Filter Card */}
-        <div className="clean-card">
-          <div className="clean-card-header" style={{ paddingBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Filter size={16} style={{ color: '#6366f1' }} />
-              <h3 className="clean-card-title">Filter Audit Trail</h3>
+        {/* ── 3. Structured Filter & Controls Panel ──────────────────── */}
+        <div className="sh-filter-card">
+          <div className="sh-filter-header">
+            <div className="sh-filter-title">
+              <Filter size={15} style={{ color: '#6366f1' }} />
+              <span>Filter Audit History</span>
+              {hasActiveFilters && (
+                <span className="clean-badge clean-badge-primary" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+                  Active
+                </span>
+              )}
             </div>
 
-            <div className="clean-segmented">
-              <button
-                className={`clean-segmented-btn ${viewMode === 'feed' ? 'active' : ''}`}
-                onClick={() => setViewMode('feed')}
-              >
-                <Layers size={13} style={{ display: 'inline', marginRight: 4 }} /> Feed View
-              </button>
-              <button
-                className={`clean-segmented-btn ${viewMode === 'table' ? 'active' : ''}`}
-                onClick={() => setViewMode('table')}
-              >
-                <TableIcon size={13} style={{ display: 'inline', marginRight: 4 }} /> Table View
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {hasActiveFilters && (
+                <button
+                  onClick={handleResetFilters}
+                  className="clean-btn-secondary"
+                  style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                  title="Clear all filters"
+                >
+                  <X size={12} /> Clear Filters
+                </button>
+              )}
+
+              <div className="clean-segmented">
+                <button
+                  className={`clean-segmented-btn ${viewMode === 'feed' ? 'active' : ''}`}
+                  onClick={() => setViewMode('feed')}
+                  title="Timeline Feed View"
+                >
+                  <Layers size={13} style={{ display: 'inline', marginRight: 4 }} /> Feed
+                </button>
+                <button
+                  className={`clean-segmented-btn ${viewMode === 'table' ? 'active' : ''}`}
+                  onClick={() => setViewMode('table')}
+                  title="Structured Table View"
+                >
+                  <TableIcon size={13} style={{ display: 'inline', marginRight: 4 }} /> Table
+                </button>
+              </div>
             </div>
           </div>
 
-          <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', alignItems: 'flex-end' }}>
+          <div className="sh-filter-grid">
             {/* Search */}
-            <div style={{ minWidth: 180 }}>
-              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                Search Title / Change / Rep
-              </label>
+            <div className="sh-filter-field" style={{ minWidth: 200 }}>
+              <label className="sh-filter-label">Search Query</label>
               <div style={{ position: 'relative' }}>
                 <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="text"
-                  placeholder="Search logs..."
+                  placeholder="Search diff, actor, record..."
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(1); }}
-                  style={{
-                    width: '100%',
-                    padding: '7px 10px 7px 30px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-tertiary, rgba(0,0,0,0.15))',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.82rem',
-                    boxSizing: 'border-box'
-                  }}
+                  className="sh-search-input"
                 />
               </div>
             </div>
 
             {/* Target Entity */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                Target Entity
-              </label>
+            <div className="sh-filter-field">
+              <label className="sh-filter-label">Module / Entity</label>
               <SearchableSelect
                 value={entityTypeName}
                 onChange={val => { setEntityTypeName(String(val)); setPage(1); }}
                 options={[
-                  { value: 'All', label: 'All Entities' },
-                  { value: 'Opportunity', label: 'Opportunity' },
-                  { value: 'Lead', label: 'Lead' },
+                  { value: 'All', label: 'All Modules' },
                   { value: 'Customer', label: 'Customer' },
                   { value: 'Company', label: 'Company' },
+                  { value: 'Lead', label: 'Lead' },
+                  { value: 'Opportunity', label: 'Opportunity / Deal' },
                   { value: 'Contract', label: 'Contract' },
                   { value: 'Invoice', label: 'Invoice' },
+                  { value: 'Payment', label: 'Payment' },
                   { value: 'Task', label: 'Task' }
                 ]}
               />
             </div>
 
             {/* Action Type */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                Action Type
-              </label>
+            <div className="sh-filter-field">
+              <label className="sh-filter-label">Action</label>
               <SearchableSelect
                 value={auditActionTypeName}
                 onChange={val => { setAuditActionTypeName(String(val)); setPage(1); }}
                 options={[
-                  { value: 'All', label: 'All Action Types' },
-                  { value: 'Delete', label: 'Delete (Deletions)' },
-                  { value: 'Update', label: 'Update / Field Edits' },
+                  { value: 'All', label: 'All Actions' },
                   { value: 'Create', label: 'Create / Insert' },
-                  { value: 'Assign', label: 'Assign / Reassign' },
+                  { value: 'Update', label: 'Update / Field Edit' },
+                  { value: 'Delete', label: 'Delete / Purge' },
+                  { value: 'StageChange', label: 'Stage Change' },
                   { value: 'Convert', label: 'Convert' },
-                  { value: 'StageChange', label: 'Stage Change' }
+                  { value: 'Assign', label: 'Assign' }
                 ]}
               />
             </div>
 
             {/* Performed By */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>
-                Performed By User
-              </label>
+            <div className="sh-filter-field">
+              <label className="sh-filter-label">User / Actor</label>
               <SearchableSelect
                 value={changedById}
                 onChange={val => { setChangedById(String(val)); setPage(1); }}
                 options={[
-                  { value: 'All', label: 'All Users & Reps' },
+                  { value: 'All', label: 'All Users' },
                   ...users.map(u => {
                     const userId = u.id ?? u.identityId;
                     if (userId == null) return null;
@@ -494,161 +518,165 @@ export const AuditLogsScreen: React.FC = () => {
               />
             </div>
 
-            {/* Reset Button */}
-            <div>
-              <button
-                onClick={handleResetFilters}
-                className="clean-btn-secondary"
-                style={{ width: '100%', padding: '7px 10px', fontSize: '0.8rem', justifyContent: 'center' }}
-              >
-                Reset Filters
-              </button>
+            {/* From Date */}
+            <div className="sh-filter-field">
+              <label className="sh-filter-label">From Date</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => { setFromDate(e.target.value); setPage(1); }}
+                className="sh-date-input"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="sh-filter-field">
+              <label className="sh-filter-label">To Date</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => { setToDate(e.target.value); setPage(1); }}
+                className="sh-date-input"
+              />
             </div>
           </div>
         </div>
 
-        {/* Content Stream */}
+        {/* ── 4. Main History Log Records (Feed / Table) ──────────────── */}
         {isLoading ? (
-          <div className="clean-card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <RefreshCw size={32} className="animate-spin" style={{ color: '#6366f1', margin: '0 auto 1rem' }} />
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>Loading system audit trail records...</p>
+          <div className="clean-card" style={{ padding: '3.5rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <RefreshCw size={28} className="animate-spin" style={{ color: '#6366f1', margin: '0 auto 0.75rem' }} />
+            <p style={{ margin: 0, fontSize: '0.875rem' }}>Loading system history logs...</p>
           </div>
         ) : error ? (
-          <div className="clean-card" style={{ padding: '3rem', textAlign: 'center', color: '#ef4444' }}>
-            <AlertTriangle size={36} style={{ margin: '0 auto 1rem' }} />
-            <p style={{ margin: 0 }}>{error}</p>
+          <div className="clean-card" style={{ padding: '2.5rem', textAlign: 'center', color: '#ef4444' }}>
+            <AlertTriangle size={32} style={{ margin: '0 auto 0.75rem' }} />
+            <p style={{ margin: 0, fontWeight: 600 }}>{error}</p>
           </div>
         ) : logs.length === 0 ? (
-          <div className="clean-card" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <History size={48} style={{ opacity: 0.3, margin: '0 auto 1rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>No audit logs match your search criteria</h3>
-            <p style={{ margin: 0, fontSize: '0.85rem' }}>Try clearing filters or changing your search terms.</p>
+          <div className="clean-card" style={{ padding: '3.5rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <History size={42} style={{ opacity: 0.35, margin: '0 auto 0.75rem' }} />
+            <h3 style={{ margin: '0 0 0.4rem', color: 'var(--text-primary)', fontSize: '1.05rem' }}>
+              No audit logs match your search criteria
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.825rem' }}>Try clearing filters or adjusting your date range.</p>
           </div>
         ) : viewMode === 'feed' ? (
-          /* Feed View */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          /* ── Feed Timeline Mode ── */
+          <div className="sh-feed-stream">
             {logs.map(log => {
               const badge = getActionBadge(log.auditActionTypeName);
               const IconComp = badge.icon;
               const isDelete = log.auditActionTypeName === 'Delete';
+              const actorInitials = getUserInitials(log.changedByName);
 
               return (
-                <div
-                  key={log.auditLogId}
-                  className="clean-card"
-                  style={{
-                    padding: '1rem 1.25rem',
-                    borderLeft: `4px solid ${badge.color}`,
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', flex: 1, minWidth: 260 }}>
-                      {/* Icon */}
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 8,
-                          background: badge.bg,
-                          color: badge.color,
-                          border: `1px solid ${badge.border}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          marginTop: 2
-                        }}
-                      >
-                        <IconComp size={17} />
-                      </div>
+                <div key={log.auditLogId} className="sh-feed-item">
+                  <div className="sh-feed-left-bar" style={{ background: badge.color }} />
 
-                      {/* Content */}
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: 4 }}>
-                          <span
-                            className="clean-badge"
-                            style={{
-                              background: badge.bg,
-                              color: badge.color,
-                              border: `1px solid ${badge.border}`,
-                              fontSize: '0.72rem',
-                              fontWeight: 700
-                            }}
-                          >
-                            {log.auditActionTypeName}
-                          </span>
-
-                          <span className="clean-badge clean-badge-primary" style={{ fontSize: '0.72rem' }}>
-                            {log.entityTypeName} #{log.entityId}
-                          </span>
-
-                          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                            by <strong style={{ color: 'var(--text-primary)' }}>{log.changedByName}</strong>
-                            {log.changedByEmail ? ` (${log.changedByEmail})` : ''}
-                          </span>
-                        </div>
-
-                        {/* Details diff */}
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginTop: 4 }}>
-                          {isDelete ? (
-                            <span style={{ color: '#ef4444', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <ShieldAlert size={14} />
-                              {log.oldValue || `Deleted ${log.entityTypeName} record #${log.entityId}`}
-                            </span>
-                          ) : log.fieldName ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 600, color: '#6366f1' }}>{log.fieldName}:</span>
-                              <span style={{ textDecoration: 'line-through', opacity: 0.7, color: '#ef4444' }}>
-                                {log.oldValue ?? '(empty)'}
-                              </span>
-                              <ArrowRight size={12} style={{ opacity: 0.5 }} />
-                              <span style={{ fontWeight: 600, color: '#10b981' }}>{log.newValue ?? '(empty)'}</span>
-                            </div>
-                          ) : (
-                            <span style={{ opacity: 0.9 }}>
-                              {log.oldValue || log.newValue || `Executed ${log.auditActionTypeName} on ${log.entityTypeName}`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  <div className="sh-feed-content">
+                    {/* User Avatar */}
+                    <div
+                      className="sh-feed-avatar"
+                      style={{
+                        background: 'rgba(99, 102, 241, 0.12)',
+                        color: '#818cf8',
+                        border: '1px solid rgba(99, 102, 241, 0.25)'
+                      }}
+                      title={log.changedByName}
+                    >
+                      {actorInitials}
                     </div>
 
-                    {/* Meta & actions */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Calendar size={12} />
-                        {formatDate(log.changedAt)}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <button
-                          onClick={() => setSelectedLog(log)}
-                          className="clean-back-btn"
-                          style={{ padding: '3px 8px', fontSize: '0.74rem' }}
+                    {/* Body */}
+                    <div className="sh-feed-body">
+                      {/* Meta header */}
+                      <div className="sh-feed-meta-row">
+                        <span
+                          className="clean-badge"
+                          style={{
+                            background: badge.bg,
+                            color: badge.color,
+                            border: `1px solid ${badge.border}`,
+                            fontSize: '0.68rem',
+                            fontWeight: 700
+                          }}
                         >
-                          <Eye size={12} /> Inspect
-                        </button>
+                          <IconComp size={11} style={{ display: 'inline', marginRight: 3 }} />
+                          {badge.label}
+                        </span>
 
-                        {isAdmin && (
-                          <button
-                            onClick={(e) => handleDeleteSingleLog(e, log.auditLogId)}
-                            title="Delete this audit record"
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.1)',
-                              color: '#ef4444',
-                              border: '1px solid rgba(239, 68, 68, 0.25)',
-                              borderRadius: '6px',
-                              padding: '4px 7px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        )}
+                        <span className="clean-badge clean-badge-primary" style={{ fontSize: '0.7rem' }}>
+                          {log.entityTypeName} #{log.entityId}
+                        </span>
+
+                        <span className="sh-feed-actor">{log.changedByName}</span>
+                        {log.changedByEmail && <span className="sh-feed-email">({log.changedByEmail})</span>}
                       </div>
+
+                      {/* Diff Payload */}
+                      {isDelete ? (
+                        <div className="sh-feed-diff-box" style={{ borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}>
+                          <ShieldAlert size={13} style={{ color: '#ef4444', flexShrink: 0 }} />
+                          <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                            {log.oldValue || `Purged ${log.entityTypeName} #${log.entityId} record.`}
+                          </span>
+                        </div>
+                      ) : log.fieldName ? (
+                        <div className="sh-feed-diff-box">
+                          <span style={{ fontWeight: 600, color: '#6366f1' }}>{log.fieldName}:</span>
+                          <span style={{ textDecoration: 'line-through', opacity: 0.75, color: '#ef4444' }}>
+                            {log.oldValue ?? '(empty)'}
+                          </span>
+                          <ArrowRight size={11} style={{ opacity: 0.5 }} />
+                          <span style={{ fontWeight: 600, color: '#10b981' }}>
+                            {log.newValue ?? '(empty)'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="sh-feed-diff-box">
+                          <span style={{ opacity: 0.9 }}>
+                            {log.oldValue || log.newValue || `Executed ${log.auditActionTypeName} on ${log.entityTypeName} #${log.entityId}`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions & Timestamp */}
+                  <div className="sh-feed-actions">
+                    <div className="sh-feed-time" title={formatDate(log.changedAt)}>
+                      <Clock size={11} />
+                      <span>{formatRelativeTime(log.changedAt)}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: 4 }}>
+                      <button
+                        onClick={() => setSelectedLog(log)}
+                        className="clean-back-btn"
+                        style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                      >
+                        <Eye size={11} /> Inspect
+                      </button>
+
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => handleDeleteSingleLog(e, log.auditLogId)}
+                          title="Delete this audit record"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            borderRadius: '5px',
+                            padding: '3px 6px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -656,16 +684,16 @@ export const AuditLogsScreen: React.FC = () => {
             })}
           </div>
         ) : (
-          /* Table View */
-          <div className="clean-card">
+          /* ── Table Mode ── */
+          <div className="clean-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="clean-table-container">
               <table className="clean-table">
                 <thead>
                   <tr>
-                    <th>Entity</th>
+                    <th>Module & Record</th>
                     <th>Action</th>
-                    <th>Field Diff / Details</th>
-                    <th>User</th>
+                    <th>Field Diff / Summary</th>
+                    <th>Actor / User</th>
                     <th>Timestamp</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -676,7 +704,8 @@ export const AuditLogsScreen: React.FC = () => {
                     return (
                       <tr key={log.auditLogId}>
                         <td>
-                          <strong>{log.entityTypeName} #{log.entityId}</strong>
+                          <strong>{log.entityTypeName}</strong>
+                          <span style={{ opacity: 0.6, fontSize: '0.78rem', marginLeft: 4 }}>#{log.entityId}</span>
                         </td>
                         <td>
                           <span
@@ -684,32 +713,35 @@ export const AuditLogsScreen: React.FC = () => {
                             style={{
                               background: badge.bg,
                               color: badge.color,
-                              fontSize: '0.72rem',
+                              border: `1px solid ${badge.border}`,
+                              fontSize: '0.68rem',
                               fontWeight: 700
                             }}
                           >
-                            {log.auditActionTypeName}
+                            {badge.label}
                           </span>
                         </td>
-                        <td style={{ maxWidth: 320 }}>
+                        <td style={{ maxWidth: 360 }}>
                           {log.fieldName ? (
                             <span style={{ fontSize: '0.8rem' }}>
-                              <strong>{log.fieldName}:</strong>{' '}
-                              <span style={{ textDecoration: 'line-through', color: '#ef4444' }}>{log.oldValue ?? 'ø'}</span>
+                              <strong style={{ color: '#6366f1' }}>{log.fieldName}:</strong>{' '}
+                              <span style={{ textDecoration: 'line-through', color: '#ef4444', opacity: 0.75 }}>
+                                {log.oldValue ?? 'ø'}
+                              </span>
                               {' → '}
                               <span style={{ color: '#10b981', fontWeight: 600 }}>{log.newValue ?? 'ø'}</span>
                             </span>
                           ) : (
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              {log.oldValue || log.newValue || 'Action performed'}
+                              {log.oldValue || log.newValue || 'Action logged'}
                             </span>
                           )}
                         </td>
                         <td>
                           <div>
-                            <span style={{ fontWeight: 600, fontSize: '0.82rem' }}>{log.changedByName}</span>
+                            <span style={{ fontWeight: 600, fontSize: '0.825rem' }}>{log.changedByName}</span>
                             {log.changedByEmail && (
-                              <span style={{ display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              <span style={{ display: 'block', fontSize: '0.725rem', color: 'var(--text-muted)' }}>
                                 {log.changedByEmail}
                               </span>
                             )}
@@ -718,14 +750,34 @@ export const AuditLogsScreen: React.FC = () => {
                         <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                           {formatDate(log.changedAt)}
                         </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            onClick={() => setSelectedLog(log)}
-                            className="clean-back-btn"
-                            style={{ padding: '3px 8px', fontSize: '0.74rem' }}
-                          >
-                            Inspect
-                          </button>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <button
+                              onClick={() => setSelectedLog(log)}
+                              className="clean-back-btn"
+                              style={{ padding: '3px 8px', fontSize: '0.72rem' }}
+                            >
+                              <Eye size={11} style={{ display: 'inline', marginRight: 3 }} /> Inspect
+                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => handleDeleteSingleLog(e, log.auditLogId)}
+                                title="Delete this audit record"
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  color: '#ef4444',
+                                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                                  borderRadius: '5px',
+                                  padding: '3px 6px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -736,35 +788,40 @@ export const AuditLogsScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Pagination Bar */}
+        {/* ── 5. Responsive Pagination Toolbar ───────────────────────── */}
         {totalPages > 1 && (
-          <div className="clean-card" style={{ padding: '0.85rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-              Page <strong>{page}</strong> of <strong>{totalPages}</strong> ({totalCount} total entries)
+          <div className="clean-card" style={{ padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Page <strong>{page}</strong> of <strong>{totalPages}</strong> ({totalCount.toLocaleString()} total entries)
             </span>
 
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="clean-btn-secondary"
-                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                style={{ padding: '4px 10px', fontSize: '0.76rem' }}
               >
-                <ChevronLeft size={14} /> Previous
+                <ChevronLeft size={13} /> Prev
               </button>
+
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, padding: '0 4px' }}>
+                {page} / {totalPages}
+              </span>
+
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 className="clean-btn-secondary"
-                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                style={{ padding: '4px 10px', fontSize: '0.76rem' }}
               >
-                Next <ChevronRight size={14} />
+                Next <ChevronRight size={13} />
               </button>
             </div>
           </div>
         )}
 
-        {/* Detailed Modal */}
+        {/* ── 6. Inspection Detail Modal ─────────────────────────────── */}
         {selectedLog && (
           <div
             className="modal-overlay"
@@ -787,17 +844,17 @@ export const AuditLogsScreen: React.FC = () => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <History size={18} style={{ color: '#6366f1' }} />
-                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>
+                  <History size={17} style={{ color: '#6366f1' }} />
+                  <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>
                     Audit Log Inspection #{selectedLog.auditLogId}
                   </h3>
                 </div>
 
                 <button
                   onClick={() => setSelectedLog(null)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.1rem' }}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1rem' }}
                 >
-                  ✕
+                  <X size={16} />
                 </button>
               </div>
 
@@ -814,23 +871,23 @@ export const AuditLogsScreen: React.FC = () => {
                   }}
                 >
                   <div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>User / Rep</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>User / Actor</span>
                     <strong style={{ fontSize: '0.85rem' }}>{selectedLog.changedByName}</strong>
-                    {selectedLog.changedByEmail && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{selectedLog.changedByEmail}</div>}
+                    {selectedLog.changedByEmail && <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{selectedLog.changedByEmail}</div>}
                   </div>
 
                   <div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Timestamp</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Timestamp</span>
                     <strong style={{ fontSize: '0.85rem' }}>{formatDate(selectedLog.changedAt)}</strong>
                   </div>
 
                   <div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Target Entity</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Target Entity</span>
                     <strong style={{ fontSize: '0.85rem' }}>{selectedLog.entityTypeName} (ID #{selectedLog.entityId})</strong>
                   </div>
 
                   <div>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>Action</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>Action</span>
                     <strong style={{ fontSize: '0.85rem', color: getActionBadge(selectedLog.auditActionTypeName).color }}>
                       {selectedLog.auditActionTypeName}
                     </strong>
@@ -838,7 +895,7 @@ export const AuditLogsScreen: React.FC = () => {
                 </div>
 
                 <div style={{ background: 'var(--bg-tertiary, rgba(0,0,0,0.15))', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <strong style={{ display: 'block', fontSize: '0.82rem', marginBottom: 6 }}>
+                  <strong style={{ display: 'block', fontSize: '0.8rem', marginBottom: 6, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
                     Payload & Mutation Diff:
                   </strong>
 
@@ -849,8 +906,8 @@ export const AuditLogsScreen: React.FC = () => {
                       {selectedLog.oldValue || 'No detailed snapshot captured.'}
                     </div>
                   ) : selectedLog.fieldName ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.82rem' }}>
-                      <div><strong>Field:</strong> {selectedLog.fieldName}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.825rem' }}>
+                      <div><strong>Field Name:</strong> <span style={{ color: '#6366f1' }}>{selectedLog.fieldName}</span></div>
                       <div><strong style={{ color: '#ef4444' }}>Old Value:</strong> {selectedLog.oldValue ?? '(empty)'}</div>
                       <div><strong style={{ color: '#10b981' }}>New Value:</strong> {selectedLog.newValue ?? '(empty)'}</div>
                     </div>
@@ -865,7 +922,7 @@ export const AuditLogsScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Clear History Confirmation Modal */}
+        {/* ── 7. Purge Confirmation Modal ────────────────────────────── */}
         {showClearModal && (
           <div className="modal-overlay" onClick={() => setShowClearModal(false)}>
             <div className="clean-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px', padding: 0 }}>
@@ -874,7 +931,9 @@ export const AuditLogsScreen: React.FC = () => {
                   <ShieldAlert size={18} />
                   <span>Purge Audit History Logs</span>
                 </div>
-                <button onClick={() => setShowClearModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+                <button onClick={() => setShowClearModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
               </div>
 
               <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>

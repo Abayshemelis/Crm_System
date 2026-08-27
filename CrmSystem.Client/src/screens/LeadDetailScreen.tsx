@@ -909,25 +909,27 @@ export const LeadDetailScreen: React.FC = () => {
                             <Card.Content style={{ padding: '1.5rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                                     <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Lead Tasks</h3>
-                                    <Button size="sm" onClick={() => { setEditTask(null); setShowTaskModal(true); }}>
+                                    <Button size="sm" onClick={() => navigate(`/tasks/new?leadId=${id}`)}>
                                         <Plus size={14} style={{ marginRight: 4 }} /> Add Task
                                     </Button>
                                 </div>
-                                <TaskListGroup
-                                    overdue={groupedTasks.overdue}
-                                    dueToday={groupedTasks.dueToday}
-                                    upcoming={groupedTasks.upcoming}
-                                    completed={groupedTasks.completed}
-                                    onTaskComplete={async (taskId: number) => {
-                                        const doneStatus = taskStatuses.find(s => s.isTerminal);
-                                        if (doneStatus) {
-                                            await api.put(`/api/tasks/${taskId}`, { crmTaskStatusId: doneStatus.crmTaskStatusId });
-                                            fetchTasks();
-                                        }
-                                    }}
-                                    onTaskDelete={() => fetchTasks()}
-                                    onTaskClick={(t: TaskReadDto) => { setEditTask(t); setShowTaskModal(true); }}
-                                />
+                                <div className="bounded-scroll-container" style={{ maxHeight: '480px' }}>
+                                    <TaskListGroup
+                                        overdue={groupedTasks.overdue}
+                                        dueToday={groupedTasks.dueToday}
+                                        upcoming={groupedTasks.upcoming}
+                                        completed={groupedTasks.completed}
+                                        onTaskComplete={async (taskId: number) => {
+                                            const doneStatus = taskStatuses.find(s => s.isTerminal);
+                                            if (doneStatus) {
+                                                await api.put(`/api/tasks/${taskId}`, { crmTaskStatusId: doneStatus.crmTaskStatusId });
+                                                fetchTasks();
+                                            }
+                                        }}
+                                        onTaskDelete={() => fetchTasks()}
+                                        onTaskClick={(t: TaskReadDto) => navigate(`/tasks/${t.crmTaskId}/edit`)}
+                                    />
+                                </div>
                             </Card.Content>
                         </Card>
                     )}
@@ -953,7 +955,7 @@ export const LeadDetailScreen: React.FC = () => {
             </div>
 
             {/* Modals */}
-            {showConvertModal && (
+            {showConvertModal && lead && (
                 <LeadConvertModal
                     isOpen={showConvertModal}
                     leadId={lead.leadId}
@@ -969,7 +971,7 @@ export const LeadDetailScreen: React.FC = () => {
                 />
             )}
 
-            {showFollowUpModal && (
+            {showFollowUpModal && lead && (
                 <FollowUpModal
                     isOpen={showFollowUpModal}
                     onClose={() => setShowFollowUpModal(false)}
@@ -988,18 +990,6 @@ export const LeadDetailScreen: React.FC = () => {
                     leadName={`${lead.firstName} ${lead.lastName}`}
                     onClose={() => setShowMarkLostModal(false)}
                     onConfirm={handleMarkLost}
-                />
-            )}
-
-            {showTaskModal && (
-                <TaskFormModal
-                    task={editTask}
-                    leadId={Number(id)}
-                    currentUserId={currentUser?.userId ?? 0}
-                    statuses={taskStatuses}
-                    users={users}
-                    onSaved={() => { fetchTasks(); setShowTaskModal(false); setEditTask(null); }}
-                    onClose={() => { setShowTaskModal(false); setEditTask(null); }}
                 />
             )}
 

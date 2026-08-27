@@ -37,6 +37,7 @@ public class TestEmailTemplateService : IEmailTemplateService
     public string BuildInvoiceIssuedHtml(string customerName, string invoiceNumber, decimal amount, decimal totalAmount, DateTime issueDate, DateTime dueDate, string? contractNumber) => "<html></html>";
     public string BuildInvoiceOverdueHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime dueDate) => "<html></html>";
     public string BuildInvoicePaymentReceiptHtml(string customerName, string invoiceNumber, decimal totalAmount, DateTime paidAt, string paymentMethod) => "<html></html>";
+    public string BuildInvoicePaymentRequestHtml(string customerName, string invoiceNumber, decimal totalAmount, decimal balanceDue, DateTime dueDate, string payUrl, string? customMessage) => "<html></html>";
 }
 
 public class ContractsControllerTests
