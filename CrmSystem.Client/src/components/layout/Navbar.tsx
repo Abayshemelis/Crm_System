@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './layout.css';
+import { confirmAction } from '../../lib/confirm';
 import {
   LogOut, User, Sun, Moon, Menu, PanelLeftClose, PanelLeftOpen,
   ShieldCheck, Check, ChevronDown, Settings, Building2
@@ -215,7 +216,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button
                         type="button"
                         className="nav-role-action-btn danger"
-                        onClick={() => { setIsDropdownOpen(false); logout(); }}
+                        onClick={async () => {
+                          setIsDropdownOpen(false);
+                          if (await confirmAction('Are you sure you want to log out?', { confirmText: 'Yes', cancelText: 'No', type: 'info' })) {
+                            logout();
+                          }
+                        }}
                       >
                         <LogOut size={14} />
                         <span>Sign Out</span>

@@ -12,18 +12,16 @@ public class UpdateSystemProfileDto
     [StringLength(100, ErrorMessage = "Company Name cannot exceed 100 characters.")]
     public string? CompanyName { get; set; }
 
-    [RegularExpression(@"^(https?://.+)?$", ErrorMessage = "Please enter a valid website URL.")]
+    // Allowed to be any URL or path
     public string? LogoUrl { get; set; }
 
     [RegularExpression(@"^([^\s@]+@[^\s@]+\.[^\s@]+)?$", ErrorMessage = "Please enter a valid email address.")]
     [StringLength(150, ErrorMessage = "Email cannot exceed 150 characters.")]
     public string? Email { get; set; }
 
-    // Allows standard international phone formats optionally, or empty
-    [RegularExpression(@"^(\+?[1-9]\d{1,14})?$", ErrorMessage = "Please enter a valid phone number format (e.g. +251...).")]
+    // Allows standard international phone formats optionally, or empty, including spaces and dashes
     public string? Phone { get; set; }
 
-    [RegularExpression(@"^(https?://.+)?$", ErrorMessage = "Please enter a valid website URL.")]
     [StringLength(200, ErrorMessage = "Website URL cannot exceed 200 characters.")]
     public string? Website { get; set; }
 

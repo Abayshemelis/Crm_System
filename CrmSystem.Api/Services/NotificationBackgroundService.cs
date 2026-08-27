@@ -25,7 +25,8 @@ public class NotificationBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Notification background service started.");
+        _logger.LogInformation("Notification background service started. Waiting before first run...");
+        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); // Delay before first run to let the API start up
 
         while (!stoppingToken.IsCancellationRequested)
         {

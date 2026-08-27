@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../lib/toast';
+import { confirmAction } from '../../lib/confirm';
 import {
   X, Camera, Trash2, Check, User, Mail, Shield, LogOut,
   UploadCloud, Copy, CheckCheck, Key, ShieldCheck,
@@ -335,9 +336,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
           <button
             type="button"
             className="clean-profile-signout-btn"
-            onClick={() => {
+            onClick={async () => {
               onClose();
-              logout();
+              if (await confirmAction('Are you sure you want to log out?', { confirmText: 'Yes', cancelText: 'No', type: 'info' })) {
+                logout();
+              }
             }}
           >
             <LogOut size={15} />

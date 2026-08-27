@@ -357,27 +357,13 @@ export const SettingsScreen: React.FC = () => {
     }
     
     if (website && website.trim()) {
-      if (!/^https?:\/\/.+\..+/.test(website.trim())) {
-        newErrors.website = 'Please enter a valid website URL.';
-      } else if (website.trim().length > 200) {
+      if (website.trim().length > 200) {
         newErrors.website = 'Website URL cannot exceed 200 characters.';
-      }
-    }
-
-    if (phone && phone.trim()) {
-      if (!/^\+?[1-9]\d{1,14}$/.test(phone.replace(/[\s-]/g, ''))) {
-        newErrors.phone = 'Please enter a valid phone number format (e.g. +251...).';
       }
     }
 
     if (address && address.trim().length > 250) {
       newErrors.address = 'Address cannot exceed 250 characters.';
-    }
-
-    if (crmLogo && crmLogo.trim()) {
-      if (!crmLogo.startsWith('/uploads') && !/^https?:\/\//.test(crmLogo.trim())) {
-        newErrors.logo = 'Please enter a valid image URL or upload an image.';
-      }
     }
 
     setErrors(newErrors);

@@ -38,13 +38,21 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({ value, onChange, error, 
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/[^\d\s-]/g, '');
-    onChange(`${selectedCountry.dialCode} ${val}`);
+    if (!val.trim()) {
+      onChange('');
+    } else {
+      onChange(`${selectedCountry.dialCode} ${val}`);
+    }
   };
 
   const selectCountry = (country: typeof PHONE_COUNTRIES[0]) => {
     setSelectedCountry(country);
     setIsOpen(false);
-    onChange(`${country.dialCode} ${localNumber}`);
+    if (!localNumber.trim()) {
+      onChange('');
+    } else {
+      onChange(`${country.dialCode} ${localNumber}`);
+    }
   };
 
   const filteredCountries = PHONE_COUNTRIES.filter(c => 

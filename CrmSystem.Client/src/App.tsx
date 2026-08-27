@@ -191,7 +191,11 @@ function AppRoutes() {
 
 function AppShell() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [confirmState, setConfirmState] = useState<{ message: string; resolve: (val: boolean) => void } | null>(null);
+  const [confirmState, setConfirmState] = useState<{ 
+    message: string; 
+    resolve: (val: boolean) => void;
+    options?: { confirmText?: string; cancelText?: string; type?: 'danger' | 'info' };
+  } | null>(null);
 
   useEffect(() => {
     initTheme();
@@ -206,7 +210,11 @@ function AppShell() {
     window.addEventListener('app:toast', handler);
 
     const confirmHandler = ((event: Event) => {
-      const customEvent = event as CustomEvent<{ message: string; resolve: (val: boolean) => void }>;
+      const customEvent = event as CustomEvent<{ 
+        message: string; 
+        resolve: (val: boolean) => void;
+        options?: { confirmText?: string; cancelText?: string; type?: 'danger' | 'info' };
+      }>;
       setConfirmState(customEvent.detail);
     }) as EventListener;
 
@@ -224,7 +232,10 @@ function AppShell() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {confirmState && (
         <GlobalConfirmDialog 
-           message={confirmState.message} 
+           message={confirmState.message}
+           confirmText={confirmState.options?.confirmText}
+           cancelText={confirmState.options?.cancelText}
+           type={confirmState.options?.type}
            onConfirm={() => { confirmState.resolve(true); setConfirmState(null); }}
            onCancel={() => { confirmState.resolve(false); setConfirmState(null); }}
         />
