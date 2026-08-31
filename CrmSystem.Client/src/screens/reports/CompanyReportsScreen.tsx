@@ -14,14 +14,15 @@ import {
 } from 'lucide-react';
 import { ReportsNav } from '../../components/reports/ReportsNav';
 import { ReportHeader, calculateDateRange } from '../../components/reports/ReportHeader';
-import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpiCard';
+import { ReportKpiGrid, ReportKpiItem, ReportSummaryBanner } from '../../components/reports/ReportKpiCard';
 import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
 import { exportCSV, exportExecutivePDF } from '../../components/reports/reportExportUtils';
+import { formatCurrencyGlobal } from '../../context/SystemProfileContext';
 import './cleanReports.css';
 
 const PALETTE = ['#2563eb', '#10b981', '#6366f1', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#14b8a6'];
-const fmt$ = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
+const fmt$ = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v || 0);
 
 type CompanySubTab = 'overview' | 'industries' | 'size' | 'revenue' | 'directory';
@@ -387,8 +388,16 @@ export const CompanyReportsScreen: React.FC = () => {
           loading={loading}
         />
 
-        {/* ── 3. Executive KPI Grid ──────────────────────────────────────── */}
-        <ReportKpiGrid items={kpis} loading={loading} columns={5} />
+        {/* ── 3. Executive KPI Summary ──────────────────────────────────────── */}
+        <ReportSummaryBanner 
+          items={[
+            kpis[0], // Total Organizations
+            kpis[1], // Attached Stakeholders
+            kpis[2], // B2B Revenue Closed
+            kpis[3], // Open B2B Pipeline
+          ]} 
+          loading={loading} 
+        />
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* VIEW 1: OVERVIEW */}

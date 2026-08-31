@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../../lib/api';
-import { Loader2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, Eye, X, History, Clock, User, ArrowRight, Activity, Calendar, LayoutList, List } from 'lucide-react';
+import { Loader2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, Eye, X, History, Clock, User, ArrowRight, Activity, Calendar, LayoutList, List, Edit3 } from 'lucide-react';
 
 interface AuditLogEntry {
     auditLogId: number;
@@ -464,17 +464,11 @@ export const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ entityType
                                             </td>
                                             <td style={{ textAlign: 'center', paddingTop: '0.85rem' }}>
                                                 <button 
+                                                    type="button"
                                                     onClick={() => setSelectedGroup(group)}
-                                                    style={{
-                                                        background: 'transparent', border: '1px solid var(--border-color)',
-                                                        color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px',
-                                                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                                        fontSize: '0.8rem', transition: 'all 0.2s'
-                                                    }}
-                                                    onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                                                    onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                                                    className="crm-audit-inspect-btn"
                                                 >
-                                                    <Eye size={14} /> View
+                                                    <Eye size={12} /> Inspect
                                                 </button>
                                             </td>
                                         </tr>
@@ -577,122 +571,126 @@ export const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ entityType
 
             {/* View Details Modal */}
             {selectedGroup && (
-                <div className="modal-overlay" onClick={() => setSelectedGroup(null)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                <div className="crm-modal-overlay">
                     <div 
-                        className="modal-content glass-panel" 
-                        onClick={e => e.stopPropagation()}
-                        style={{ width: '100%', maxWidth: '600px', padding: 0, overflow: 'hidden' }}
+                        className="crm-modal-container" 
+                        style={{ maxWidth: '640px' }}
                     >
                         {/* Modal Header */}
                         <div style={{ 
-                            padding: '1.25rem 1.5rem', 
+                            paddingBottom: '1rem', 
                             borderBottom: '1px solid var(--border-color)',
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            background: 'var(--bg-secondary)'
+                            marginBottom: '1.25rem'
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <div style={{ 
-                                    width: '36px', height: '36px', borderRadius: '10px', 
+                                    width: '38px', height: '38px', borderRadius: '10px', 
                                     background: getActionBadgeColor(selectedGroup.actionType).bg,
                                     color: getActionBadgeColor(selectedGroup.actionType).color,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: `1px solid ${getActionBadgeColor(selectedGroup.actionType).color}40`
                                 }}>
-                                    <Activity size={18} />
+                                    <Activity size={20} />
                                 </div>
                                 <div>
-                                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Audit Details</h3>
-                                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                        {selectedGroup.actionType} Action
+                                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        Audit Record Inspection
+                                    </h3>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                                        {selectedGroup.actionType} Action Verification
                                     </div>
                                 </div>
                             </div>
                             <button 
+                                type="button"
                                 onClick={() => setSelectedGroup(null)}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
                             >
                                 <X size={20} />
                             </button>
                         </div>
 
                         {/* Modal Body */}
-                        <div style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+                        <div style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: '4px' }}>
                             {/* Meta Info Grid */}
                             <div style={{ 
-                                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', 
-                                background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)',
-                                marginBottom: '1.5rem'
+                                display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', 
+                                background: 'var(--bg-secondary)', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)',
+                                marginBottom: '1.25rem'
                             }}>
                                 <div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <User size={12} /> User
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                                        <User size={11} /> User / Actor
                                     </div>
-                                    <div style={{ fontWeight: 500 }}>{getDisplayUser(selectedGroup)}</div>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{getDisplayUser(selectedGroup)}</div>
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Clock size={12} /> Date & Time
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                                        <Clock size={11} /> Timestamp
                                     </div>
-                                    <div style={{ fontWeight: 500 }}>{formatDate(selectedGroup.changedAt)}</div>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{formatDate(selectedGroup.changedAt)}</div>
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Activity size={12} /> Entity
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                                        <Activity size={11} /> Target Module
                                     </div>
-                                    <div style={{ fontWeight: 500 }}>{getDisplayEntity()}</div>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{getDisplayEntity()}</div>
                                 </div>
                                 {(entityName || entityName === "") && (
                                     <div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <Calendar size={12} /> Record Name
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                                            <Calendar size={11} /> Record Name
                                         </div>
-                                        <div style={{ fontWeight: 500 }}>{entityName}</div>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.88rem' }}>{entityName}</div>
                                     </div>
                                 )}
                             </div>
 
                             {/* Changed Fields Section */}
-                            <h4 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                 Changed Fields ({selectedGroup.fields.length})
                             </h4>
                             
                             {selectedGroup.fields.length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {selectedGroup.fields.map((field, idx) => (
                                         <div key={idx} style={{ 
                                             background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                                            borderRadius: '8px', padding: '1rem'
+                                            borderRadius: '8px', padding: '0.85rem 1rem'
                                         }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-                                                {field.fieldName || 'Unknown Field'}
+                                            <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: '0.6rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <Edit3 size={13} style={{ color: '#6366f1' }} />
+                                                <span>Field: <span style={{ color: '#818cf8' }}>{field.fieldName || 'Unknown Field'}</span></span>
                                             </div>
                                             
                                             {selectedGroup.actionType === 'Update' || selectedGroup.actionType === 'StatusChange' || selectedGroup.actionType === 'Assign' ? (
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '1rem', alignItems: 'center' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.75rem', alignItems: 'center' }}>
                                                     <div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Previous Value</div>
+                                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', textTransform: 'uppercase', fontWeight: 700 }}>Previous Value</div>
                                                         <ValueChip value={field.oldValue} variant="old" />
                                                     </div>
-                                                    <div style={{ color: 'var(--text-secondary)', opacity: 0.5, paddingTop: '16px' }}>
-                                                        <ArrowRight size={20} />
+                                                    <div style={{ color: 'var(--text-muted)', paddingTop: '14px', display: 'flex', justifyContent: 'center' }}>
+                                                        <ArrowRight size={16} />
                                                     </div>
                                                     <div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>New Value</div>
+                                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', textTransform: 'uppercase', fontWeight: 700 }}>New Value</div>
                                                         <ValueChip value={field.newValue} variant="new" />
                                                     </div>
                                                 </div>
                                             ) : selectedGroup.actionType === 'Create' ? (
                                                 <div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Added Value</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', textTransform: 'uppercase', fontWeight: 700 }}>Added Value</div>
                                                     <ValueChip value={field.newValue} variant="added" />
                                                 </div>
                                             ) : selectedGroup.actionType === 'Delete' ? (
                                                 <div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Removed Value</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', textTransform: 'uppercase', fontWeight: 700 }}>Removed Value</div>
                                                     <ValueChip value={field.oldValue} variant="removed" />
                                                 </div>
                                             ) : (
                                                 <div>
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Value</div>
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '3px', textTransform: 'uppercase', fontWeight: 700 }}>Value</div>
                                                     <ValueChip value={field.newValue || field.oldValue} variant="new" />
                                                 </div>
                                             )}
@@ -705,6 +703,18 @@ export const AuditHistoryTable: React.FC<AuditHistoryTableProps> = ({ entityType
                                     No specific field changes recorded for this action.
                                 </div>
                             )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedGroup(null)}
+                                className="crm-audit-inspect-btn"
+                                style={{ padding: '0.45rem 1.25rem', fontSize: '0.85rem' }}
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

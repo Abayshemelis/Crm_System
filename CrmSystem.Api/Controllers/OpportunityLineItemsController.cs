@@ -218,6 +218,68 @@ public class OpportunityLineItemsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{opportunityId}/sync-prices")]
+    public async Task<ActionResult> SyncPricesToCatalog(int opportunityId)
+    {
+        if (_currentUser.UserId is null)
+            return Unauthorized();
+
+        var opportunity = await _db.Opportunities
+            .Include(o => o.LineItems)
+            .ThenInclude(li => li.Product)
+            .SingleOrDefaultAsync(o => o.OpportunityId == opportunityId);
+
+        if (opportunity == null)
+            return NotFound(new { message = "Opportunity not found." });
+
+        if (!_currentUser.CanAccessOwnedRecord(opportunity.OwnerId))
+            return Forbid();
+
+        var oldEstimatedValue = opportunity.EstimatedValue;
+        int updatedItemsCount = 0;
+
+        foreach (var item in opportunity.LineItems)
+        {
+            if (item.Product != null && item.UnitPrice != item.Product.Price)
+            {
+                item.UnitPrice = item.Product.Price;
+                updatedItemsCount++;
+            }
+        }
+
+        var newCalculatedTotal = opportunity.LineItems
+            .Sum(li => li.Quantity * li.UnitPrice * (1 - li.DiscountPercent / 100m));
+
+        if (opportunity.LineItems.Any())
+        {
+            opportunity.EstimatedValue = newCalculatedTotal;
+        }
+        opportunity.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Opportunity");
+        if (entityType != null && (updatedItemsCount > 0 || oldEstimatedValue != opportunity.EstimatedValue))
+        {
+            var changes = new List<(string FieldName, string? OldValue, string? NewValue)>();
+            if (oldEstimatedValue != opportunity.EstimatedValue)
+            {
+                changes.Add(("EstimatedValue", oldEstimatedValue.ToString("F2"), opportunity.EstimatedValue.ToString("F2")));
+            }
+            if (changes.Count > 0)
+            {
+                await _auditService.LogFieldChangesAsync(entityType.EntityTypeId, opportunity.OpportunityId, changes, "Update", _currentUser.UserId.Value);
+            }
+        }
+
+        return Ok(new
+        {
+            message = $"Successfully updated {updatedItemsCount} line item price(s) to match the current product catalog.",
+            updatedCount = updatedItemsCount,
+            newEstimatedValue = opportunity.EstimatedValue
+        });
+    }
+
     private async Task TouchOpportunityAsync(int opportunityId)
     {
         var opportunity = await _db.Opportunities.FindAsync(opportunityId);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from './Card';
 import { Target, DollarSign, CheckSquare, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useFormatCurrency } from '../../context/SystemProfileContext';
 
 interface ActivityItem {
     id: number;
@@ -30,9 +31,7 @@ export const DashboardSummaryCard: React.FC<DashboardSummaryCardProps> = ({
     onPipelineClick
 }) => {
     const navigate = useNavigate();
-
-    const formatCurrency = (val: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+    const { formatCurrency } = useFormatCurrency();
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);

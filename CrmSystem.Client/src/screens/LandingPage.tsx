@@ -17,6 +17,7 @@ import { PublicAiAssistant } from '../components/ai/PublicAiAssistant';
 import { PhoneInput } from '../components/ui/PhoneInput';
 import { SelectDown, SelectOption } from '../components/ui/SelectDown';
 import { parsePhoneNumber, validatePhoneNumber } from '../components/ui/countryData';
+import { validateName, validateEmail } from '../lib/validators';
 import './LandingPage.css';
 
 const LEAD_SOURCE_OPTIONS: SelectOption[] = [
@@ -37,7 +38,9 @@ export const LandingPage: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
-  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [isCursorActive, setIsCursorActive] = useState(false);
@@ -180,25 +183,76 @@ export const LandingPage: React.FC = () => {
     setOpenFaq(openFaq === index ? null : index);
   };
 
-  const handleContactSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPhoneError(null);
-    if (!contactForm.name || !contactForm.email || !contactForm.subject || !contactForm.message) {
-      return;
+  const handleContactFieldChange = (field: string, value: string) => {
+    setContactForm(prev => ({ ...prev, [field]: value }));
+    if (formErrors[field]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+    if (submitError) {
+      setSubmitError(null);
+    }
+  };
+
+  const validateContactForm = (): boolean => {
+    const errs: Record<string, string> = {};
+
+    // 1. Full Name Validation (presence, min 2 chars, max 100 chars, no numbers-only)
+    const nameErr = validateName(contactForm.name, 'Full name', 2, 100);
+    if (nameErr) {
+      errs.name = nameErr;
     }
 
+    // 2. Email Address Validation (presence, valid RFC format with real domain/TLD, max 254 chars)
+    const emailErr = validateEmail(contactForm.email, true, 'Email address');
+    if (emailErr) {
+      errs.email = emailErr;
+    }
+
+    // 3. Phone Number Validation (country-aware if entered)
     if (contactForm.phone && contactForm.phone.trim()) {
       const parsed = parsePhoneNumber(contactForm.phone);
-      const validationError = validatePhoneNumber(parsed.nationalNumber, parsed.country);
-      if (validationError) {
-        setPhoneError(validationError);
-        return;
+      const phoneErr = validatePhoneNumber(parsed.nationalNumber, parsed.country);
+      if (phoneErr) {
+        errs.phone = phoneErr;
       }
     }
 
+    // 4. Subject Validation (presence, min 2 chars, max 150 chars)
+    const subjectErr = validateName(contactForm.subject, 'Subject', 2, 150);
+    if (subjectErr) {
+      errs.subject = subjectErr;
+    }
+
+    // 5. Message Validation (presence, min 5 chars, max 2000 chars)
+    if (!contactForm.message || !contactForm.message.trim()) {
+      errs.message = 'Message is required';
+    } else if (contactForm.message.trim().length < 5) {
+      errs.message = 'Message must be at least 5 characters';
+    } else if (contactForm.message.trim().length > 2000) {
+      errs.message = 'Message cannot exceed 2,000 characters';
+    }
+
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+
+    if (!validateContactForm()) {
+      return;
+    }
+
+    setIsSubmittingContact(true);
     try {
       await api.post('/api/dashboard/contact', contactForm);
       setFormSubmitted(true);
+      setFormErrors({});
       // Refresh dashboard stats so the new lead shows up immediately
       const data = await api.get('/api/dashboard/public-stats');
       setDashboardData(data);
@@ -206,14 +260,11 @@ export const LandingPage: React.FC = () => {
         setFormSubmitted(false);
         setContactForm({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
       }, 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to submit contact message:', err);
-      // Fallback show success response for UX
-      setFormSubmitted(true);
-      setTimeout(() => {
-        setFormSubmitted(false);
-        setContactForm({ name: '', email: '', phone: '', source: 'Google Search', subject: '', message: '' });
-      }, 4000);
+      setSubmitError(err?.message || 'Failed to send message. Please check your information and try again.');
+    } finally {
+      setIsSubmittingContact(false);
     }
   };
 
@@ -1026,7 +1077,25 @@ export const LandingPage: React.FC = () => {
                   <p>Thank you for reaching out. Our team has received your inquiry and will follow up shortly.</p>
                 </div>
               ) : (
-                <form onSubmit={handleContactSubmit} className="contact-form-layout">
+                <form onSubmit={handleContactSubmit} className="contact-form-layout" noValidate>
+                  {submitError && (
+                    <div style={{
+                      padding: '0.75rem 1rem',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      color: '#dc2626',
+                      borderRadius: '10px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontWeight: 500,
+                    }}>
+                      <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                      <span>{submitError}</span>
+                    </div>
+                  )}
+
                   {/* Row 1: Name & Email */}
                   <div className="contact-form-row">
                     <div className="contact-form-field">
@@ -1034,22 +1103,35 @@ export const LandingPage: React.FC = () => {
                       <input
                         type="text"
                         placeholder="John Doe"
-                        className="input-field contact-input"
+                        className={`input-field contact-input ${formErrors.name ? 'input-error' : ''}`}
                         value={contactForm.name}
-                        onChange={e => setContactForm({ ...contactForm, name: e.target.value })}
-                        required
+                        onChange={e => handleContactFieldChange('name', e.target.value)}
+                        style={formErrors.name ? { borderColor: '#ef4444' } : undefined}
                       />
+                      {formErrors.name && (
+                        <div className="input-error-text" style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: '#ef4444', fontWeight: 500 }}>
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{formErrors.name}</span>
+                        </div>
+                      )}
                     </div>
+
                     <div className="contact-form-field">
                       <label className="contact-field-label">Email Address *</label>
                       <input
                         type="email"
                         placeholder="john@example.com"
-                        className="input-field contact-input"
+                        className={`input-field contact-input ${formErrors.email ? 'input-error' : ''}`}
                         value={contactForm.email}
-                        onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
-                        required
+                        onChange={e => handleContactFieldChange('email', e.target.value)}
+                        style={formErrors.email ? { borderColor: '#ef4444' } : undefined}
                       />
+                      {formErrors.email && (
+                        <div className="input-error-text" style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: '#ef4444', fontWeight: 500 }}>
+                          <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                          <span>{formErrors.email}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1059,13 +1141,10 @@ export const LandingPage: React.FC = () => {
                       <PhoneInput
                         label="Phone Number"
                         value={contactForm.phone}
-                        onChange={(val) => {
-                          setContactForm({ ...contactForm, phone: val });
-                          if (phoneError) setPhoneError(null);
-                        }}
+                        onChange={(val) => handleContactFieldChange('phone', val)}
                         defaultCountryCode="ET"
                         showInlineValidation={true}
-                        error={phoneError || undefined}
+                        error={formErrors.phone}
                         placeholder="91 123 4567"
                         className="contact-phone-input"
                       />
@@ -1075,7 +1154,7 @@ export const LandingPage: React.FC = () => {
                       <SelectDown
                         value={contactForm.source}
                         options={LEAD_SOURCE_OPTIONS}
-                        onChange={(val) => setContactForm({ ...contactForm, source: String(val) })}
+                        onChange={(val) => handleContactFieldChange('source', String(val))}
                         placeholder="Select Lead Source"
                         className="contact-selectdown"
                       />
@@ -1088,11 +1167,17 @@ export const LandingPage: React.FC = () => {
                     <input
                       type="text"
                       placeholder="Inquiry regarding CRM features, pricing, or custom setup..."
-                      className="input-field contact-input"
+                      className={`input-field contact-input ${formErrors.subject ? 'input-error' : ''}`}
                       value={contactForm.subject}
-                      onChange={e => setContactForm({ ...contactForm, subject: e.target.value })}
-                      required
+                      onChange={e => handleContactFieldChange('subject', e.target.value)}
+                      style={formErrors.subject ? { borderColor: '#ef4444' } : undefined}
                     />
+                    {formErrors.subject && (
+                      <div className="input-error-text" style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: '#ef4444', fontWeight: 500 }}>
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{formErrors.subject}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Row 4: Message */}
@@ -1101,15 +1186,26 @@ export const LandingPage: React.FC = () => {
                     <textarea
                       placeholder="Please share any specific requirements, team size, or questions you have..."
                       rows={4}
-                      className="input-field contact-textarea"
+                      className={`input-field contact-textarea ${formErrors.message ? 'input-error' : ''}`}
                       value={contactForm.message}
-                      onChange={e => setContactForm({ ...contactForm, message: e.target.value })}
-                      required
+                      onChange={e => handleContactFieldChange('message', e.target.value)}
+                      style={formErrors.message ? { borderColor: '#ef4444' } : undefined}
                     />
+                    {formErrors.message && (
+                      <div className="input-error-text" style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: '#ef4444', fontWeight: 500 }}>
+                        <AlertCircle size={13} style={{ flexShrink: 0 }} />
+                        <span>{formErrors.message}</span>
+                      </div>
+                    )}
                   </div>
 
-                  <button type="submit" className="btn-primary contact-submit-btn">
-                    <Send size={16} /> Send Message
+                  <button
+                    type="submit"
+                    className="btn-primary contact-submit-btn"
+                    disabled={isSubmittingContact}
+                    style={isSubmittingContact ? { opacity: 0.7, cursor: 'not-allowed' } : undefined}
+                  >
+                    <Send size={16} /> {isSubmittingContact ? 'Sending...' : 'Send Message'}
                   </button>
                 </form>
               )}
@@ -1133,13 +1229,13 @@ export const LandingPage: React.FC = () => {
               Enterprise customer relationship management platform designed for sales pipeline execution and team collaboration.
             </p>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <a href="https://www.linkedin.com" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="LinkedIn">
+              <a href="https://www.linkedin.com/in/amazi" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="LinkedIn">
                 <Linkedin size={16} />
               </a>
-              <a href="https://t.me" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="Telegram">
+              <a href="https://t.me/Computer_science_2016_bach" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="Telegram">
                 <Send size={16} />
               </a>
-              <a href="https://www.instagram.com" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="Instagram">
+              <a href="https://www.instagram.com/amazi1075" target="_blank" rel="noopener noreferrer" className="social-icon-btn" aria-label="Instagram">
                 <Instagram size={16} />
               </a>
             </div>
@@ -1159,7 +1255,7 @@ export const LandingPage: React.FC = () => {
             <h4 className="footer-column-title">Account Access</h4>
             <div className="footer-links-list">
               <a href="/login" onClick={(e) => { e.preventDefault(); navigate('/login'); }}>Login to Account</a>
-              <a href="/login" onClick={(e) => { e.preventDefault(); navigate('/login'); }}>Default Credentials</a>
+              <a href="/forgot-password" onClick={(e) => { e.preventDefault(); navigate('/forgot-password'); }}>Forgot Password</a>
             </div>
           </div>
         </div>

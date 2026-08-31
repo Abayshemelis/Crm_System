@@ -10,6 +10,9 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
 
+using Microsoft.AspNetCore.SignalR;
+using CrmSystem.Api.Hubs;
+
 namespace CrmSystem.Api.Controllers;
 
 [ApiController]
@@ -21,19 +24,22 @@ public class AuthController : ControllerBase
     private readonly ITokenService _tokenService;
     private readonly IEmailSender _emailSender;
     private readonly IGoogleAuthService _googleAuthService;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
     public AuthController(
         AppDbContext db,
         IPasswordHasher passwordHasher,
         ITokenService tokenService,
         IEmailSender emailSender,
-        IGoogleAuthService googleAuthService)
+        IGoogleAuthService googleAuthService,
+        IHubContext<NotificationHub> hubContext)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _emailSender = emailSender;
         _googleAuthService = googleAuthService;
+        _hubContext = hubContext;
     }
 
     // ── 1. USER REGISTRATION ──────────────────────────────────────────────────
@@ -77,68 +83,75 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var cleanEmail = request.Email?.Trim() ?? string.Empty;
-        var cleanPassword = request.Password?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(cleanEmail) || string.IsNullOrWhiteSpace(cleanPassword))
+        try
         {
-            return BadRequest(new { message = "Email and password are required." });
+            var cleanIdentifier = request.Email?.Trim() ?? string.Empty;
+            var cleanPassword = request.Password?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(cleanIdentifier) || string.IsNullOrWhiteSpace(cleanPassword))
+            {
+                return BadRequest(new { message = "Email/Username and password are required." });
+            }
+
+            var identity = await _db.Identities
+                .Include(i => i.Role)
+                .Include(i => i.IdentityRoles)
+                    .ThenInclude(ir => ir.Role)
+                .FirstOrDefaultAsync(i => i.Email.ToLower() == cleanIdentifier.ToLower() || i.Name.ToLower() == cleanIdentifier.ToLower());
+
+            if (identity is null || !_passwordHasher.Verify(cleanPassword, identity.PasswordHash))
+            {
+                return Unauthorized(new { message = "Invalid email/username or password." });
+            }
+
+            if (!identity.IsActive)
+            {
+                return Unauthorized(new { message = "Account is deactivated. Please contact an administrator." });
+            }
+
+            var rawRefreshToken = _tokenService.GenerateRefreshToken();
+
+            var refreshTokenEntity = new RefreshToken
+            {
+                IdentityId = identity.IdentityId,
+                TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
+                DeviceInfo = GetDeviceInfo(Request),
+                IpAddress = GetClientIpAddress(HttpContext),
+                LastActiveAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
+                IsRevoked = false
+            };
+
+            _db.RefreshTokens.Add(refreshTokenEntity);
+            await _db.SaveChangesAsync();
+
+            var accessToken = _tokenService.GenerateAccessToken(identity, refreshTokenEntity.RefreshTokenId);
+
+            var roles = identity.IdentityRoles
+                .Where(ir => ir.Role != null)
+                .Select(ir => ir.Role!.Name)
+                .Distinct()
+                .ToArray();
+
+            if (roles.Length == 0 && identity.Role != null)
+            {
+                roles = new[] { identity.Role.Name };
+            }
+
+            return Ok(new AuthResponse(
+                identity.IdentityId,
+                identity.Name,
+                identity.Email,
+                roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty,
+                roles,
+                accessToken,
+                rawRefreshToken));
         }
-
-        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(cleanEmail))
+        catch (Exception ex)
         {
-            return BadRequest(new { message = "Invalid email format." });
+            Console.WriteLine($"[Login Exception]: {ex.Message}\n{ex.StackTrace}");
+            return StatusCode(500, new { message = $"Authentication error: {ex.Message}" });
         }
-
-        var identity = await _db.Identities
-            .Include(i => i.Role)
-            .Include(i => i.IdentityRoles)
-                .ThenInclude(ir => ir.Role)
-            .FirstOrDefaultAsync(i => i.Email.ToLower() == cleanEmail.ToLower());
-
-        if (identity is null || !_passwordHasher.Verify(cleanPassword, identity.PasswordHash))
-        {
-            return Unauthorized(new { message = "Invalid email or password." });
-        }
-
-        if (!identity.IsActive)
-        {
-            return Unauthorized(new { message = "Account is deactivated. Please contact an administrator." });
-        }
-
-        var accessToken = _tokenService.GenerateAccessToken(identity);
-        var rawRefreshToken = _tokenService.GenerateRefreshToken();
-
-        var refreshTokenEntity = new RefreshToken
-        {
-            IdentityId = identity.IdentityId,
-            TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
-            ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
-            IsRevoked = false
-        };
-
-        _db.RefreshTokens.Add(refreshTokenEntity);
-        await _db.SaveChangesAsync();
-
-        var roles = identity.IdentityRoles
-            .Where(ir => ir.Role != null)
-            .Select(ir => ir.Role!.Name)
-            .Distinct()
-            .ToArray();
-
-        if (roles.Length == 0 && identity.Role != null)
-        {
-            roles = new[] { identity.Role.Name };
-        }
-
-        return Ok(new AuthResponse(
-            identity.IdentityId,
-            identity.Name,
-            identity.Email,
-            roles.FirstOrDefault() ?? identity.Role?.Name ?? string.Empty,
-            roles,
-            accessToken,
-            rawRefreshToken));
     }
 
     // ── 3. GOOGLE OAUTH LOGIN & AUTO-REGISTRATION ─────────────────────────────
@@ -210,19 +223,23 @@ public class AuthController : ControllerBase
             }
 
             // Step E: Generate JWT access token & refresh token
-            var accessToken = _tokenService.GenerateAccessToken(identity);
             var rawRefreshToken = _tokenService.GenerateRefreshToken();
 
             var refreshTokenEntity = new RefreshToken
             {
                 IdentityId = identity.IdentityId,
                 TokenHash = _tokenService.HashRefreshToken(rawRefreshToken),
+                DeviceInfo = GetDeviceInfo(Request),
+                IpAddress = GetClientIpAddress(HttpContext),
+                LastActiveAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
                 IsRevoked = false
             };
 
             _db.RefreshTokens.Add(refreshTokenEntity);
             await _db.SaveChangesAsync();
+
+            var accessToken = _tokenService.GenerateAccessToken(identity, refreshTokenEntity.RefreshTokenId);
 
             var roles = identity.IdentityRoles
                 .Where(ir => ir.Role != null)
@@ -273,19 +290,23 @@ public class AuthController : ControllerBase
         storedToken.IsRevoked = true;
 
         var identity = storedToken.Identity!;
-        var newAccessToken = _tokenService.GenerateAccessToken(identity);
         var newRawRefreshToken = _tokenService.GenerateRefreshToken();
 
         var newRefreshTokenEntity = new RefreshToken
         {
             IdentityId = identity.IdentityId,
             TokenHash = _tokenService.HashRefreshToken(newRawRefreshToken),
+            DeviceInfo = GetDeviceInfo(Request) ?? storedToken.DeviceInfo,
+            IpAddress = GetClientIpAddress(HttpContext) ?? storedToken.IpAddress,
+            LastActiveAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.RefreshTokenExpiryDays),
             IsRevoked = false
         };
 
         _db.RefreshTokens.Add(newRefreshTokenEntity);
         await _db.SaveChangesAsync();
+
+        var newAccessToken = _tokenService.GenerateAccessToken(identity, newRefreshTokenEntity.RefreshTokenId);
 
         var roles = identity.IdentityRoles
             .Where(ir => ir.Role != null)
@@ -418,5 +439,196 @@ public class AuthController : ControllerBase
     public ActionResult AdminCheck()
     {
         return Ok(new { message = "You are an Admin. This proves AdminOnly policy works." });
+    }
+
+    // ── 9. ACTIVE SESSIONS MANAGEMENT ─────────────────────────────────────────
+    [Authorize]
+    [HttpGet("sessions")]
+    public async Task<ActionResult> GetActiveSessions([FromQuery] string? currentRefreshToken = null)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!int.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        string? currentHash = null;
+        if (!string.IsNullOrWhiteSpace(currentRefreshToken))
+        {
+            currentHash = _tokenService.HashRefreshToken(currentRefreshToken);
+        }
+
+        var rawSessions = await _db.RefreshTokens
+            .Where(rt => rt.IdentityId == userId && !rt.IsRevoked && rt.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(rt => rt.LastActiveAt ?? rt.CreatedAt)
+            .ToListAsync();
+
+        var activeSessions = rawSessions.Select(rt => new
+        {
+            sessionId = rt.RefreshTokenId,
+            deviceInfo = string.IsNullOrWhiteSpace(rt.DeviceInfo) ? "Web Browser" : rt.DeviceInfo,
+            ipAddress = string.IsNullOrWhiteSpace(rt.IpAddress) ? "127.0.0.1" : rt.IpAddress,
+            createdAt = rt.CreatedAt,
+            lastActiveAt = rt.LastActiveAt ?? rt.CreatedAt,
+            expiresAt = rt.ExpiresAt,
+            isCurrentSession = currentHash != null ? rt.TokenHash == currentHash : false
+        }).ToList();
+
+        return Ok(activeSessions);
+    }
+
+    [Authorize]
+    [HttpPost("sessions/revoke/{id:int}")]
+    public async Task<ActionResult> RevokeSession(int id)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!int.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var session = await _db.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.RefreshTokenId == id && rt.IdentityId == userId);
+
+        if (session is null)
+        {
+            return NotFound(new { message = "Session not found." });
+        }
+
+        session.IsRevoked = true;
+        await _db.SaveChangesAsync();
+
+        // Broadcast real-time SignalR event to instantly kick out revoked device
+        await _hubContext.Clients.Group($"user_{userId}").SendAsync("SessionRevoked", new
+        {
+            sessionId = id,
+            message = "Your session was terminated from another device."
+        });
+
+        return Ok(new { message = "Session revoked successfully." });
+    }
+
+    [Authorize]
+    [HttpPost("sessions/revoke-others")]
+    public async Task<ActionResult> RevokeOtherSessions([FromBody] RevokeOthersRequest? request)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!int.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        string? currentHash = null;
+        if (!string.IsNullOrWhiteSpace(request?.CurrentRefreshToken))
+        {
+            currentHash = _tokenService.HashRefreshToken(request.CurrentRefreshToken);
+        }
+
+        var sessionsToRevoke = await _db.RefreshTokens
+            .Where(rt => rt.IdentityId == userId && !rt.IsRevoked && (currentHash == null || rt.TokenHash != currentHash))
+            .ToListAsync();
+
+        foreach (var s in sessionsToRevoke)
+        {
+            s.IsRevoked = true;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // Broadcast real-time SignalR event to all devices of this user
+        await _hubContext.Clients.Group($"user_{userId}").SendAsync("SessionRevoked", new
+        {
+            message = "Your session was logged out from another device."
+        });
+
+        return Ok(new { message = $"Revoked {sessionsToRevoke.Count} other active session(s)." });
+    }
+
+    [Authorize]
+    [HttpPost("sessions/revoke-all")]
+    public async Task<ActionResult> RevokeAllSessions()
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!int.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var sessions = await _db.RefreshTokens
+            .Where(rt => rt.IdentityId == userId && !rt.IsRevoked)
+            .ToListAsync();
+
+        foreach (var s in sessions)
+        {
+            s.IsRevoked = true;
+        }
+
+        await _db.SaveChangesAsync();
+
+        await _hubContext.Clients.Group($"user_{userId}").SendAsync("SessionRevoked", new
+        {
+            all = true,
+            message = "All sessions have been terminated. Please log in again."
+        });
+
+        return Ok(new { message = "All sessions revoked." });
+    }
+
+    // ── 10. SESSION STATUS CHECK ──────────────────────────────────────────────
+    [HttpPost("check-session")]
+    public async Task<ActionResult> CheckSession([FromBody] RefreshRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Ok(new { isRevoked = true });
+        }
+
+        var incomingHash = _tokenService.HashRefreshToken(request.RefreshToken);
+        var token = await _db.RefreshTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(rt => rt.TokenHash == incomingHash);
+
+        if (token is null || token.IsRevoked || token.ExpiresAt < DateTime.UtcNow)
+        {
+            return Ok(new { isRevoked = true });
+        }
+
+        return Ok(new { isRevoked = false });
+    }
+
+    // ── HELPER METHODS ────────────────────────────────────────────────────────
+    private string GetDeviceInfo(HttpRequest request)
+    {
+        var ua = request.Headers["User-Agent"].ToString();
+        if (string.IsNullOrWhiteSpace(ua)) return "Web Browser";
+
+        string os = "Device";
+        if (ua.Contains("Windows NT 10.0") || ua.Contains("Windows 10") || ua.Contains("Windows 11")) os = "Windows";
+        else if (ua.Contains("Macintosh") || ua.Contains("Mac OS X")) os = "macOS";
+        else if (ua.Contains("iPhone")) os = "iPhone";
+        else if (ua.Contains("iPad")) os = "iPad";
+        else if (ua.Contains("Android")) os = "Android";
+        else if (ua.Contains("Linux")) os = "Linux";
+
+        string browser = "Browser";
+        if (ua.Contains("Edg/")) browser = "Edge";
+        else if (ua.Contains("Chrome/") && !ua.Contains("Edg/")) browser = "Chrome";
+        else if (ua.Contains("Firefox/")) browser = "Firefox";
+        else if (ua.Contains("Safari/") && !ua.Contains("Chrome")) browser = "Safari";
+
+        return $"{browser} on {os}";
+    }
+
+    private string GetClientIpAddress(HttpContext context)
+    {
+        if (context.Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor) && !string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            var ip = forwardedFor.ToString().Split(',')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(ip)) return ip;
+        }
+
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString();
+        if (remoteIp == "::1" || remoteIp == "127.0.0.1") return "127.0.0.1 (Local)";
+        return string.IsNullOrWhiteSpace(remoteIp) ? "127.0.0.1" : remoteIp;
     }
 }

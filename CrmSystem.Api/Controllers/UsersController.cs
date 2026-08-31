@@ -95,23 +95,42 @@ public class UsersController : ControllerBase
                 .ThenInclude(ir => ir.Role)
             .AsQueryable();
 
-        if (User.IsInRole("SalesRep"))
+        // Only restrict if the user is ONLY a SalesRep and not an Admin or Manager
+        if (!User.IsInRole("Admin") && !User.IsInRole("Manager") && User.IsInRole("SalesRep"))
         {
             query = query.Where(i => i.IdentityId == userId);
         }
 
-        var users = await query.Select(i => new
+        var rawUsers = await query.Select(i => new
         {
             Id = i.IdentityId,
             i.Name,
             i.Email,
-            // primary role: prefer explicit IdentityRoles, fallback to Role
-            Role = i.IdentityRoles.Select(ir => ir.Role!.Name).FirstOrDefault() ?? i.Role!.Name,
+            PrimaryRole = i.Role != null ? i.Role.Name : "SalesRep",
+            Roles = i.IdentityRoles.Where(ir => ir.Role != null).Select(ir => ir.Role!.Name).ToArray(),
             RoleId = i.RoleId,
-            Roles = i.IdentityRoles.Select(ir => ir.Role!.Name).ToArray(),
             IsActive = i.IsActive,
             ProfileImage = i.ProfileImage
         }).ToListAsync();
+
+        var users = rawUsers.Select(u =>
+        {
+            var distinctRoles = u.Roles.Union(new[] { u.PrimaryRole }).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct().ToArray();
+            var topRole = distinctRoles.Contains("Admin") ? "Admin" :
+                          distinctRoles.Contains("Manager") ? "Manager" :
+                          (distinctRoles.FirstOrDefault() ?? "SalesRep");
+            return new
+            {
+                Id = u.Id,
+                Name = u.Name,
+                Email = u.Email,
+                Role = topRole,
+                RoleId = u.RoleId,
+                Roles = distinctRoles,
+                IsActive = u.IsActive,
+                ProfileImage = u.ProfileImage
+            };
+        });
 
         return Ok(users);
     }
@@ -120,7 +139,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> GetRoles()
     {
         var roles = await _db.Roles
-            .Where(r => r.Name == "Manager" || r.Name == "SalesRep")
+            .OrderBy(r => r.RoleId)
             .Select(r => new { Id = r.RoleId, Name = r.Name })
             .ToListAsync();
         return Ok(roles);

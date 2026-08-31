@@ -23,48 +23,55 @@ export const DATE_PRESETS: DatePresetOption[] = [
   { id: 'custom',     label: 'Custom Range' },
 ];
 
+function toLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function calculateDateRange(presetId: string): { start: string; end: string } {
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = toLocalYmd(now);
 
   switch (presetId) {
     case 'today': {
       return { start: todayStr, end: todayStr };
     }
     case 'yesterday': {
-      const yest = new Date(Date.now() - 86400_000);
-      const yestStr = yest.toISOString().split('T')[0];
+      const yest = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const yestStr = toLocalYmd(yest);
       return { start: yestStr, end: yestStr };
     }
     case '7days': {
-      const d7 = new Date(Date.now() - 7 * 86400_000);
-      return { start: d7.toISOString().split('T')[0], end: todayStr };
+      const d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      return { start: toLocalYmd(d7), end: todayStr };
     }
     case '30days': {
-      const d30 = new Date(Date.now() - 30 * 86400_000);
-      return { start: d30.toISOString().split('T')[0], end: todayStr };
+      const d30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      return { start: toLocalYmd(d30), end: todayStr };
     }
     case 'thisMonth': {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start: firstDay.toISOString().split('T')[0], end: todayStr };
+      return { start: toLocalYmd(firstDay), end: todayStr };
     }
     case 'lastMonth': {
       const firstDayPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastDayPrev = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { start: firstDayPrev.toISOString().split('T')[0], end: lastDayPrev.toISOString().split('T')[0] };
+      return { start: toLocalYmd(firstDayPrev), end: toLocalYmd(lastDayPrev) };
     }
     case 'thisQuarter': {
       const currentQuarter = Math.floor(now.getMonth() / 3);
       const quarterStart = new Date(now.getFullYear(), currentQuarter * 3, 1);
-      return { start: quarterStart.toISOString().split('T')[0], end: todayStr };
+      return { start: toLocalYmd(quarterStart), end: todayStr };
     }
     case 'thisYear': {
       const yearStart = new Date(now.getFullYear(), 0, 1);
-      return { start: yearStart.toISOString().split('T')[0], end: todayStr };
+      return { start: toLocalYmd(yearStart), end: todayStr };
     }
     default: {
-      const defaultStart = new Date(Date.now() - 30 * 86400_000);
-      return { start: defaultStart.toISOString().split('T')[0], end: todayStr };
+      const defaultStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      return { start: toLocalYmd(defaultStart), end: todayStr };
     }
   }
 }
@@ -159,7 +166,7 @@ export const ReportHeader: React.FC<ReportHeaderProps> = ({
             <h1 className="clean-report-title">{title}</h1>
             {badge && <span className="clean-badge clean-badge-primary">{badge}</span>}
           </div>
-          <p className="clean-report-desc">{description}</p>
+          {description && <p className="clean-report-desc">{description}</p>}
         </div>
 
         {/* ── Top-right Actions: Refresh & Exports ────────────────────────── */}

@@ -14,6 +14,7 @@ interface SearchableSelectProps {
   className?: string;
   style?: React.CSSProperties;
   error?: string;
+  disabled?: boolean;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({

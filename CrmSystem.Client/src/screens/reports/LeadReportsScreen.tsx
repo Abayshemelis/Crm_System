@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { ReportsNav } from '../../components/reports/ReportsNav';
 import { ReportHeader, calculateDateRange } from '../../components/reports/ReportHeader';
-import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpiCard';
+import { ReportKpiGrid, ReportKpiItem, ReportSummaryBanner } from '../../components/reports/ReportKpiCard';
 import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
 import { exportCSV, exportExecutivePDF } from '../../components/reports/reportExportUtils';
@@ -301,8 +301,16 @@ export const LeadReportsScreen: React.FC = () => {
           loading={loading}
         />
 
-        {/* ── 3. KPI Grid ────────────────────────────────────────────────── */}
-        <ReportKpiGrid items={kpis} loading={loading} />
+        {/* ── 3. Summary Banner ────────────────────────────────────────────────── */}
+        <ReportSummaryBanner 
+          items={[
+            kpis[0], // Total Leads
+            kpis[1], // New Leads
+            kpis[3], // Converted Customers
+            kpis[4], // Conversion Rate
+          ]} 
+          loading={loading} 
+        />
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* VIEW 1: OVERVIEW */}

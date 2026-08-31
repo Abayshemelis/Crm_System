@@ -5,9 +5,10 @@ import { Input } from './Input';
 import { DatePicker } from './DatePicker';
 import { SelectDown } from './SelectDown';
 import { api } from '../../lib/api';
-import { X, Plus, Trash2, Check, XCircle, History } from 'lucide-react';
+import { X, Plus, Trash2, Check, XCircle, History, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AuditHistoryTable } from '../audit/AuditHistoryTable';
 import { getExpectedCloseDateStatus, getStandardCloseDatePresets } from '../../lib/dateUtils';
+import { useSystemProfile, useFormatCurrency } from '../../context/SystemProfileContext';
 import '../../screens/screens.css';
 
 interface Opportunity {
@@ -81,12 +82,15 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     onClose,
     onUpdate
 }) => {
+    const { profile } = useSystemProfile();
+    const { formatCurrency, currency } = useFormatCurrency();
     const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
     const [lineItems, setLineItems] = useState<OpportunityLineItem[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [stages, setStages] = useState<Stage[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [syncingPrices, setSyncingPrices] = useState(false);
     const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>({});
     const [newLineItem, setNewLineItem] = useState({
         productId: 0,
@@ -153,6 +157,52 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                 detail: { message: 'Failed to update opportunity', type: 'error' as const }
             });
             window.dispatchEvent(event);
+        }
+    };
+
+    const calculatedTotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+    const handleSyncEstimatedValue = async () => {
+        if (!opportunity) return;
+        try {
+            await api.put(`/api/opportunities/${opportunityId}`, {
+                ...opportunity,
+                estimatedValue: calculatedTotal
+            });
+            setOpportunity(prev => prev ? ({ ...prev, estimatedValue: calculatedTotal }) : null);
+            setEditedOpportunity(prev => ({ ...prev, estimatedValue: calculatedTotal }));
+            onUpdate();
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Deal value synced with product line items', type: 'success' as const }
+            });
+            window.dispatchEvent(event);
+        } catch {
+            const event = new CustomEvent('app:toast', {
+                detail: { message: 'Failed to sync deal value', type: 'error' as const }
+            });
+            window.dispatchEvent(event);
+        }
+    };
+
+    const handleSyncCatalogPrices = async () => {
+        if (!opportunity) return;
+        setSyncingPrices(true);
+        try {
+            const res = await api.post<any>(`/api/opportunitylineitems/${opportunityId}/sync-prices`, {});
+            await loadData();
+            onUpdate();
+            setAuditRefreshTrigger(t => t + 1);
+            const event = new CustomEvent('app:toast', {
+                detail: { message: res.message || 'Product line items updated to current catalog prices!', type: 'success' as const }
+            });
+            window.dispatchEvent(event);
+        } catch (err: any) {
+            const event = new CustomEvent('app:toast', {
+                detail: { message: err?.message || 'Failed to sync prices with catalog', type: 'error' as const }
+            });
+            window.dispatchEvent(event);
+        } finally {
+            setSyncingPrices(false);
         }
     };
 
@@ -279,7 +329,10 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
     }
 
     const hasLineItems = lineItems.length > 0;
-    const calculatedTotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const outdatedPriceItems = lineItems.filter(item => {
+        const catProd = products.find(p => p.productId === item.productId);
+        return catProd && Math.abs(catProd.price - item.unitPrice) > 0.001;
+    });
 
     return (
         <div className="detail-panel-overlay" onClick={onClose}>
@@ -296,7 +349,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                     </div>
                     <div className="card-detail-panel-header-right">
                         <div className="card-detail-value-section">
-                            <span className="card-detail-value">${opportunity.estimatedValue.toLocaleString()}</span>
+                            <span className="card-detail-value">{formatCurrency(opportunity.estimatedValue)}</span>
                             <span className="card-detail-tag">{opportunity.stageName || 'No Stage'}</span>
                         </div>
                         <div className="card-detail-actions">
@@ -393,7 +446,26 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                             />
                                         </div>
                                         <div className="card-form-field">
-                                            <label className="card-form-label">Estimated Value</label>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                                <label className="card-form-label" style={{ margin: 0 }}>Estimated Value ({profile?.currency || currency})</label>
+                                                {hasLineItems && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleFieldChange('estimatedValue', calculatedTotal)}
+                                                        style={{
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            color: '#818cf8',
+                                                            fontSize: '0.72rem',
+                                                            fontWeight: 600,
+                                                            cursor: 'pointer',
+                                                            padding: 0
+                                                        }}
+                                                    >
+                                                        ⚡ Use Quoted Total ({formatCurrency(calculatedTotal)})
+                                                    </button>
+                                                )}
+                                            </div>
                                             <Input
                                                 type="number"
                                                 min="0"
@@ -464,12 +536,67 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                         {activeTab === 'lineItems' && (
                             <Card className="glass-panel card-detail-section">
                                 <Card.Content>
-                                    <div className="card-detail-section-header">
+                                    <div className="card-detail-section-header" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
                                         <h3 className="card-detail-section-title">Products</h3>
-                                        <div className="card-detail-section-total">
-                                            Total: ${calculatedTotal.toLocaleString()}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                            {outdatedPriceItems.length > 0 && (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={handleSyncCatalogPrices}
+                                                    disabled={syncingPrices}
+                                                    style={{ borderColor: '#f59e0b', color: '#f59e0b', fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+                                                    title="Update line item prices with latest catalog prices"
+                                                >
+                                                    <RefreshCw size={12} className={syncingPrices ? 'spin' : ''} style={{ marginRight: 4 }} />
+                                                    Sync Catalog Prices ({outdatedPriceItems.length})
+                                                </Button>
+                                            )}
+                                            {hasLineItems && Math.abs(opportunity.estimatedValue - calculatedTotal) > 0.01 && (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={handleSyncEstimatedValue}
+                                                    style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+                                                    title="Set deal value to match line items total"
+                                                >
+                                                    <RefreshCw size={12} style={{ marginRight: 4 }} />
+                                                    Sync Deal Value
+                                                </Button>
+                                            )}
+                                            <div className="card-detail-section-total" style={{ color: '#10b981', fontWeight: 800 }}>
+                                                Total: {formatCurrency(calculatedTotal)}
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {outdatedPriceItems.length > 0 && (
+                                        <div style={{
+                                            padding: '0.6rem 0.85rem',
+                                            background: 'rgba(245, 158, 11, 0.12)',
+                                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                                            borderRadius: '0.5rem',
+                                            marginBottom: '0.75rem',
+                                            fontSize: '0.78rem',
+                                            color: '#f59e0b',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '0.5rem'
+                                        }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <AlertTriangle size={14} /> {outdatedPriceItems.length} product(s) have updated prices in Settings.
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={handleSyncCatalogPrices}
+                                                disabled={syncingPrices}
+                                                style={{ background: '#f59e0b', border: 'none', color: '#000', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.72rem' }}
+                                            >
+                                                {syncingPrices ? 'Syncing…' : 'Update Prices Now'}
+                                            </button>
+                                        </div>
+                                    )}
 
                                     <div className="card-line-items-table">
                                         <div className="card-line-items-header">
@@ -481,27 +608,39 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                             <div></div>
                                         </div>
 
-                                        {lineItems.map((item, index) => (
-                                            <div key={item.lineItemId} className="card-line-item-row">
-                                                <div className="card-line-item-product">
-                                                    <div className="card-line-item-name">{item.product?.name}</div>
-                                                    {item.product?.sku && <div className="card-line-item-sku">SKU: {item.product.sku}</div>}
-                                                    {item.product?.productCategory && <div className="card-line-item-category">{item.product.productCategory.name}</div>}
+                                        {lineItems.map((item) => {
+                                            const catalogProduct = products.find(p => p.productId === item.productId);
+                                            const hasPriceChanged = catalogProduct && Math.abs(catalogProduct.price - item.unitPrice) > 0.001;
+
+                                            return (
+                                                <div key={item.lineItemId} className="card-line-item-row">
+                                                    <div className="card-line-item-product">
+                                                        <div className="card-line-item-name">{item.product?.name}</div>
+                                                        {item.product?.sku && <div className="card-line-item-sku">SKU: {item.product.sku}</div>}
+                                                        {item.product?.productCategory && <div className="card-line-item-category">{item.product.productCategory.name}</div>}
+                                                    </div>
+                                                    <div className="card-line-item-qty">{item.quantity}</div>
+                                                    <div className="card-line-item-price">
+                                                        <div>{formatCurrency(item.unitPrice)}</div>
+                                                        {hasPriceChanged && (
+                                                            <span style={{ fontSize: '0.68rem', color: '#f59e0b', display: 'block', fontWeight: 600 }}>
+                                                                Cat: {formatCurrency(catalogProduct.price)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="card-line-item-discount">{item.discountPercent}%</div>
+                                                    <div className="card-line-item-total" style={{ fontWeight: 700, color: '#10b981' }}>{formatCurrency(item.totalPrice)}</div>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteLineItem(item.lineItemId)}
+                                                        className="card-line-item-delete"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </Button>
                                                 </div>
-                                                <div className="card-line-item-qty">{item.quantity}</div>
-                                                <div className="card-line-item-price">${item.unitPrice.toLocaleString()}</div>
-                                                <div className="card-line-item-discount">{item.discountPercent}%</div>
-                                                <div className="card-line-item-total">${item.totalPrice.toLocaleString()}</div>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteLineItem(item.lineItemId)}
-                                                    className="card-line-item-delete"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
 
                                     <div className="card-line-item-add-compact">
@@ -509,7 +648,7 @@ export const OpportunityDetailPanel: React.FC<OpportunityDetailPanelProps> = ({
                                             value={newLineItem.productId}
                                             options={[
                                                 { value: 0, label: 'Select Product' },
-                                                ...products.map(p => ({ value: p.productId, label: p.name }))
+                                                ...products.map(p => ({ value: p.productId, label: `${p.name} (${formatCurrency(p.price)})` }))
                                             ]}
                                             onChange={val => handleProductChange(Number(val))}
                                             compact

@@ -13,6 +13,7 @@ import {
   FileSpreadsheet, RefreshCw, Search, Sparkles, Filter,
   ExternalLink, Table as TableIcon, BarChart3, ArrowUpRight
 } from 'lucide-react';
+import { ReportSummaryBanner } from '../../components/reports/ReportKpiCard';
 import './cleanReports.css';
 
 const PALETTE = ['#f59e0b', '#10b981', '#6366f1', '#3b82f6', '#ec4899', '#8b5cf6', '#06b6d4'];
@@ -414,73 +415,40 @@ export const UserReportsScreen: React.FC = () => {
         </div>
 
         {/* 4 Clean Metric Cards */}
-        <div className="clean-stat-grid">
-          {/* Revenue Won */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Total Closed Revenue</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981' }}>
-                <DollarSign size={17} />
-              </div>
-            </div>
-            <div className="clean-stat-value" style={{ color: '#10b981' }}>
-              ${totalWonRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-            </div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta clean-pill-green">Won</span>
-              <span>Team total closed production</span>
-            </div>
-          </div>
-
-          {/* Deals Won */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Closed Won Deals</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
-                <Award size={17} />
-              </div>
-            </div>
-            <div className="clean-stat-value">{totalWonDeals}</div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta" style={{ background: 'rgba(245,158,11,0.14)', color: '#f59e0b' }}>Deals</span>
-              <span>Successfully closed</span>
-            </div>
-          </div>
-
-          {/* Top Rep */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Top Producing Rep</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(234,179,8,0.12)', color: '#eab308' }}>
-                <Crown size={17} />
-              </div>
-            </div>
-            <div className="clean-stat-value" style={{ fontSize: '1.25rem' }}>
-              {topRep?.repName || '—'}
-            </div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta clean-pill-green">
-                ${(topRep?.revenueWon || 0).toLocaleString()}
-              </span>
-              <span>Leaderboard #1</span>
-            </div>
-          </div>
-
-          {/* Reps Count */}
-          <div className="clean-stat-card">
-            <div className="clean-stat-top">
-              <span className="clean-stat-label">Active Team Reps</span>
-              <div className="clean-stat-icon" style={{ background: 'rgba(99,102,241,0.12)', color: '#6366f1' }}>
-                <UserCircle size={17} />
-              </div>
-            </div>
-            <div className="clean-stat-value">{repPerf.length}</div>
-            <div className="clean-stat-footer">
-              <span className="clean-pill-delta clean-pill-blue">Sales Team</span>
-              <span>Contributing reps</span>
-            </div>
-          </div>
-        </div>
+        <ReportSummaryBanner
+          items={[
+            {
+              label: 'Total Closed Revenue',
+              value: `$${totalWonRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+              sub: 'Team total closed production',
+              icon: <DollarSign size={17} />,
+              color: '#10b981',
+              deltaUp: true
+            },
+            {
+              label: 'Closed Won Deals',
+              value: totalWonDeals,
+              sub: 'Successfully closed',
+              icon: <Award size={17} />,
+              color: '#f59e0b'
+            },
+            {
+              label: 'Top Producing Rep',
+              value: topRep?.repName || '—',
+              sub: 'Leaderboard #1',
+              icon: <Crown size={17} />,
+              color: '#eab308'
+            },
+            {
+              label: 'Active Team Reps',
+              value: repPerf.length,
+              sub: 'Contributing reps',
+              icon: <UserCircle size={17} />,
+              color: '#6366f1'
+            }
+          ]}
+          loading={loading}
+        />
 
         {/* Chart */}
         <div className="clean-card">

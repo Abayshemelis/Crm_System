@@ -112,6 +112,8 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(rt => rt.TokenHash).IsUnique();
             e.Property(rt => rt.TokenHash).HasMaxLength(255).IsRequired();
+            e.Property(rt => rt.DeviceInfo).HasMaxLength(255);
+            e.Property(rt => rt.IpAddress).HasMaxLength(100);
             e.HasOne(rt => rt.Identity)
              .WithMany()
              .HasForeignKey(rt => rt.IdentityId)

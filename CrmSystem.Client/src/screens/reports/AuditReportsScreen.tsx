@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/layout/Layout';
+import { Button } from '../../components/ui/Button';
+import { showToast } from '../../lib/toast';
 import { api } from '../../lib/api';
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -9,15 +12,17 @@ import {
   History, Download, ShieldAlert, Activity, CheckCircle2,
   FileText, FileSpreadsheet, RefreshCw, Search, Filter,
   ArrowUpRight, Shield, Layers, Trash2, Calendar, User,
-  PlusCircle, Edit3, Lock, Eye, AlertTriangle, CheckSquare
+  PlusCircle, Edit3, Lock, Eye, AlertTriangle, CheckSquare,
+  X, Copy, Check, ExternalLink, Code2, Sparkles, Clock, ArrowRight
 } from 'lucide-react';
 import { ReportsNav } from '../../components/reports/ReportsNav';
 import { ReportHeader, calculateDateRange } from '../../components/reports/ReportHeader';
-import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpiCard';
+import { ReportKpiGrid, ReportKpiItem, ReportSummaryBanner } from '../../components/reports/ReportKpiCard';
 import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
 import { exportCSV } from '../../components/reports/reportExportUtils';
 import './cleanReports.css';
+import '../screens.css';
 
 const PALETTE = ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v || 0);
@@ -252,6 +257,7 @@ function exportAuditPDF(logs: any[], dateRange: string, activeTabName: string) {
 }
 
 export const AuditReportsScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<HistoryTab>('overview');
   const [activePreset, setActivePreset] = useState('30days');
   const initialDates = calculateDateRange('30days');
@@ -260,6 +266,12 @@ export const AuditReportsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+
+  // Selected Log for details modal & view mode
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [inspectTab, setInspectTab] = useState<'diff' | 'json'>('diff');
+  const [copiedId, setCopiedId] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -428,22 +440,22 @@ export const AuditReportsScreen: React.FC = () => {
 
   // Master Table Columns
   const trailColumns: ColumnDef<any>[] = [
-    { key: 'changedAt', header: 'Timestamp', width: '15%', render: (r) => new Date(r.changedAt).toLocaleString() },
-    { key: 'changedByName', header: 'User', width: '18%', render: (r) => (
+    { key: 'changedAt', header: 'Timestamp', width: '14%', render: (r) => new Date(r.changedAt).toLocaleString() },
+    { key: 'changedByName', header: 'User', width: '16%', render: (r) => (
       <div>
         <strong>{r.changedByName || 'System User'}</strong>
         {r.changedByEmail && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{r.changedByEmail}</div>}
       </div>
     )},
-    { key: 'entityTypeName', header: 'Module', width: '12%', render: (r) => <span className="clean-badge clean-badge-info">{r.entityTypeName}</span> },
-    { key: 'entityId', header: 'Record ID', width: '10%', align: 'center', render: (r) => `#${r.entityId}` },
-    { key: 'auditActionTypeName', header: 'Action', width: '12%', render: (r) => {
+    { key: 'entityTypeName', header: 'Module', width: '11%', render: (r) => <span className="clean-badge clean-badge-info">{r.entityTypeName}</span> },
+    { key: 'entityId', header: 'Record ID', width: '9%', align: 'center', render: (r) => `#${r.entityId}` },
+    { key: 'auditActionTypeName', header: 'Action', width: '11%', render: (r) => {
       const act = (r.auditActionTypeName || '').toLowerCase();
       const cls = act.includes('create') || act.includes('insert') ? 'clean-badge-success' : act.includes('delete') ? 'clean-badge-danger' : 'clean-badge-primary';
       return <span className={`clean-badge ${cls}`}>{r.auditActionTypeName}</span>;
     }},
-    { key: 'details', header: 'Change Details', width: '33%', render: (r) => {
-      if (!r.fieldName) return <span style={{ color: '#94a3b8', fontSize: '12px' }}>Record lifecycle mutation</span>;
+    { key: 'details', header: 'Change Details', width: '27%', render: (r) => {
+      if (!r.fieldName) return <span style={{ color: '#94a3b8', fontSize: '12px' }}>{r.oldValue || r.newValue || 'Record lifecycle mutation'}</span>;
       return (
         <div style={{ fontSize: '12px' }}>
           <strong style={{ color: 'var(--color-text, #1e293b)' }}>{r.fieldName}: </strong>
@@ -452,16 +464,42 @@ export const AuditReportsScreen: React.FC = () => {
         </div>
       );
     }},
+    { key: 'actions', header: 'Action', width: '12%', align: 'right', render: (r) => (
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedLog(r);
+          setInspectTab('diff');
+        }}
+        className="crm-audit-inspect-btn"
+      >
+        <Eye size={12} />
+        <span>Inspect</span>
+      </button>
+    )},
   ];
 
   // Updated Records Columns with Before / After Cards
   const updatedColumns: ColumnDef<any>[] = [
-    { key: 'changedAt', header: 'Timestamp', width: '15%', render: (r) => new Date(r.changedAt).toLocaleString() },
-    { key: 'changedByName', header: 'Changed By', width: '18%', render: (r) => <strong>{r.changedByName || 'System User'}</strong> },
-    { key: 'entityTypeName', header: 'Module & ID', width: '15%', render: (r) => <span><strong>{r.entityTypeName}</strong> #{r.entityId}</span> },
-    { key: 'fieldName', header: 'Field Modified', width: '15%', render: (r) => <span className="clean-badge clean-badge-warning">{r.fieldName || 'Attributes'}</span> },
-    { key: 'oldValue', header: 'Before (Old Value)', width: '18%', render: (r) => <span style={{ color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '12px' }}>{r.oldValue || '—'}</span> },
-    { key: 'newValue', header: 'After (New Value)', width: '19%', render: (r) => <span style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>{r.newValue || '—'}</span> },
+    { key: 'changedAt', header: 'Timestamp', width: '14%', render: (r) => new Date(r.changedAt).toLocaleString() },
+    { key: 'changedByName', header: 'Changed By', width: '16%', render: (r) => <strong>{r.changedByName || 'System User'}</strong> },
+    { key: 'entityTypeName', header: 'Module & ID', width: '14%', render: (r) => <span><strong>{r.entityTypeName}</strong> #{r.entityId}</span> },
+    { key: 'fieldName', header: 'Field Modified', width: '14%', render: (r) => <span className="clean-badge clean-badge-warning">{r.fieldName || 'Attributes'}</span> },
+    { key: 'oldValue', header: 'Before (Old Value)', width: '15%', render: (r) => <span style={{ color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '12px' }}>{r.oldValue || '—'}</span> },
+    { key: 'newValue', header: 'After (New Value)', width: '15%', render: (r) => <span style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>{r.newValue || '—'}</span> },
+    { key: 'actions', header: 'Action', width: '12%', align: 'right', render: (r) => (
+      <button
+        type="button"
+        onClick={() => {
+          setSelectedLog(r);
+          setInspectTab('diff');
+        }}
+        className="crm-audit-inspect-btn"
+      >
+        <Eye size={12} />
+        <span>Inspect</span>
+      </button>
+    )},
   ];
 
   const handleExportPDF = () => {
@@ -600,7 +638,15 @@ export const AuditReportsScreen: React.FC = () => {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'overview' && (
           <>
-            <ReportKpiGrid items={historyKpis} columns={5} />
+            <ReportSummaryBanner 
+              items={[
+                historyKpis[0], // Total System Events
+                historyKpis[1], // Created Records
+                historyKpis[2], // Updated Records
+                historyKpis[4], // Login / Security Events
+              ]} 
+              loading={loading} 
+            />
 
             <div className="clean-charts-grid">
               <ReportChartCard
@@ -785,6 +831,351 @@ export const AuditReportsScreen: React.FC = () => {
             <ReportDataTable columns={trailColumns} data={filteredLogs} loading={loading} />
           </div>
         )}
+
+        {/* ── 8. State-of-the-Art System History Inspection Modal ────────── */}
+        {selectedLog && (() => {
+          const actionName = selectedLog.auditActionTypeName || selectedLog.action || 'Action';
+          const act = actionName.toLowerCase();
+          const actionBadge = {
+            bg: act.includes('create') || act.includes('insert') ? 'rgba(16,185,129,0.15)' : act.includes('delete') ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
+            color: act.includes('create') || act.includes('insert') ? '#10b981' : act.includes('delete') ? '#ef4444' : '#6366f1',
+            border: act.includes('create') || act.includes('insert') ? 'rgba(16,185,129,0.3)' : act.includes('delete') ? 'rgba(239,68,68,0.3)' : 'rgba(99,102,241,0.3)',
+            label: actionName
+          };
+
+          const entityUrl = (() => {
+            const t = (selectedLog.entityTypeName || selectedLog.entity || '').toLowerCase();
+            const id = selectedLog.entityId;
+            if (t.includes('customer')) return `/customers/${id}`;
+            if (t.includes('lead')) return `/leads/${id}`;
+            if (t.includes('company') || t.includes('organization')) return `/companies/${id}`;
+            if (t.includes('opp') || t.includes('deal')) return `/opportunities/${id}`;
+            if (t.includes('contract')) return `/contracts`;
+            if (t.includes('invoice')) return `/invoices`;
+            if (t.includes('payment')) return `/payments`;
+            if (t.includes('task')) return `/tasks`;
+            return null;
+          })();
+
+          return (
+            <div className="crm-modal-overlay">
+              <div className="crm-modal-container" style={{ maxWidth: '680px' }}>
+                {/* Modal Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      background: actionBadge.bg,
+                      color: actionBadge.color,
+                      padding: '0.55rem',
+                      borderRadius: '10px',
+                      border: `1px solid ${actionBadge.border}`,
+                      display: 'flex'
+                    }}>
+                      <History size={22} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          System History Inspection
+                        </h3>
+                        <span style={{
+                          background: 'rgba(99, 102, 241, 0.12)',
+                          color: '#818cf8',
+                          border: '1px solid rgba(99, 102, 241, 0.3)',
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontFamily: 'monospace',
+                          fontWeight: 700
+                        }}>
+                          #{selectedLog.auditLogId || selectedLog.id || selectedLog.entityId}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                        Audit trail record verification
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLog(null)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.35rem' }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* 4-Box Metadata Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.2rem' }}>
+                  {/* Actor / User */}
+                  <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <User size={11} /> Actor / User
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.25rem', fontSize: '0.88rem' }}>
+                      {selectedLog.changedByName || selectedLog.userName || 'System Actor'}
+                    </div>
+                    {selectedLog.changedByEmail && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {selectedLog.changedByEmail}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Target Entity */}
+                  <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Layers size={11} /> Target Module
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.25rem', fontSize: '0.88rem' }}>
+                      {selectedLog.entityTypeName || selectedLog.entity || 'Entity'}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 600 }}>
+                      Record #{selectedLog.entityId}
+                    </div>
+                  </div>
+
+                  {/* Action */}
+                  <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Activity size={11} /> Action Type
+                    </div>
+                    <div style={{ marginTop: '0.35rem' }}>
+                      <span
+                        className="clean-badge"
+                        style={{
+                          background: actionBadge.bg,
+                          color: actionBadge.color,
+                          border: `1px solid ${actionBadge.border}`,
+                          fontSize: '0.72rem',
+                          fontWeight: 700
+                        }}
+                      >
+                        {actionBadge.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Timestamp */}
+                  <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={11} /> Timestamp
+                    </div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.25rem', fontSize: '0.8rem' }}>
+                      {new Date(selectedLog.changedAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* View Switcher: Visual Diff vs JSON Payload */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setInspectTab('diff')}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '6px',
+                      border: inspectTab === 'diff' ? '1px solid #6366f1' : '1px solid transparent',
+                      background: inspectTab === 'diff' ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                      color: inspectTab === 'diff' ? '#818cf8' : 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                      fontWeight: inspectTab === 'diff' ? 700 : 500,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Sparkles size={13} /> Visual Diff &amp; Changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInspectTab('json')}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '6px',
+                      border: inspectTab === 'json' ? '1px solid #6366f1' : '1px solid transparent',
+                      background: inspectTab === 'json' ? 'rgba(99, 102, 241, 0.12)' : 'transparent',
+                      color: inspectTab === 'json' ? '#818cf8' : 'var(--text-muted)',
+                      fontSize: '0.8rem',
+                      fontWeight: inspectTab === 'json' ? 700 : 500,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Code2 size={13} /> Raw JSON Payload
+                  </button>
+                </div>
+
+                {/* TAB 1: VISUAL DIFF VIEW */}
+                {inspectTab === 'diff' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '50vh', overflowY: 'auto', paddingRight: '4px' }}>
+                    {act.includes('delete') ? (
+                      <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px', padding: '1rem' }}>
+                        <div style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Trash2 size={15} /> Deleted Entity State Snapshot
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-word', fontFamily: 'monospace' }}>
+                          {selectedLog.oldValue || 'Record was deleted from system without attributes snapshot.'}
+                        </div>
+                      </div>
+                    ) : selectedLog.fieldName ? (
+                      <div className="crm-audit-diff-row">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Edit3 size={13} style={{ color: '#6366f1' }} />
+                            <span>Field: <span style={{ color: '#818cf8' }}>{selectedLog.fieldName}</span></span>
+                          </div>
+                          <span className="clean-badge clean-badge-warning" style={{ fontSize: '0.68rem' }}>Field Mutation</span>
+                        </div>
+
+                        <div className="crm-audit-diff-values">
+                          <div>
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3, fontWeight: 700 }}>
+                              Previous (Before)
+                            </div>
+                            <div className="crm-audit-val-box old">
+                              {selectedLog.oldValue !== null && selectedLog.oldValue !== '' ? selectedLog.oldValue : <em style={{ opacity: 0.5 }}>ø (empty)</em>}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--text-muted)' }}>
+                            <ArrowRight size={16} />
+                          </div>
+
+                          <div>
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 3, fontWeight: 700 }}>
+                              New (After)
+                            </div>
+                            <div className="crm-audit-val-box new">
+                              {selectedLog.newValue !== null && selectedLog.newValue !== '' ? selectedLog.newValue : <em style={{ opacity: 0.5 }}>ø (empty)</em>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : act.includes('create') ? (
+                      <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '8px', padding: '1rem' }}>
+                        <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <PlusCircle size={15} /> Entity Record Created
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                          New <strong>{selectedLog.entityTypeName || selectedLog.entity}</strong> initialized with identifier <strong>#{selectedLog.entityId}</strong> by <strong>{selectedLog.changedByName || 'System'}</strong>.
+                        </div>
+                        {selectedLog.newValue && (
+                          <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'var(--bg-secondary)', borderRadius: '6px', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+                            {selectedLog.newValue}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem' }}>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.4rem' }}>
+                          Transaction Details
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                          {selectedLog.oldValue || selectedLog.newValue || `Operation ${actionName} completed on ${selectedLog.entityTypeName || selectedLog.entity} #${selectedLog.entityId}`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: RAW JSON PAYLOAD VIEW */}
+                {inspectTab === 'json' && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                        Audit Log Object
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2));
+                          setCopiedJson(true);
+                          showToast('Audit JSON payload copied to clipboard', 'success');
+                          setTimeout(() => setCopiedJson(false), 2000);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--border-color)',
+                          color: copiedJson ? '#10b981' : 'var(--text-secondary)',
+                          fontSize: '0.72rem',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                      >
+                        {copiedJson ? <Check size={11} /> : <Copy size={11} />}
+                        {copiedJson ? 'Copied' : 'Copy JSON'}
+                      </button>
+                    </div>
+                    <div className="crm-audit-json-box">
+                      {JSON.stringify(selectedLog, null, 2)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Footer Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idToCopy = selectedLog.auditLogId || selectedLog.id || selectedLog.entityId;
+                      navigator.clipboard.writeText(String(idToCopy));
+                      setCopiedId(true);
+                      showToast(`Audit ID #${idToCopy} copied`, 'success');
+                      setTimeout(() => setCopiedId(false), 2000);
+                    }}
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                      color: copiedId ? '#10b981' : 'var(--text-secondary)',
+                      fontSize: '0.75rem',
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    {copiedId ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedId ? 'Copied ID' : 'Copy Audit ID'}
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {entityUrl && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setSelectedLog(null);
+                          navigate(entityUrl);
+                        }}
+                        style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <ExternalLink size={13} /> View {selectedLog.entityTypeName || selectedLog.entity}
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() => setSelectedLog(null)}
+                      style={{ fontSize: '0.8rem' }}
+                    >
+                      Close Inspection
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </Layout>
   );

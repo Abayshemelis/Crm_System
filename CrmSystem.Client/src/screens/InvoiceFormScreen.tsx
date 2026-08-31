@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Input';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
+import { useFormatCurrency, useSystemProfile } from '../context/SystemProfileContext';
 import { ArrowLeft, Receipt, DollarSign, Calendar, FileText, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { validatePositiveNumber, validateRequiredSelect, validateDateRange } from '../lib/validators';
 import './screens.css';
@@ -36,6 +37,8 @@ export const InvoiceFormScreen: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
+  const { formatCurrency, currency } = useFormatCurrency();
+  const { profile } = useSystemProfile();
 
   const initialCustomerId = searchParams.get('customerId') ? Number(searchParams.get('customerId')) : 0;
   const initialContractId = searchParams.get('contractId') ? Number(searchParams.get('contractId')) : null;
@@ -167,9 +170,6 @@ export const InvoiceFormScreen: React.FC = () => {
   // Tax calculations
   const taxAmount = (Number(form.amount) || 0) * ((Number(form.taxRate) || 0) / 100);
   const totalAmount = (Number(form.amount) || 0) + taxAmount;
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 
   const validate = () => {
     const errs: Record<string, string> = {};

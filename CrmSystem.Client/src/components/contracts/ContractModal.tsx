@@ -3,6 +3,7 @@ import { FileText, X, CheckCircle, Download, Printer, PenTool, RefreshCw, Receip
 import { Button } from '../ui/Button';
 import { api } from '../../lib/api';
 import { showToast } from '../../lib/toast';
+import { useSystemProfile, useFormatCurrency } from '../../context/SystemProfileContext';
 import html2pdf from 'html2pdf.js';
 
 export interface ContractItem {
@@ -54,6 +55,8 @@ interface ContractModalProps {
 }
 
 export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose, onUpdate, onInvoice }) => {
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const customerCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -64,6 +67,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
   const [signingCustomer, setSigningCustomer] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [syncingPricing, setSyncingPricing] = useState(false);
   const [hasDrawnSignature, setHasDrawnSignature] = useState(false);
   const [hasDrawnCustomerSignature, setHasDrawnCustomerSignature] = useState(false);
   const [showInPersonCustomerSign, setShowInPersonCustomerSign] = useState(false);
@@ -71,6 +75,19 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
   const isCompanySigned = !!contract.companySignatureDataUrl;
   const isCustomerSigned = !!(contract.customerSignatureDataUrl || contract.signatureDataUrl || contract.status === 'Signed');
   const isFullySigned = (isCompanySigned && isCustomerSigned) || (contract.status === 'Signed' && isCompanySigned);
+
+  const handleSyncPricing = async () => {
+    setSyncingPricing(true);
+    try {
+      await api.post(`/api/contracts/${contract.contractId}/sync-pricing`, {});
+      showToast('Contract value synchronized with latest product catalog pricing!');
+      onUpdate();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync contract pricing', 'error');
+    } finally {
+      setSyncingPricing(false);
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -357,6 +374,19 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
                 <Receipt size={15} style={{ marginRight: 5 }} /> Generate Invoice
               </Button>
             )}
+            {!isFullySigned && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSyncPricing}
+                disabled={syncingPricing}
+                title="Synchronize contract value with current product catalog prices"
+                style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.08)' }}
+              >
+                <RefreshCw size={14} style={{ marginRight: 5 }} className={syncingPricing ? 'animate-spin' : ''} />
+                {syncingPricing ? 'Syncing…' : 'Sync Catalog Prices'}
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={handleCopySigningLink} title="Copy public signing link to send to client">
               <LinkIcon size={14} style={{ marginRight: 5 }} /> Copy E-Sign Link
             </Button>
@@ -379,14 +409,19 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
         <div style={{ padding: 'clamp(1rem, 3vw, 2rem)', overflowY: 'auto', flex: 1, background: '#ffffff', color: '#0f172a' }} id="printable-contract-area">
           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #e2e8f0', paddingBottom: '1.25rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#4338ca', margin: 0 }}>Enterprise Commercial Agreement</h2>
+              {profile?.logoUrl && (
+                <img src={profile.logoUrl} alt="Logo" style={{ maxHeight: '44px', maxWidth: '160px', objectFit: 'contain', marginBottom: '6px' }} />
+              )}
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#4338ca', margin: 0 }}>
+                {profile?.companyName ? `${profile.companyName} Commercial Agreement` : 'Commercial Agreement'}
+              </h2>
               <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>Contract Ref: <strong>{contract.contractNumber}</strong></p>
             </div>
             <div style={{ textAlign: 'left', fontSize: '0.85rem' }}>
               <div>Start Date: <strong>{new Date(contract.startDate).toLocaleDateString()}</strong></div>
               <div>End Date: <strong>{new Date(contract.endDate).toLocaleDateString()}</strong></div>
               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#10b981', marginTop: 4 }}>
-                Contract Value: ${contract.contractValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                Contract Value: {formatCurrency(contract.contractValue, profile?.currency || currency, 2)}
               </div>
             </div>
           </div>
@@ -394,8 +429,10 @@ export const ContractModal: React.FC<ContractModalProps> = ({ contract, onClose,
           <div className="crm-contract-doc-parties">
             <div>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#6366f1', marginBottom: 4 }}>Party A: Service Provider</div>
-              <div style={{ fontWeight: 700, fontSize: '1rem' }}>CRM System Enterprise Inc.</div>
-              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Account Executive: {contract.createdByName}</div>
+              <div style={{ fontWeight: 700, fontSize: '1rem' }}>{profile?.companyName || profile?.systemName || 'Enterprise CRM Solutions'}</div>
+              {profile?.address && <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{profile.address}</div>}
+              {profile?.email && <div style={{ fontSize: '0.8rem', color: '#64748b' }}>✉️ {profile.email}</div>}
+              <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>Account Executive: {contract.createdByName}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#6366f1', marginBottom: 4 }}>Party B: Client Organization</div>

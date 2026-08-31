@@ -15,6 +15,7 @@ import { api } from '../lib/api';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { showToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
+import { useFormatCurrency } from '../context/SystemProfileContext';
 import {
   ArrowLeft, Globe, MapPin, Briefcase, Mail, Phone, Tag, Link as LinkIcon,
   History, Plus, Trash2, Edit2, ExternalLink, Calendar,
@@ -81,6 +82,7 @@ export const CompanyDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [company, setCompany] = useState<CompanyDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -252,9 +254,6 @@ export const CompanyDetailScreen: React.FC = () => {
       activeDealsCount: opportunities.filter(o => !o.isWon && !o.isLost).length
     };
   }, [opportunities, company, activities, tasks]);
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
 
   // Filtered Contacts
   const filteredContacts = useMemo(() => {
@@ -1112,7 +1111,8 @@ export const CompanyDetailScreen: React.FC = () => {
                             <th style={{ padding: '0.75rem 0.5rem' }}>Stage</th>
                             <th style={{ padding: '0.75rem 0.5rem' }}>Value</th>
                             <th style={{ padding: '0.75rem 0.5rem' }}>Close Date</th>
-                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Owner</th>
+                            <th style={{ padding: '0.75rem 0.5rem' }}>Owner</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1120,11 +1120,14 @@ export const CompanyDetailScreen: React.FC = () => {
                             <tr
                               key={opp.opportunityId}
                               style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}
-                              onClick={() => navigate(`/pipeline`)}
+                              onClick={() => navigate(`/opportunities/${opp.opportunityId}`)}
                               className="table-row-hover"
                             >
                               <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
-                                {opp.title}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                  <Briefcase size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                                  {opp.title}
+                                </span>
                               </td>
                               <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>
                                 {opp.customerName || '—'}
@@ -1147,8 +1150,32 @@ export const CompanyDetailScreen: React.FC = () => {
                               <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                                 {formatDisplayDate(opp.expectedCloseDate)}
                               </td>
-                              <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                                 {opp.ownerName || '—'}
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/opportunities/${opp.opportunityId}`);
+                                  }}
+                                  style={{
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '6px',
+                                    padding: '0.25rem 0.5rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    color: 'var(--accent-primary)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                  }}
+                                >
+                                  View <ExternalLink size={12} />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -1239,6 +1266,15 @@ export const CompanyDetailScreen: React.FC = () => {
             showToast('Deal created successfully.', 'success');
           }}
           preselectedCustomerId={primaryContact?.customerId}
+          preselectedCustomer={primaryContact ? {
+            customerId: primaryContact.customerId,
+            name: `${primaryContact.firstName || ''} ${primaryContact.lastName || ''}`.trim(),
+            firstName: primaryContact.firstName,
+            lastName: primaryContact.lastName,
+            email: primaryContact.email,
+            phone: primaryContact.phone,
+            companyName: company.name
+          } : undefined}
         />
 
         {/* ── DELETE COMPANY CONFIRM DIALOG ───────────────────────────────── */}

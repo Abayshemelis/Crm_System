@@ -46,8 +46,9 @@ public class ReportsController : ControllerBase
     private (DateTime start, DateTime end) NormalizeDateRange(DateTime? startDate, DateTime? endDate)
     {
         var now = DateTime.UtcNow;
-        var start = startDate ?? now.AddDays(-30);
-        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : now;
+        var start = (startDate ?? now.AddDays(-30)).Date;
+        var end = endDate.HasValue ? endDate.Value.Date.AddDays(1).AddTicks(-1) : DateTime.SpecifyKind(now.Date.AddDays(1).AddTicks(-1), DateTimeKind.Unspecified);
+        if (end < start) end = start.AddDays(1).AddTicks(-1);
         return (start, end);
     }
 
@@ -79,11 +80,6 @@ public class ReportsController : ControllerBase
         var inactiveCustomers = 0;
 
         var allCustList = await custQuery.Select(c => new { c.CreatedAt, SourceName = c.Source != null ? c.Source.Name : "Direct" }).ToListAsync();
-        var customerGrowthTrend = allCustList
-            .GroupBy(d => d.CreatedAt.ToString("yyyy-MM"))
-            .OrderBy(g => g.Key)
-            .Select(g => new { month = g.Key, count = g.Count() })
-            .ToList();
 
         var customersBySource = allCustList
             .GroupBy(c => string.IsNullOrWhiteSpace(c.SourceName) ? "Direct" : c.SourceName)
@@ -103,14 +99,46 @@ public class ReportsController : ControllerBase
             .Include(l => l.Source)
             .Where(l => !l.IsDeleted && (isAdmin || l.AssignedRepId == userId || (isManager && l.AssignedRep != null && l.AssignedRep.ManagerId == userId)));
 
+        var useDailyBuckets = (end - start).TotalDays <= 45;
+        string BucketKey(DateTime dt) => useDailyBuckets ? dt.ToString("yyyy-MM-dd") : dt.ToString("yyyy-MM");
+        var periodKeys = new List<string>();
+        if (useDailyBuckets)
+        {
+            for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
+                periodKeys.Add(d.ToString("yyyy-MM-dd"));
+        }
+        else
+        {
+            var cursor = new DateTime(start.Year, start.Month, 1);
+            var last = new DateTime(end.Year, end.Month, 1);
+            while (cursor <= last)
+            {
+                periodKeys.Add(cursor.ToString("yyyy-MM"));
+                cursor = cursor.AddMonths(1);
+            }
+        }
+
+        var customersInPeriod = allCustList.Where(c => c.CreatedAt >= start && c.CreatedAt <= end).ToList();
+        var customerGrowthLookup = customersInPeriod
+            .GroupBy(d => BucketKey(d.CreatedAt))
+            .ToDictionary(g => g.Key, g => g.Count());
+        var customerGrowthTrend = periodKeys
+            .Select(k => new { month = k, count = customerGrowthLookup.TryGetValue(k, out var c) ? c : 0 })
+            .ToList();
+
         var totalLeads = await leadQuery.CountAsync();
         var newLeads = await leadQuery.Where(l => l.CreatedAt >= start && l.CreatedAt <= end).CountAsync();
         var qualifiedLeads = await leadQuery.Where(l => l.LeadStatus != null && (l.LeadStatus.Name == "Qualified" || l.LeadStatus.Name == "Converted")).CountAsync();
         var convertedLeads = await leadQuery
-            .Where(l => (l.ConvertedCustomerId != null || (l.LeadStatus != null && l.LeadStatus.Name == "Converted"))
-                     && ((l.ConvertedAt.HasValue && l.ConvertedAt.Value >= start && l.ConvertedAt.Value <= end) || (l.CreatedAt >= start && l.CreatedAt <= end)))
+            .Where(l => l.ConvertedCustomerId != null || (l.LeadStatus != null && l.LeadStatus.Name == "Converted"))
             .CountAsync();
-        var conversionRate = newLeads > 0 ? Math.Round((double)convertedLeads / newLeads * 100, 1) : (totalLeads > 0 ? Math.Round((double)convertedLeads / totalLeads * 100, 1) : 0.0);
+        var convertedInPeriod = await leadQuery
+            .Where(l => (l.ConvertedCustomerId != null || (l.LeadStatus != null && l.LeadStatus.Name == "Converted"))
+                     && ((l.ConvertedAt.HasValue && l.ConvertedAt.Value >= start && l.ConvertedAt.Value <= end)
+                         || (!l.ConvertedAt.HasValue && l.CreatedAt >= start && l.CreatedAt <= end)))
+            .CountAsync();
+        var conversionRate = totalLeads > 0 ? Math.Round((double)convertedLeads / totalLeads * 100, 1) : 0.0;
+        var periodConversionRate = newLeads > 0 ? Math.Round((double)convertedInPeriod / newLeads * 100, 1) : 0.0;
 
         var allLeadsList = await leadQuery
             .Select(l => new {
@@ -124,15 +152,18 @@ public class ReportsController : ControllerBase
             .Select(g => new { status = g.Key, count = g.Count() })
             .ToList();
 
-        var leadTrend = allLeadsList
-            .GroupBy(l => l.CreatedAt.ToString("yyyy-MM"))
-            .OrderBy(g => g.Key)
-            .Select(g => new { month = g.Key, count = g.Count() })
+        var leadsInPeriod = allLeadsList.Where(l => l.CreatedAt >= start && l.CreatedAt <= end).ToList();
+        var leadTrendLookup = leadsInPeriod
+            .GroupBy(l => BucketKey(l.CreatedAt))
+            .ToDictionary(g => g.Key, g => g.Count());
+        var leadTrend = periodKeys
+            .Select(k => new { month = k, count = leadTrendLookup.TryGetValue(k, out var c) ? c : 0 })
             .ToList();
 
         // 3. Opportunities & Sales Metrics
         var oppQuery = _db.Opportunities
             .Include(o => o.OpportunityStage)
+            .Include(o => o.Owner)
             .Where(o => (o.Customer == null || !o.Customer.IsDeleted) && (isAdmin || o.OwnerId == userId || (isManager && o.Owner != null && o.Owner.ManagerId == userId)));
 
         var totalOpportunities = await oppQuery.CountAsync();
@@ -145,12 +176,16 @@ public class ReportsController : ControllerBase
             o.EstimatedValue,
             o.ActualCloseDate,
             o.UpdatedAt,
-            o.CreatedAt
+            o.CreatedAt,
+            OwnerName = o.Owner != null ? o.Owner.Name : "Unassigned"
         }).ToListAsync();
 
         var openOpps = allOppsList.Where(o => !o.IsWon && !o.IsLost).ToList();
         var openDeals = openOpps.Count;
         var pipelineValue = (double)openOpps.Sum(o => o.EstimatedValue);
+
+        static DateTime CloseAt(DateTime? actualClose, DateTime? updatedAt, DateTime createdAt) =>
+            actualClose ?? updatedAt ?? createdAt;
 
         var wonOpps = allOppsList.Where(o => o.IsWon).ToList();
         var lostOpps = allOppsList.Where(o => o.IsLost).ToList();
@@ -158,26 +193,78 @@ public class ReportsController : ControllerBase
         var lostDealsCount = lostOpps.Count;
         var wonRevenueTotal = (double)wonOpps.Sum(o => o.EstimatedValue);
         var lostValueTotal = (double)lostOpps.Sum(o => o.EstimatedValue);
-        var averageDealSize = totalOpportunities > 0 ? Math.Round((double)allOppsList.Sum(o => o.EstimatedValue) / totalOpportunities, 2) : 0.0;
-        var winRate = (wonDealsCount + lostDealsCount) > 0 ? Math.Round((double)wonDealsCount / (wonDealsCount + lostDealsCount) * 100, 1) : (totalOpportunities > 0 ? Math.Round((double)wonDealsCount / totalOpportunities * 100, 1) : 0.0);
+        var wonInPeriod = wonOpps.Where(o => CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) >= start && CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) <= end).ToList();
+        var lostInPeriod = lostOpps.Where(o => CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) >= start && CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) <= end).ToList();
+        var wonDealsInPeriod = wonInPeriod.Count;
+        var lostDealsInPeriod = lostInPeriod.Count;
+        var wonRevenueInPeriod = (double)wonInPeriod.Sum(o => o.EstimatedValue);
+        var lostValueInPeriod = (double)lostInPeriod.Sum(o => o.EstimatedValue);
+        var averageDealSize = wonDealsCount > 0 ? Math.Round(wonRevenueTotal / wonDealsCount, 2) : 0.0;
+        var closedCount = wonDealsCount + lostDealsCount;
+        var winRate = closedCount > 0 ? Math.Round((double)wonDealsCount / closedCount * 100, 1) : 0.0;
+        var periodClosed = wonDealsInPeriod + lostDealsInPeriod;
+        var periodWinRate = periodClosed > 0 ? Math.Round((double)wonDealsInPeriod / periodClosed * 100, 1) : 0.0;
 
-        var allStages = await _db.OpportunityStages.OrderBy(s => s.OpportunityStageId).ToListAsync();
-        var pipelineDistribution = allStages.Select(s =>
-        {
-            var stageOpps = allOppsList.Where(o => o.OpportunityStageId == s.OpportunityStageId).ToList();
-            return new
+        var allStages = await _db.OpportunityStages.OrderBy(s => s.SortOrder).ToListAsync();
+        var pipelineDistribution = allStages
+            .Where(s => !s.IsWon && !s.IsLost)
+            .Select(s =>
             {
-                stage = s.Name,
-                count = stageOpps.Count,
-                value = (double)stageOpps.Sum(o => o.EstimatedValue)
-            };
+                var stageOpps = allOppsList.Where(o => o.OpportunityStageId == s.OpportunityStageId).ToList();
+                return new
+                {
+                    stage = s.Name,
+                    count = stageOpps.Count,
+                    value = (double)stageOpps.Sum(o => o.EstimatedValue)
+                };
+            }).ToList();
+
+        var wonLostBreakdown = new[]
+        {
+            new { status = "Won", count = wonDealsCount, value = wonRevenueTotal },
+            new { status = "Lost", count = lostDealsCount, value = lostValueTotal },
+            new { status = "Open", count = openDeals, value = pipelineValue }
+        };
+
+        var wonLostTrendLookup = wonOpps.Concat(lostOpps)
+            .Where(o => CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) >= start && CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt) <= end)
+            .GroupBy(o => BucketKey(CloseAt(o.ActualCloseDate, o.UpdatedAt, o.CreatedAt)))
+            .ToDictionary(
+                g => g.Key,
+                g => new {
+                    won = (double)g.Where(x => x.IsWon).Sum(x => x.EstimatedValue),
+                    lost = (double)g.Where(x => x.IsLost).Sum(x => x.EstimatedValue)
+                });
+        var wonLostTrend = periodKeys.Select(k =>
+        {
+            wonLostTrendLookup.TryGetValue(k, out var v);
+            return new { month = k, won = v?.won ?? 0.0, lost = v?.lost ?? 0.0 };
         }).ToList();
+
+        var salesByOwner = allOppsList
+            .GroupBy(o => string.IsNullOrWhiteSpace(o.OwnerName) ? "Unassigned" : o.OwnerName)
+            .Select(g => new
+            {
+                name = g.Key,
+                openDeals = g.Count(x => !x.IsWon && !x.IsLost),
+                wonDeals = g.Count(x => x.IsWon),
+                pipelineValue = (double)g.Where(x => !x.IsWon && !x.IsLost).Sum(x => x.EstimatedValue),
+                wonValue = (double)g.Where(x => x.IsWon).Sum(x => x.EstimatedValue)
+            })
+            .OrderByDescending(x => x.wonValue)
+            .ThenByDescending(x => x.pipelineValue)
+            .Take(8)
+            .ToList();
 
         // 4. Contracts Metrics
         var contractQuery = _db.Contracts.Where(c => !c.IsDeleted && (isAdmin || c.CreatedById == userId || (c.Customer != null && c.Customer.AssignedRepId == userId) || (isManager && c.CreatedBy != null && c.CreatedBy.ManagerId == userId)));
         var totalContracts = await contractQuery.CountAsync();
         var allContracts = await contractQuery.ToListAsync();
         var activeContracts = allContracts.Count(c => c.Status == "Active" || c.Status == "Signed");
+        var pendingContracts = allContracts.Count(c =>
+            c.Status == "Draft" || c.Status == "SentForSignature" || c.Status == "PendingCustomer" || c.Status == "PendingSeller");
+        var expiredContracts = allContracts.Count(c => c.Status == "Expired" || c.Status == "Terminated" || c.EndDate < now);
+        var newContractsInPeriod = allContracts.Count(c => c.CreatedAt >= start && c.CreatedAt <= end);
         var totalContractValue = (double)allContracts.Sum(c => c.ContractValue);
 
         var contractsByStatus = allContracts
@@ -195,6 +282,12 @@ public class ReportsController : ControllerBase
         var allPayments = await paymentQuery.ToListAsync();
 
         var totalPaymentsCollected = (double)allPayments.Where(p => p.Status == "Completed" || p.Status == "Paid").Sum(p => p.Amount);
+        var periodInvoices = allInvoices.Where(i => i.IssueDate >= start && i.IssueDate <= end).ToList();
+        var periodPayments = allPayments.Where(p =>
+            (p.PaymentDate != default ? p.PaymentDate : p.CreatedAt) >= start &&
+            (p.PaymentDate != default ? p.PaymentDate : p.CreatedAt) <= end).ToList();
+        var periodInvoicedValue = (double)periodInvoices.Sum(i => i.TotalAmount);
+        var periodCollectedValue = (double)periodPayments.Where(p => p.Status == "Completed" || p.Status == "Paid").Sum(p => p.Amount);
         
         // Outstanding Receivables: Unpaid balance on open active invoices
         double outstandingReceivables = (double)allInvoices
@@ -217,34 +310,30 @@ public class ReportsController : ControllerBase
 
         var collectionRate = totalInvoicedValue > 0 ? Math.Round(totalPaymentsCollected / totalInvoicedValue * 100, 1) : 0.0;
 
-        // Invoices vs. Payments monthly trendline
-        var monthlyPayments = allPayments
+        var monthlyPayments = periodPayments
             .Where(p => p.Status == "Completed" || p.Status == "Paid")
-            .GroupBy(p => (p.PaymentDate != default ? p.PaymentDate : p.CreatedAt).ToString("yyyy-MM"))
-            .Select(g => new { month = g.Key, collected = (double)g.Sum(p => p.Amount) })
-            .ToList();
+            .GroupBy(p => BucketKey(p.PaymentDate != default ? p.PaymentDate : p.CreatedAt))
+            .ToDictionary(g => g.Key, g => (double)g.Sum(p => p.Amount));
 
-        var monthlyInvoices = allInvoices
-            .GroupBy(i => i.CreatedAt.ToString("yyyy-MM"))
-            .Select(g => new { month = g.Key, invoiced = (double)g.Sum(i => i.TotalAmount) })
-            .ToList();
+        var monthlyInvoices = periodInvoices
+            .GroupBy(i => BucketKey(i.IssueDate))
+            .ToDictionary(g => g.Key, g => (double)g.Sum(i => i.TotalAmount));
 
-        var allMonths = monthlyPayments.Select(m => m.month)
-            .Union(monthlyInvoices.Select(m => m.month))
-            .OrderBy(m => m)
-            .TakeLast(12)
-            .ToList();
-
-        var revenueTrend = allMonths.Select(m => new
+        var revenueTrend = periodKeys.Select(m => new
         {
             month = m,
-            invoiced = monthlyInvoices.FirstOrDefault(x => x.month == m)?.invoiced ?? 0.0,
-            collected = monthlyPayments.FirstOrDefault(x => x.month == m)?.collected ?? 0.0
+            invoiced = monthlyInvoices.TryGetValue(m, out var inv) ? inv : 0.0,
+            collected = monthlyPayments.TryGetValue(m, out var col) ? col : 0.0
         }).ToList();
 
         var invoicesByStatus = allInvoices
             .GroupBy(i => string.IsNullOrWhiteSpace(i.Status) ? "Draft" : i.Status)
             .Select(g => new { status = g.Key, count = g.Count(), value = (double)g.Sum(i => i.TotalAmount) })
+            .ToList();
+
+        var paymentsByStatus = allPayments
+            .GroupBy(p => string.IsNullOrWhiteSpace(p.Status) ? "Pending" : p.Status)
+            .Select(g => new { status = g.Key, count = g.Count(), value = (double)g.Sum(p => p.Amount) })
             .ToList();
 
         // 6. Operations: Tasks & Activities Metrics
@@ -253,11 +342,29 @@ public class ReportsController : ControllerBase
             .Where(a => (isAdmin || a.CreatedById == userId || (isManager && a.CreatedBy != null && a.CreatedBy.ManagerId == userId)));
         var totalActivities = await actQuery.CountAsync();
         var allActivities = await actQuery.ToListAsync();
+        var activitiesInPeriod = allActivities.Count(a => a.ActivityDate >= start && a.ActivityDate <= end);
+        var customerActivityCount = allActivities.Count(a => a.CustomerId.HasValue);
+        activeCustomers = allActivities.Where(a => a.CustomerId.HasValue).Select(a => a.CustomerId!.Value).Distinct().Count();
+        inactiveCustomers = Math.Max(0, totalCustomers - activeCustomers);
+        customersByStatus = new List<object>
+        {
+            new { status = "With activity", count = activeCustomers },
+            new { status = "No logged activity", count = inactiveCustomers },
+            new { status = "New this period", count = newCustomers }
+        };
 
         var activitiesByType = allActivities
             .GroupBy(a => a.ActivityType != null ? a.ActivityType.Name : "Note")
             .Select(g => new { type = g.Key, count = g.Count() })
             .OrderByDescending(x => x.count)
+            .ToList();
+
+        var activityTrendLookup = allActivities
+            .Where(a => a.ActivityDate >= start && a.ActivityDate <= end)
+            .GroupBy(a => BucketKey(a.ActivityDate))
+            .ToDictionary(g => g.Key, g => g.Count());
+        var activityTrend = periodKeys
+            .Select(k => new { month = k, count = activityTrendLookup.TryGetValue(k, out var c) ? c : 0 })
             .ToList();
 
         var taskQuery = _db.CrmTasks
@@ -279,13 +386,43 @@ public class ReportsController : ControllerBase
 
         // 7. System Health & User Metrics
         var activeUsersCount = await _db.Identities.CountAsync(u => u.IsActive);
+        var totalUsersCount = await _db.Identities.CountAsync();
         var totalAuditLogsCount = await _db.AuditLogs.CountAsync();
+        var auditPeriodRows = await _db.AuditLogs
+            .AsNoTracking()
+            .Where(a => a.ChangedAt >= start && a.ChangedAt <= end)
+            .Select(a => new
+            {
+                Action = a.AuditActionType != null ? a.AuditActionType.Name : "Update",
+                Entity = a.EntityType != null ? a.EntityType.Name : ""
+            })
+            .ToListAsync();
+
+        var auditInPeriodCount = auditPeriodRows.Count;
+        var auditByAction = auditPeriodRows
+            .GroupBy(a => string.IsNullOrWhiteSpace(a.Action) ? "Update" : a.Action)
+            .Select(g => new { action = g.Key, count = g.Count() })
+            .OrderByDescending(x => x.count)
+            .ToList();
+
+        var authEventCount = auditPeriodRows.Count(a =>
+            (a.Entity ?? "").Contains("Auth") ||
+            (a.Action ?? "").Contains("Login") ||
+            (a.Action ?? "").Contains("Logout") ||
+            (a.Action ?? "").Contains("Password") ||
+            (a.Action ?? "").Contains("Session"));
+
+        var activeSessionsCount = await _db.RefreshTokens.CountAsync(t => !t.IsRevoked && t.ExpiresAt > now);
+        var sessionsCreatedInPeriod = await _db.RefreshTokens.CountAsync(t => t.CreatedAt >= start && t.CreatedAt <= end);
+        var revokedSessionsInPeriod = await _db.RefreshTokens.CountAsync(t => t.IsRevoked && t.CreatedAt >= start && t.CreatedAt <= end);
+
+        var failedPayments = allPayments.Count(p => p.Status == "Failed" || p.Status == "Cancelled");
         var recentAuditLogs = await _db.AuditLogs
             .Include(a => a.EntityType)
             .Include(a => a.AuditActionType)
             .Include(a => a.ChangedBy)
             .OrderByDescending(a => a.ChangedAt)
-            .Take(6)
+            .Take(8)
             .Select(a => new
             {
                 a.AuditLogId,
@@ -299,9 +436,25 @@ public class ReportsController : ControllerBase
             })
             .ToListAsync();
 
+        var alerts = new List<object>();
+        if (overdueTasks > 0)
+            alerts.Add(new { severity = "warning", label = "Overdue tasks", count = overdueTasks, detail = "Open tasks past their due date" });
+        if (overdueCount > 0)
+            alerts.Add(new { severity = "critical", label = "Overdue invoices", count = overdueCount, detail = "Unpaid invoices past due" });
+        if (pendingContracts > 0)
+            alerts.Add(new { severity = "info", label = "Contracts awaiting action", count = pendingContracts, detail = "Draft or pending signature" });
+        if (failedPayments > 0)
+            alerts.Add(new { severity = "warning", label = "Failed or cancelled payments", count = failedPayments, detail = "Payment records that did not complete" });
+        if (dueTodayTasks > 0)
+            alerts.Add(new { severity = "info", label = "Tasks due today", count = dueTodayTasks, detail = "Require attention today" });
+
         return Ok(new
         {
-            // Executive KPIs
+            periodStart = start,
+            periodEnd = end,
+            bucket = useDailyBuckets ? "day" : "month",
+
+            // Executive KPIs (snapshots unless named *InPeriod)
             totalCompanies,
             newCompanies,
             totalCustomers,
@@ -312,7 +465,9 @@ public class ReportsController : ControllerBase
             newLeads,
             qualifiedLeads,
             convertedLeads,
+            convertedInPeriod,
             conversionRate,
+            periodConversionRate,
             totalOpportunities,
             totalDeals = totalOpportunities,
             openDeals,
@@ -322,31 +477,50 @@ public class ReportsController : ControllerBase
             wonDeals = wonDealsCount,
             lostDealsCount,
             lostDeals = lostDealsCount,
+            wonDealsInPeriod,
+            lostDealsInPeriod,
             wonRevenueTotal,
-            revenueInPeriod = wonRevenueTotal,
+            wonRevenueInPeriod,
+            lostValueInPeriod,
+            revenueInPeriod = wonRevenueInPeriod,
             totalRevenue = wonRevenueTotal,
             lostValueTotal,
             averageDealSize,
             winRate,
+            periodWinRate,
             overallWinRate = winRate,
             totalContracts,
             activeContracts,
+            pendingContracts,
+            expiredContracts,
+            newContractsInPeriod,
             totalContractValue,
             totalInvoices,
             totalInvoicedValue,
+            periodInvoicedValue,
             totalPaymentsCollected,
+            periodCollectedValue,
             outstandingReceivables,
             overdueCount,
             overdueValue,
             collectionRate,
             totalActivities,
+            activitiesInPeriod,
+            customerActivityCount,
             totalTasks,
             completedTasks,
             openTasks,
             overdueTasks,
             dueTodayTasks,
             activeUsersCount,
+            totalUsersCount,
             totalAuditLogsCount,
+            auditInPeriodCount,
+            authEventCount,
+            activeSessionsCount,
+            sessionsCreatedInPeriod,
+            revokedSessionsInPeriod,
+            failedPayments,
 
             // Charts & Breakdowns
             customerGrowthTrend,
@@ -355,11 +529,18 @@ public class ReportsController : ControllerBase
             leadStatusBreakdown,
             leadTrend,
             pipelineDistribution,
+            wonLostBreakdown,
+            wonLostTrend,
+            salesByOwner,
             revenueTrend,
             contractsByStatus,
             invoicesByStatus,
+            paymentsByStatus,
             activitiesByType,
+            activityTrend,
             tasksByStatus,
+            auditByAction,
+            alerts,
             recentAuditLogs
         });
     }

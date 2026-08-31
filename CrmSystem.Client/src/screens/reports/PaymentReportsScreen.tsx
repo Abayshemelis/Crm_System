@@ -13,14 +13,15 @@ import {
 } from 'lucide-react';
 import { ReportsNav } from '../../components/reports/ReportsNav';
 import { ReportHeader, calculateDateRange } from '../../components/reports/ReportHeader';
-import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpiCard';
+import { ReportKpiGrid, ReportKpiItem, ReportSummaryBanner } from '../../components/reports/ReportKpiCard';
 import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
 import { exportCSV, exportExecutivePDF } from '../../components/reports/reportExportUtils';
+import { formatCurrencyGlobal } from '../../context/SystemProfileContext';
 import './cleanReports.css';
 
 const PALETTE = ['#14b8a6', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444'];
-const fmt$ = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
+const fmt$ = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v || 0);
 
 export const PaymentReportsScreen: React.FC = () => {
@@ -274,8 +275,16 @@ export const PaymentReportsScreen: React.FC = () => {
           loading={loading}
         />
 
-        {/* ── 3. KPI Grid ────────────────────────────────────────────────── */}
-        <ReportKpiGrid items={kpis} loading={loading} />
+        {/* ── 3. Summary Banner ────────────────────────────────────────────────── */}
+        <ReportSummaryBanner 
+          items={[
+            kpis[0], // Total Collected
+            kpis[1], // Pending Inflow
+            kpis[3], // Average Payment Size
+            kpis[4], // Outstanding Receivables
+          ]} 
+          loading={loading} 
+        />
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* VIEW 1: OVERVIEW */}

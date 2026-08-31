@@ -17,10 +17,11 @@ import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpi
 import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
 import { exportCSV, exportExecutivePDF } from '../../components/reports/reportExportUtils';
+import { formatCurrencyGlobal } from '../../context/SystemProfileContext';
 import './cleanReports.css';
 
 const PALETTE = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#ef4444'];
-const fmt$ = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
+const fmt$ = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v || 0);
 
 export const PipelineReportsScreen: React.FC = () => {

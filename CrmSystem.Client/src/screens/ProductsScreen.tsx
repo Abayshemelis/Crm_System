@@ -10,11 +10,13 @@ import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { validateName, validatePositiveNumber, validateRequiredSelect, validateMaxLength } from '../lib/validators';
 import { useAuth } from '../context/AuthContext';
+import { useFormatCurrency } from '../context/SystemProfileContext';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
 export const ProductsScreen: React.FC = () => {
   const { isManagerOrAbove } = useAuth();
+  const { formatCurrency } = useFormatCurrency();
   const [products, setProducts] = useState<{ id: number; name: string; sku: string; description: string | null; productCategoryId: number; productCategoryName: string; productStatusId: number; productStatusName: string; price: number; cost: number | null; stockQuantity: number }[]>([]);
   const [productCategories, setProductCategories] = useState<{ id: number; name: string }[]>([]);
   const [productStatuses, setProductStatuses] = useState<{ id: number; name: string; isSelectable: boolean }[]>([]);
@@ -494,8 +496,8 @@ export const ProductsScreen: React.FC = () => {
                     <span style={{ flex: 1, fontSize: '0.875rem' }}>SKU: {product.sku}</span>
                     <span style={{ flex: 1, fontSize: '0.875rem' }}>{product.productCategoryName}</span>
                     <span style={{ flex: 1, fontSize: '0.875rem' }}>{product.productStatusName}</span>
-                    <span style={{ width: '80px', fontSize: '0.875rem', textAlign: 'right' }}>${product.price.toLocaleString()}</span>
-                    <span style={{ width: '80px', fontSize: '0.875rem', textAlign: 'right', color: 'var(--text-muted)' }}>{product.cost ? `$${product.cost.toLocaleString()}` : '-'}</span>
+                    <span style={{ width: '80px', fontSize: '0.875rem', textAlign: 'right' }}>{formatCurrency(product.price)}</span>
+                    <span style={{ width: '80px', fontSize: '0.875rem', textAlign: 'right', color: 'var(--text-muted)' }}>{product.cost ? formatCurrency(product.cost) : '-'}</span>
                     <span style={{ width: '80px', fontSize: '0.875rem', textAlign: 'right' }}>{product.stockQuantity}</span>
                     {isManagerOrAbove && (
                       <>

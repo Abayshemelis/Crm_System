@@ -16,6 +16,7 @@ import { api } from '../lib/api';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { showToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
+import { useFormatCurrency } from '../context/SystemProfileContext';
 import {
   ArrowLeft, Mail, Phone, Building2, Plus, Trash2, Edit2, ExternalLink, Calendar,
   DollarSign, CheckSquare, Clock, User, CheckCircle2, Layers, Award,
@@ -100,6 +101,7 @@ export const CustomerDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [allTags, setAllTags] = useState<TagItem[]>([]);
@@ -272,9 +274,6 @@ export const CustomerDetailScreen: React.FC = () => {
       openTasksCount
     };
   }, [opportunities, payments, tasks]);
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
 
   // Loading Skeleton
   if (isLoading || !customer) {
@@ -1106,7 +1105,8 @@ export const CustomerDetailScreen: React.FC = () => {
                             <th style={{ padding: '0.75rem 0.5rem' }}>Stage</th>
                             <th style={{ padding: '0.75rem 0.5rem' }}>Value</th>
                             <th style={{ padding: '0.75rem 0.5rem' }}>Close Date</th>
-                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Owner</th>
+                            <th style={{ padding: '0.75rem 0.5rem' }}>Owner</th>
+                            <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1114,11 +1114,14 @@ export const CustomerDetailScreen: React.FC = () => {
                             <tr
                               key={opp.opportunityId}
                               style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}
-                              onClick={() => navigate(`/pipeline`)}
+                              onClick={() => navigate(`/opportunities/${opp.opportunityId}`)}
                               className="table-row-hover"
                             >
                               <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
-                                {opp.title}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                  <Briefcase size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                                  {opp.title}
+                                </span>
                               </td>
                               <td style={{ padding: '0.75rem 0.5rem' }}>
                                 <span style={{
@@ -1138,8 +1141,32 @@ export const CustomerDetailScreen: React.FC = () => {
                               <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                                 {formatDisplayDate(opp.expectedCloseDate)}
                               </td>
-                              <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                                 {opp.ownerName || '—'}
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/opportunities/${opp.opportunityId}`);
+                                  }}
+                                  style={{
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '6px',
+                                    padding: '0.25rem 0.5rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    color: 'var(--accent-primary)',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                  }}
+                                >
+                                  View <ExternalLink size={12} />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -1411,6 +1438,17 @@ export const CustomerDetailScreen: React.FC = () => {
             showToast('Deal created successfully.', 'success');
           }}
           preselectedCustomerId={customer.customerId}
+          preselectedCustomer={{
+            customerId: customer.customerId,
+            name: `${customer.firstName} ${customer.lastName}`.trim(),
+            firstName: customer.firstName,
+            lastName: customer.lastName,
+            email: customer.email,
+            phone: customer.phone,
+            companyName: customer.companyName,
+            assignedRepId: customer.assignedRepId,
+            assignedRepName: customer.assignedRepName
+          }}
         />
 
         {/* ── EMAIL COMPOSER MODAL ────────────────────────────────────────── */}

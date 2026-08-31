@@ -42,7 +42,7 @@ public class DashboardController : ControllerBase
     }
 
     // Helper to check if current user has the restricted SalesRep role
-    private bool IsSalesRep() => User.IsInRole("SalesRep");
+    private bool IsRestrictedUser() => !User.IsInRole("Admin") && !User.IsInRole("Manager");
 
     // ── 1. PUBLIC STATS (ANONYMOUS LANDING PAGE METRICS) ──────────────────────
     // Aggregates high-level metrics for unauthenticated visitors and landing page counters.
@@ -216,7 +216,7 @@ public class DashboardController : ControllerBase
         IQueryable<Product> productsQuery = _db.Products.AsNoTracking();
 
         // Apply Role-Based Data Isolation: SalesReps only see records assigned to their user ID
-        if (IsSalesRep())
+        if (IsRestrictedUser())
         {
             customersQuery = customersQuery.Where(c => c.AssignedRepId == userId);
             leadsQuery = leadsQuery.Where(l => l.AssignedRepId == userId);
@@ -380,6 +380,48 @@ public class DashboardController : ControllerBase
             })
             .ToListAsync();
 
+        // ── Financial & Invoicing Aggregate Metrics ──────────────────────────
+        var allInvoices = await _db.Invoices
+            .AsNoTracking()
+            .Where(i => !i.IsDeleted)
+            .Include(i => i.Payments)
+            .ToListAsync();
+
+        var totalInvoiced = allInvoices.Sum(i => (double)i.TotalAmount);
+
+        var totalCollected = totalCollectedPayments > 0 
+            ? totalCollectedPayments 
+            : allInvoices.Sum(i => {
+                var pSum = (double)(i.Payments?.Where(p => !p.IsDeleted && p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
+                return pSum > 0 ? pSum : (i.Status == "Paid" ? (double)i.TotalAmount : 0.0);
+            });
+
+        var totalReceivable = allInvoices
+            .Where(i => i.Status != "Cancelled")
+            .Sum(i => {
+                var pSum = (double)(i.Payments?.Where(p => !p.IsDeleted && p.Status == "Completed").Sum(p => p.Amount) ?? 0m);
+                var paid = pSum > 0 ? pSum : (i.Status == "Paid" ? (double)i.TotalAmount : 0.0);
+                return Math.Max(0.0, (double)i.TotalAmount - paid);
+            });
+
+        var overdueInvoicesCount = allInvoices
+            .Count(i => i.Status != "Paid" && i.Status != "Cancelled" && i.DueDate.Date < today && ((double)i.TotalAmount - (double)(i.Payments?.Where(p => !p.IsDeleted && p.Status == "Completed").Sum(p => p.Amount) ?? 0m) > 0.01));
+
+        var pendingWireCount = await _db.Payments
+            .AsNoTracking()
+            .Where(p => !p.IsDeleted && (p.Status == "PendingVerification" || p.Status == "Pending"))
+            .CountAsync();
+
+        var activeContractsCount = await _db.Contracts
+            .AsNoTracking()
+            .Where(c => !c.IsDeleted && c.Status == "Active")
+            .CountAsync();
+
+        var totalContractValue = await _db.Contracts
+            .AsNoTracking()
+            .Where(c => !c.IsDeleted && c.Status == "Active")
+            .SumAsync(c => (double?)c.ContractValue) ?? 0.0;
+
         return Ok(new
         {
             totalCustomers,
@@ -399,7 +441,14 @@ public class DashboardController : ControllerBase
             productsInStock,
             totalProducts,
             recentActivities,
-            topOpportunities
+            topOpportunities,
+            totalInvoiced,
+            totalCollected,
+            totalReceivable,
+            overdueInvoicesCount,
+            pendingWireCount,
+            activeContractsCount,
+            totalContractValue
         });
     }
 }

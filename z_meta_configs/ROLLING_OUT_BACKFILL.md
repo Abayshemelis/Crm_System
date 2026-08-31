@@ -31,5 +31,5 @@ Rollback
 - If you need to roll back, restore the DB from the backup taken in step 2.
 
 Notes
-- This repo includes the migration `CrmSystem.Infrastructure/Migrations/20260722121000_BackfillIdentityRoles.cs` which is idempotent (inserts missing mappings only).
+- This repo includes the migration `CrmSystem.Infrastructure/Migrations/BackfillIdentityRoles.cs` which is idempotent (inserts missing mappings only).
 - I did NOT run any migration against your staging/production DB; this guide and scripts let your operator run them safely.

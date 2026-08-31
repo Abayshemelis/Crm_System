@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AuthLayout } from '../components/auth/AuthLayout';
 import { showToast } from '../lib/toast';
+import { buildUrl } from '../lib/api';
 import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 import {
   Mail, Lock, Eye, EyeOff, LogIn, AlertCircle, UserCheck
@@ -16,10 +17,10 @@ export const LoginScreen: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showDemoPills, setShowDemoPills] = useState(false);
 
   const navigate = useNavigate();
   const { login } = useAuth();
+
 
   // Load remembered email on mount
   useEffect(() => {
@@ -29,25 +30,13 @@ export const LoginScreen: React.FC = () => {
     }
   }, []);
 
-  const handleQuickFill = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError('');
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      setError('Please enter both your email address and password.');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setError('Please enter a valid email address.');
+      setError('Please enter your registered email address (or username) and password.');
       return;
     }
 
@@ -59,7 +48,7 @@ export const LoginScreen: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(buildUrl('/api/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,7 +60,7 @@ export const LoginScreen: React.FC = () => {
       const data = await response.json();
 
       if (response.status === 401) {
-        throw new Error(data.message || 'Invalid email or password. Please check your credentials.');
+        throw new Error(data.message || 'Invalid email/username or password. Please check your credentials.');
       }
       if (response.status === 429) {
         throw new Error('Too many login attempts. Please wait a minute and try again.');
@@ -109,16 +98,16 @@ export const LoginScreen: React.FC = () => {
           </div>
         )}
 
-        {/* ── Main Email & Password Form ── */}
+        {/* ── Main Registered Email & Password Form ── */}
         <form onSubmit={handleLogin} className="auth-custom-form" noValidate>
           {/* Email Field */}
           <div className="auth-form-group">
             <label htmlFor="login-email" className="auth-field-label">
-              Email Address
+              Registered Email Address
             </label>
             <div className="auth-input-container">
               <span className="auth-input-icon">
-                <Mail size={16} />
+                <UserCheck size={16} />
               </span>
               <input
                 id="login-email"
@@ -129,7 +118,7 @@ export const LoginScreen: React.FC = () => {
                 onChange={e => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
-                autoComplete="email"
+                autoComplete="username"
               />
             </div>
           </div>
@@ -202,7 +191,7 @@ export const LoginScreen: React.FC = () => {
               </span>
             ) : (
               <span className="auth-btn-content">
-                <span>Sign In to CRM</span>
+                <span>Sign in with Email</span>
                 <LogIn size={16} className="auth-btn-icon" />
               </span>
             )}
@@ -224,48 +213,8 @@ export const LoginScreen: React.FC = () => {
           />
         </div>
 
-        {/* ── Quick Demo Helper / Testing Chips ── */}
-        <div className="auth-demo-section">
-          <button
-            type="button"
-            className="auth-demo-toggle"
-            onClick={() => setShowDemoPills(!showDemoPills)}
-          >
-            <span>{showDemoPills ? 'Hide Demo Logins' : 'Quick Demo Credentials'}</span>
-          </button>
-
-          {showDemoPills && (
-            <div className="auth-demo-chips-grid animate-fade-in">
-              <button
-                type="button"
-                className="auth-demo-chip"
-                onClick={() => handleQuickFill('admin@test.com', 'Admin123!')}
-              >
-                <UserCheck size={12} />
-                <span>Admin</span>
-              </button>
-              <button
-                type="button"
-                className="auth-demo-chip"
-                onClick={() => handleQuickFill('manager@test.com', 'Manager123!')}
-              >
-                <UserCheck size={12} />
-                <span>Manager</span>
-              </button>
-              <button
-                type="button"
-                className="auth-demo-chip"
-                onClick={() => handleQuickFill('rep@test.com', 'Rep123!')}
-              >
-                <UserCheck size={12} />
-                <span>Sales Rep</span>
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Registration / Account Help Link */}
-        <div className="auth-register-note">
+        <div className="auth-register-note" style={{ marginTop: '1rem' }}>
           <span>Need an account?</span>{' '}
           <Link to="/" className="auth-register-link">
             Explore CRM Platform

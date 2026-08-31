@@ -7,8 +7,9 @@ import {
   Palette, Plus, Trash2, Edit2, Check, X,
   Layers, Tag, Globe, List, Bell, Activity, Package,
   Sparkles, Sun, Moon, Eye, Building2,
-  Mail, Phone, MapPin, Hash, Clock, Image, Save, Building, Upload
+  Mail, Phone, MapPin, Hash, Clock, Image, Save, Building, Upload, Shield
 } from 'lucide-react';
+import { SecuritySessionsTab } from '../components/settings/SecuritySessionsTab';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useSystemProfile } from '../context/SystemProfileContext';
@@ -42,7 +43,7 @@ interface Product {
 interface ProductCategory { id: number; name: string; }
 interface ProductStatus { id: number; name: string; isSelectable: boolean; }
 
-type MainTab = 'system-profile' | 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme' | 'custom-fields';
+type MainTab = 'system-profile' | 'pipeline' | 'tags' | 'products' | 'sources' | 'statuses' | 'theme' | 'custom-fields' | 'security';
 type StatusSubTab = 'lead' | 'task' | 'activity' | 'notification';
 
 import { ThemePreset, ATTRACTIVE_THEMES, applyThemePreset } from '../lib/theme';
@@ -796,6 +797,7 @@ export const SettingsScreen: React.FC = () => {
     { id: 'statuses', label: 'Statuses & Types', icon: <List size={15} /> },
     { id: 'theme', label: 'Theme', icon: <Palette size={15} /> },
     { id: 'custom-fields', label: 'Custom Fields', icon: <Layers size={15} /> },
+    { id: 'security', label: 'Security & Sessions', icon: <Shield size={15} /> },
   ];
 
   const STATUS_SUB_TABS: { id: StatusSubTab; label: string; icon: React.ReactNode }[] = [
@@ -1756,6 +1758,9 @@ export const SettingsScreen: React.FC = () => {
 
       {/* ── Custom Fields Admin ─────────────────────────────────────────────── */}
       {activeTab === 'custom-fields' && <CustomFieldsAdminTab />}
+
+      {/* ── Security & Sessions Admin ────────────────────────────────────────── */}
+      {activeTab === 'security' && <SecuritySessionsTab />}
     </Layout>
   );
 };

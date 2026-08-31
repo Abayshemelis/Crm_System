@@ -25,13 +25,7 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
     // Client-side validations
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
-      setError('Please enter both email address and password.');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setError('Please enter a valid email address.');
+      setError('Please enter both email/username and password.');
       return;
     }
 
@@ -50,7 +44,7 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
       const data = await response.json();
 
       if (response.status === 401) {
-        throw new Error(data.message || 'Incorrect email or password.');
+        throw new Error(data.message || 'Incorrect email/username or password.');
       }
 
       if (response.status === 429) {
@@ -84,7 +78,7 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
       {/* ── Visual OR Divider ── */}
       <div className="auth-divider">
         <span className="auth-divider-line"></span>
-        <span className="auth-divider-text">OR EMAIL LOGIN</span>
+        <span className="auth-divider-text">OR SIGN IN WITH REGISTERED EMAIL</span>
         <span className="auth-divider-line"></span>
       </div>
 
@@ -95,19 +89,20 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
         </div>
       )}
 
-      {/* ── Email & Password Form ── */}
+      {/* ── Registered Email & Password Form ── */}
       <form onSubmit={handleEmailLogin} className="login-form">
         <div className="form-group">
-          <label className="form-label" htmlFor="email-input">Email Address</label>
+          <label className="form-label" htmlFor="email-input">Registered Email Address</label>
           <input
             id="email-input"
             type="email"
             className="input-field"
-            placeholder="admin@test.com"
+            placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="username"
           />
         </div>
 
@@ -122,6 +117,7 @@ export const AuthLoginForm: React.FC<AuthLoginFormProps> = ({ onSuccess }) => {
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="current-password"
           />
         </div>
 

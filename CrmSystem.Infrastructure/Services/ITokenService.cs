@@ -10,7 +10,7 @@ namespace CrmSystem.Infrastructure.Services;
 
 public interface ITokenService
 {
-    string GenerateAccessToken(Identity identity);
+    string GenerateAccessToken(Identity identity, int? sessionId = null);
     string GenerateRefreshToken();
     string HashRefreshToken(string rawToken);
     int RefreshTokenExpiryDays { get; }
@@ -27,7 +27,7 @@ public class JwtTokenService : ITokenService
 
     public int RefreshTokenExpiryDays => 7;
 
-    public string GenerateAccessToken(Identity identity)
+    public string GenerateAccessToken(Identity identity, int? sessionId = null)
     {
         var signingKey = _configuration["Jwt:SigningKey"]!;
         var issuer = _configuration["Jwt:Issuer"]!;
@@ -44,6 +44,7 @@ public class JwtTokenService : ITokenService
 
         var claims = new List<Claim>
         {
+            new(ClaimTypes.NameIdentifier, identity.IdentityId.ToString()),
             new(JwtRegisteredClaimNames.Sub, identity.IdentityId.ToString()),
             new(ClaimTypes.Email, identity.Email),
             new(ClaimTypes.Name, string.IsNullOrWhiteSpace(identity.Name) ? identity.Email : identity.Name),
@@ -53,6 +54,11 @@ public class JwtTokenService : ITokenService
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+
+        if (sessionId.HasValue)
+        {
+            claims.Add(new Claim("sessionId", sessionId.Value.ToString()));
+        }
 
         claims.AddRange(roleNames.Distinct().Select(role => new Claim(ClaimTypes.Role, role)));
 

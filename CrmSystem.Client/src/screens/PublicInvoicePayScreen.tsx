@@ -13,6 +13,7 @@ import {
     ArrowDownLeft, HelpCircle, Smartphone
 } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
+import { useSystemProfile, useFormatCurrency } from '../context/SystemProfileContext';
 import './screens.css';
 
 interface SellerInfo {
@@ -142,6 +143,8 @@ export const PublicInvoicePayScreen: React.FC = () => {
     const sessionIdParam = searchParams.get('session_id');
     const navigate = useNavigate();
     const { user, token, userRole } = useAuth();
+    const { profile } = useSystemProfile();
+    const { formatCurrency, currency } = useFormatCurrency();
     const isInternalWorker = Boolean(token || user);
 
     const [invoice, setInvoice] = useState<InvoiceData | null>(null);
@@ -344,7 +347,7 @@ export const PublicInvoicePayScreen: React.FC = () => {
         setTimeout(() => setCopiedAcc(false), 3000);
     };
 
-    const fmtMoney = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+    const fmtMoney = (v: number) => formatCurrency(v, profile?.currency || currency, 2);
 
     if (loading) {
         return (
@@ -409,7 +412,7 @@ export const PublicInvoicePayScreen: React.FC = () => {
 
                 {/* Main Billing Paper */}
                 <div style={{ background: '#ffffff', color: '#0f172a', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', marginBottom: '1.5rem' }}>
-                    <div style={{ padding: '2.5rem' }}>
+                    <div style={{ padding: 'clamp(1rem, 4vw, 2.5rem)' }}>
 
                         {/* Top Invoice Overview */}
                         <div style={{ borderBottom: '2px solid #6366f1', paddingBottom: '1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
@@ -438,7 +441,7 @@ export const PublicInvoicePayScreen: React.FC = () => {
                         </div>
 
                         {/* EXPLICIT PAYER VS RECEIVER SECTION */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.75rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem', marginBottom: '1.75rem' }}>
                             
                             {/* Box 1: Receiver (Seller / Company) */}
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem' }}>
@@ -466,8 +469,8 @@ export const PublicInvoicePayScreen: React.FC = () => {
                         </div>
 
                         {/* FINANCIAL INSTALLMENT PROGRESS BAR & BALANCE SUMMARY */}
-                        <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '12px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase' }}>
                                     Payment Settlement Status
                                 </span>
@@ -482,18 +485,18 @@ export const PublicInvoicePayScreen: React.FC = () => {
                             </div>
 
                             {/* 3 Metric Summary Boxes */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', textAlign: 'center' }}>
-                                <div style={{ background: '#ffffff', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem', textAlign: 'center' }}>
+                                <div style={{ background: '#ffffff', padding: '0.85rem 0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: 0 }}>
                                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Invoice Total</div>
-                                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginTop: '0.2rem' }}>{fmtMoney(invoice.totalAmount)}</div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginTop: '0.2rem', wordBreak: 'break-word' }}>{fmtMoney(invoice.totalAmount)}</div>
                                 </div>
-                                <div style={{ background: '#ffffff', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ background: '#ffffff', padding: '0.85rem 0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: 0 }}>
                                     <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 700, textTransform: 'uppercase' }}>Total Verified Paid</div>
-                                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#16a34a', marginTop: '0.2rem' }}>{fmtMoney(invoice.amountPaid)}</div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#16a34a', marginTop: '0.2rem', wordBreak: 'break-word' }}>{fmtMoney(invoice.amountPaid)}</div>
                                 </div>
-                                <div style={{ background: '#ffffff', padding: '0.85rem', borderRadius: '8px', border: isFullyPaid ? '1px solid #e2e8f0' : '2px solid #6366f1' }}>
+                                <div style={{ background: '#ffffff', padding: '0.85rem 0.5rem', borderRadius: '8px', border: isFullyPaid ? '1px solid #e2e8f0' : '2px solid #6366f1', minWidth: 0 }}>
                                     <div style={{ fontSize: '0.72rem', color: isFullyPaid ? '#64748b' : '#4338ca', fontWeight: 800, textTransform: 'uppercase' }}>Remaining Balance Due</div>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: isFullyPaid ? '#16a34a' : '#4338ca', marginTop: '0.2rem' }}>{fmtMoney(invoice.balanceDue)}</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: isFullyPaid ? '#16a34a' : '#4338ca', marginTop: '0.2rem', wordBreak: 'break-word' }}>{fmtMoney(invoice.balanceDue)}</div>
                                 </div>
                             </div>
                         </div>
@@ -645,12 +648,12 @@ export const PublicInvoicePayScreen: React.FC = () => {
                                 </div>
 
                                 {/* Step 2: Payment Channel Tabs */}
-                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
                                     <button
                                         type="button"
                                         onClick={() => setPaymentTab('bank_transfer')}
                                         style={{
-                                            flex: 1,
+                                            flex: '1 1 260px',
                                             padding: '0.75rem 1rem',
                                             borderRadius: '8px',
                                             border: 'none',
@@ -673,7 +676,7 @@ export const PublicInvoicePayScreen: React.FC = () => {
                                         type="button"
                                         onClick={() => setPaymentTab('stripe_card')}
                                         style={{
-                                            flex: 1,
+                                            flex: '1 1 220px',
                                             padding: '0.75rem 1rem',
                                             borderRadius: '8px',
                                             border: 'none',

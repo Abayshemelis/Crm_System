@@ -15,6 +15,7 @@ import {
   Search, LayoutGrid, List, Crown, Award, FileText, Printer, UploadCloud,
   X, Sparkles, SlidersHorizontal, Check, Receipt, CreditCard
 } from 'lucide-react';
+import { formatCurrencyGlobal } from '../context/SystemProfileContext';
 import './reports.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -106,10 +107,10 @@ type Section = 'overview' | 'invoices' | 'contracts' | 'pipeline' | 'winrate' | 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#3b82f6','#10b981','#f59e0b','#ef4444','#06b6d4'];
-const fmt$   = (v: number) => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(v);
+const fmt$   = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v);
 const fmtPct = (v: number) => `${v.toFixed(1)}%`;
-const fmtK   = (v: number) => v >= 1000 ? `$${(v/1000).toFixed(1)}k` : fmt$(v);
+const fmtK   = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 
 const getInitials = (name: string) => {
   if (!name) return '??';

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -10,6 +11,7 @@ import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import { confirmAction } from '../lib/confirm';
 import { useAuth } from '../context/AuthContext';
+import { useFormatCurrency, useSystemProfile } from '../context/SystemProfileContext';
 import {
   CreditCard, Search, DollarSign, CheckCircle2, Clock, 
   AlertCircle, RefreshCw, Plus, Landmark, Receipt, ExternalLink, 
@@ -65,6 +67,8 @@ interface PaymentMetrics {
 
 export const PaymentsScreen: React.FC = () => {
   const { isManagerOrAboveSelected } = useAuth();
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [metrics, setMetrics] = useState<PaymentMetrics>({
@@ -81,11 +85,15 @@ export const PaymentsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [dataScope, setDataScope] = useState<'personal' | 'team'>(isManagerOrAboveSelected ? 'team' : 'personal');
 
   // Manual Payment Modal State
   const [showManualModal, setShowManualModal] = useState(false);
   const [invoicesList, setInvoicesList] = useState<{ id: number; number: string; customerName: string; amount: number; balanceDue: number; status: string }[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState<boolean>(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number>(0);
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [manualAmount, setManualAmount] = useState<number>(0);
   const [manualPaymentDate, setManualPaymentDate] = useState<string>(() => getLocalDateString(new Date()));
   const [manualMethod, setManualMethod] = useState<string>('Bank Transfer');
@@ -136,7 +144,7 @@ export const PaymentsScreen: React.FC = () => {
         <div class="receipt-box">
           <div class="header">
             <div>
-              <div class="logo-text">Enterprise CRM Solutions</div>
+              ${profile?.logoUrl ? `<img src="${profile.logoUrl}" style="max-height: 48px; max-width: 180px; object-fit: contain; margin-bottom: 6px;" alt="Logo" />` : `<div class="logo-text">⚡ ${profile?.companyName || profile?.systemName || 'Enterprise CRM Solutions'}</div>`}
               <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Official Payment Ledger Receipt</div>
             </div>
             <div>
@@ -149,10 +157,11 @@ export const PaymentsScreen: React.FC = () => {
           <div class="grid">
             <div class="info-block">
               <h4>Received By (Beneficiary / Company):</h4>
-              <p><strong>Enterprise CRM Solutions Inc.</strong></p>
-              <p>100 Enterprise Way, Suite 400</p>
-              <p>San Francisco, CA 94105, USA</p>
-              <p>Tax ID: US-94829471</p>
+              <p><strong>${profile?.companyName || profile?.systemName || 'Enterprise CRM Solutions Inc.'}</strong></p>
+              ${profile?.address ? `<p>${profile.address}</p>` : ''}
+              ${profile?.country ? `<p>${profile.country}</p>` : ''}
+              ${profile?.email ? `<p>✉️ ${profile.email}</p>` : ''}
+              ${profile?.phone ? `<p>📞 ${profile.phone}</p>` : ''}
             </div>
             <div class="info-block" style="text-align: right;">
               <h4>Received From (Payer / Customer):</h4>
@@ -167,7 +176,7 @@ export const PaymentsScreen: React.FC = () => {
               <div class="amount-title">Total Verified Amount Received:</div>
               <div style="font-size: 12px; color: #166534; margin-top: 2px;">Method: ${p.paymentMethod}</div>
             </div>
-            <div class="amount-val">$${Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div class="amount-val">${formatCurrency(Number(p.amount), profile?.currency || currency, 2)}</div>
           </div>
 
           <table>
@@ -403,7 +412,7 @@ export const PaymentsScreen: React.FC = () => {
     }
   };
 
-  const fmtMoney = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0);
+  const fmtMoney = (v: number) => formatCurrency(v, profile?.currency || currency, 2);
 
   const filteredPayments = payments.filter(p => {
     const term = searchTerm.toLowerCase();
@@ -744,112 +753,306 @@ export const PaymentsScreen: React.FC = () => {
         </Card.Content>
       </Card>
 
-      {/* RECORD / VERIFY PAYMENT MODAL */}
+      {/* RECORD / VERIFY OFFLINE PAYMENT MODAL */}
       {showManualModal && (() => {
         const selectedInv = invoicesList.find(i => i.id === selectedInvoiceId);
-        const isBankMethod = manualMethod === 'Bank Transfer' || manualMethod === 'Check' || manualMethod === 'SWIFT Wire Transfer';
+        const maxDue = selectedInv?.balanceDue || 0;
+        const isBankMethod = manualMethod === 'Bank Transfer' || manualMethod === 'Check' || manualMethod === 'SWIFT Wire Transfer' || manualMethod === 'Telebirr / CBE Birr';
 
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <Card className="glass-panel" style={{ width: '100%', maxWidth: 540, borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-              <Card.Content style={{ padding: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <ShieldCheck size={22} style={{ color: '#10b981' }} />
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Record &amp; Verify Payment</h3>
+        return ReactDOM.createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              zIndex: 99999,
+            }}
+            onClick={() => setShowManualModal(false)}
+          >
+            <style>{`
+              .rpm-modal input:focus, .rpm-modal select:focus {
+                border-color: #10b981 !important;
+                box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12) !important;
+                outline: none !important;
+              }
+            `}</style>
+            <div
+              className="rpm-modal"
+              style={{
+                width: '100%',
+                maxWidth: '640px',
+                maxHeight: '92vh',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '20px',
+                boxShadow: '0 25px 60px -15px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '1.35rem 1.75rem',
+                  background: '#ffffff',
+                  borderBottom: '1px solid #f1f5f9',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <ShieldCheck size={22} />
                   </div>
-                  <button type="button" onClick={() => setShowManualModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                    <X size={20} />
-                  </button>
-                </div>
-
-                {/* Clarification Notice */}
-                <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
                   <div>
-                    <strong style={{ color: 'var(--text-primary)' }}>Internal Company Verification:</strong> You are recording that the <strong>Customer (Payer)</strong> has made a verified payment to <strong>Our Company (Receiver)</strong>.
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.025em' }}>
+                      Record Offline / Manual Payment
+                    </h3>
+                    <div style={{ fontSize: '0.79rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Verify cash, bank wire, check, or mobile settlement into company ledger
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  style={{
+                    background: '#f1f5f9',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '7px',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    lineHeight: 1,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                <form onSubmit={handleRecordManualPayment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Select Unpaid / Open Invoice *</label>
-                    <select
-                      value={selectedInvoiceId}
-                      onChange={e => handleInvoiceSelectChange(Number(e.target.value))}
-                      required
-                      style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
-                    >
-                      {invoicesList.map(inv => (
-                        <option key={inv.id} value={inv.id}>
-                          Invoice #{inv.number} — {inv.customerName} (Bal: {fmtMoney(inv.balanceDue)})
-                        </option>
-                      ))}
-                    </select>
+              {/* Form with scrollable body */}
+              <form onSubmit={handleRecordManualPayment} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    padding: '1.25rem 1.75rem',
+                    overflowY: 'auto',
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem',
+                    background: '#f8fafc',
+                  }}
+                >
+                  {/* Direct Ledger Notice */}
+                  <div
+                    style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: '12px',
+                      padding: '0.85rem 1.1rem',
+                      fontSize: '0.83rem',
+                      color: '#166534',
+                      display: 'flex',
+                      gap: '0.65rem',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
+                    <div>
+                      <strong style={{ color: '#14532d' }}>Direct Ledger Credit:</strong> Submitting will record this payment as{' '}
+                      <span style={{ color: '#16a34a', fontWeight: 700 }}>Completed</span>, credit the customer invoice, and adjust accounts receivable.
+                    </div>
                   </div>
 
-                  {/* Explicit Payer vs Receiver Block */}
-                  {selectedInv && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.25rem' }}>
-                      <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>👤 Payer (Customer)</div>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.88rem' }}>{selectedInv.customerName}</div>
+                  {/* Select Invoice Card */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.45rem' }}>
+                      Select Unpaid / Open Invoice *
+                    </label>
+                    {invoicesList.length === 0 ? (
+                      <div style={{ padding: '0.75rem', background: '#fff7ed', borderRadius: '10px', border: '1px dashed #fed7aa', color: '#c2410c', fontSize: '0.85rem' }}>
+                        ⚠️ No open unpaid invoices found. Create or send an invoice first.
                       </div>
-                      <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>🏢 Receiver (Our Company)</div>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.88rem' }}>Enterprise CRM Solutions</div>
-                        <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>Bal: {fmtMoney(selectedInv.balanceDue)}</div>
+                    ) : (
+                      <select
+                        value={selectedInvoiceId}
+                        onChange={e => handleInvoiceSelectChange(Number(e.target.value))}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '0.65rem 0.85rem',
+                          borderRadius: '10px',
+                          background: '#ffffff',
+                          border: '1.5px solid #e2e8f0',
+                          color: '#1e293b',
+                          fontSize: '0.9rem',
+                          outline: 'none',
+                        }}
+                      >
+                        {invoicesList.map(inv => (
+                          <option key={inv.id} value={inv.id}>
+                            Invoice #{inv.number} — {inv.customerName} (Bal: {fmtMoney(inv.balanceDue)})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Payer vs Receiver Block */}
+                  {selectedInv && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                      <div style={{ background: '#ffffff', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>
+                          👤 Payer (Customer)
+                        </div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem', fontSize: '0.94rem' }}>{selectedInv.customerName}</div>
+                        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '2px' }}>Invoice #{selectedInv.number}</div>
+                      </div>
+                      <div style={{ background: '#ffffff', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                        <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>
+                          🏢 Receiver (Our Company)
+                        </div>
+                        <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem', fontSize: '0.94rem' }}>Enterprise CRM Solutions</div>
+                        <div style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700, marginTop: '2px' }}>Balance Due: {fmtMoney(selectedInv.balanceDue)}</div>
                       </div>
                     </div>
                   )}
 
-                  <div className="crm-form-2col">
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Payment Amount ($) *</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        max={selectedInv?.balanceDue}
-                        value={manualAmount}
-                        onChange={e => setManualAmount(Number(e.target.value))}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Payment Date *</label>
-                      <Input
-                        type="date"
-                        value={manualPaymentDate}
-                        onChange={e => setManualPaymentDate(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                      Payment Method (How Customer Paid) *
+                  {/* Payment Method Quick Selector */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                      Payment Method / Channel *
                     </label>
-                    <SearchableSelect
-                      value={manualMethod}
-                      onChange={val => setManualMethod(String(val))}
-                      options={[
-                        { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
-                        { value: 'Stripe', label: '💳 Stripe (Credit / Debit Card)' },
-                        { value: 'Cash', label: '💵 Cash Settlement' },
-                        { value: 'Check', label: '📑 Business Check / Cheque' },
-                        { value: 'Telebirr / CBE Birr', label: '📱 Telebirr / CBE Birr' },
-                        { value: 'SWIFT Wire Transfer', label: '🌐 SWIFT International Wire' },
-                        { value: 'Other', label: '⚡ Other Supported Method' }
-                      ]}
-                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.45rem' }}>
+                      {[
+                        { id: 'Bank Transfer', label: '🏦 Bank Wire' },
+                        { id: 'Cash', label: '💵 Cash' },
+                        { id: 'Check', label: '📑 Cheque' },
+                        { id: 'Telebirr / CBE Birr', label: '📱 Telebirr/CBE' },
+                        { id: 'Stripe', label: '💳 Card / POS' },
+                        { id: 'SWIFT Wire Transfer', label: '🌐 SWIFT Int.' },
+                      ].map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setManualMethod(m.id)}
+                          style={{
+                            padding: '0.5rem 0.6rem',
+                            borderRadius: '10px',
+                            border: manualMethod === m.id ? '1.5px solid #10b981' : '1.5px solid #e2e8f0',
+                            background: manualMethod === m.id ? '#f0fdf4' : '#ffffff',
+                            color: manualMethod === m.id ? '#16a34a' : '#475569',
+                            fontSize: '0.8rem',
+                            fontWeight: manualMethod === m.id ? 700 : 500,
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.15s ease',
+                            boxShadow: manualMethod === m.id ? '0 2px 8px rgba(16, 185, 129, 0.15)' : 'none',
+                          }}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* Amount & Date */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
+                        Amount Paid &amp; Date *
+                      </label>
+                      {maxDue > 0 && (
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setManualAmount(maxDue)}
+                            style={{
+                              background: manualAmount === maxDue ? '#dcfce7' : '#f0fdf4',
+                              border: manualAmount === maxDue ? '1.5px solid #16a34a' : '1px solid #bbf7d0',
+                              color: '#16a34a',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Full ({fmtMoney(maxDue)})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setManualAmount(Math.round((maxDue / 2) * 100) / 100)}
+                            style={{
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              color: '#64748b',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            50% ({fmtMoney(maxDue / 2)})
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={maxDue > 0 ? maxDue : undefined}
+                          value={manualAmount}
+                          onChange={e => setManualAmount(Number(e.target.value))}
+                          required
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="date"
+                          value={manualPaymentDate}
+                          onChange={e => setManualPaymentDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bank name (if bank method) */}
                   {isBankMethod && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-                        Bank Name (Customer's / Receiving Bank)
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.45rem' }}>
+                        Receiving / Customer Bank Name
                       </label>
                       <SearchableSelect
                         value={manualBankName}
@@ -863,187 +1066,418 @@ export const PaymentsScreen: React.FC = () => {
                           { value: 'Zemen Bank', label: 'Zemen Bank' },
                           { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
                           { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
-                          { value: 'Other Supported Bank', label: 'Other Supported Bank' }
+                          { value: 'Telebirr / Ethio Telecom', label: 'Telebirr / Ethio Telecom' },
+                          { value: 'Other Supported Bank', label: 'Other Supported Bank' },
                         ]}
                       />
                     </div>
                   )}
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Transaction / Check Reference (Optional)</label>
+                  {/* Transaction Ref */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.45rem' }}>
+                      Transaction / Slip / Check Reference
+                    </label>
                     <Input
                       value={manualTxnRef}
                       onChange={e => setManualTxnRef(e.target.value)}
-                      placeholder="e.g. Bank Ref #TXN-928374, Stripe ID, or Check #4092"
+                      placeholder="e.g. Bank Deposit Slip #TXN-928374, Check #4092, or Telebirr ID"
                     />
                   </div>
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Accounting Remarks (Optional)</label>
+                  {/* Remarks */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
+                        Accounting Remarks / Notes
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        {['Direct Bank Deposit', 'Cash in Office', 'Verified on Statement'].map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setManualNotes(tag)}
+                            style={{
+                              background: manualNotes === tag ? '#ede9fe' : '#f8fafc',
+                              border: manualNotes === tag ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                              color: manualNotes === tag ? '#4f46e5' : '#64748b',
+                              fontSize: '0.7rem',
+                              padding: '0.12rem 0.45rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <Input
                       value={manualNotes}
                       onChange={e => setManualNotes(e.target.value)}
                       placeholder="e.g. Deposit payment / Verified against bank statement"
                     />
                   </div>
+                </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                    <Button type="button" variant="secondary" onClick={() => setShowManualModal(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={submittingManual} style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>
-                      <CheckCircle2 size={16} style={{ marginRight: 6 }} /> {submittingManual ? 'Recording…' : 'Confirm & Verify Payment'}
-                    </Button>
-                  </div>
-                </form>
-              </Card.Content>
-            </Card>
-          </div>
+                {/* Fixed Footer */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '1rem 1.75rem',
+                    background: '#ffffff',
+                    borderTop: '1px solid #f1f5f9',
+                    flexShrink: 0,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowManualModal(false)}
+                    style={{
+                      background: 'transparent',
+                      border: '1.5px solid #e2e8f0',
+                      borderRadius: '10px',
+                      color: '#64748b',
+                      fontWeight: 600,
+                      padding: '0.6rem 1.1rem',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingManual || invoicesList.length === 0}
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      padding: '0.6rem 1.35rem',
+                      fontSize: '0.9rem',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: submittingManual || invoicesList.length === 0 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                      opacity: submittingManual ? 0.7 : 1,
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>{submittingManual ? 'Recording…' : 'Confirm & Verify Payment'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
         );
       })()}
 
       {/* VERIFY WIRE TRANSFER MODAL */}
-      {verifyingPayment && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <Card className="glass-panel" style={{ width: '100%', maxWidth: 500, borderRadius: '16px', border: '1px solid #10b981' }}>
-            <Card.Content style={{ padding: '2rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <Landmark size={22} style={{ color: '#38bdf8' }} />
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Verify Bank Wire Transfer</h3>
+      {verifyingPayment && ReactDOM.createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            zIndex: 99999,
+          }}
+          onClick={() => setVerifyingPayment(null)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '540px',
+              maxHeight: '92vh',
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.35rem 1.75rem', background: '#ffffff', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(2, 132, 199, 0.35)',
+                }}>
+                  <Landmark size={20} />
                 </div>
-                <button type="button" onClick={() => setVerifyingPayment(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                    Verify Bank Wire Transfer
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Payment #{verifyingPayment.paymentNumber}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifyingPayment(null)}
+                style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '7px', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem 1.75rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', background: '#f8fafc' }}>
+              <div style={{ background: '#ffffff', padding: '1.1rem 1.25rem', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.88rem', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Invoice Reference:</span><span style={{ fontWeight: 700, color: '#0f172a' }}>#{verifyingPayment.invoiceNumber}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Payer (Customer):</span><span style={{ fontWeight: 700, color: '#0f172a' }}>{verifyingPayment.payerName}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Amount Transferred:</span><span style={{ color: '#16a34a', fontWeight: 800, fontSize: '1.1rem' }}>{fmtMoney(verifyingPayment.amount)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Submitted Wire Ref:</span><span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#6366f1' }}>{verifyingPayment.transactionReference || 'N/A'}</span></div>
+                {verifyingPayment.notes && <div><span style={{ color: '#64748b' }}>Customer Notes:</span> {verifyingPayment.notes}</div>}
               </div>
 
-              <div style={{ background: 'var(--bg-secondary)', padding: '1.25rem', borderRadius: '10px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.88rem' }}>
-                <div><strong>Payment Number:</strong> #{verifyingPayment.paymentNumber}</div>
-                <div><strong>Invoice Reference:</strong> #{verifyingPayment.invoiceNumber}</div>
-                <div><strong>Payer (Customer):</strong> {verifyingPayment.payerName}</div>
-                <div><strong>Amount Transferred:</strong> <span style={{ color: '#10b981', fontWeight: 800, fontSize: '1.1rem' }}>{fmtMoney(verifyingPayment.amount)}</span></div>
-                <div><strong>Submitted Wire Ref:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-primary)' }}>{verifyingPayment.transactionReference || 'N/A'}</span></div>
-                {verifyingPayment.notes && <div><strong>Customer Notes:</strong> {verifyingPayment.notes}</div>}
-              </div>
-
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 1.5rem 0' }}>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
                 Clicking <strong>"Confirm &amp; Credit Payment"</strong> verifies that the funds have arrived in the company bank account, marks this payment as <strong>Completed</strong>, and credits Invoice <strong>#{verifyingPayment.invoiceNumber}</strong>.
               </p>
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                <Button type="button" variant="secondary" onClick={() => setVerifyingPayment(null)}>
-                  Close
-                </Button>
-                <Button
-                  onClick={() => handleVerifyWire(verifyingPayment)}
-                  disabled={processingVerify}
-                  style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}
-                >
-                  <ShieldCheck size={16} style={{ marginRight: 6 }} /> {processingVerify ? 'Verifying…' : 'Confirm & Credit Payment'}
-                </Button>
-              </div>
-            </Card.Content>
-          </Card>
-        </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.75rem', background: '#ffffff', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setVerifyingPayment(null)}
+                style={{ background: 'transparent', border: '1.5px solid #e2e8f0', borderRadius: '10px', color: '#64748b', fontWeight: 600, padding: '0.6rem 1.1rem', fontSize: '0.9rem', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleVerifyWire(verifyingPayment)}
+                disabled={processingVerify}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  padding: '0.6rem 1.35rem',
+                  fontSize: '0.9rem',
+                  border: 'none',
+                  borderRadius: '10px',
+                  cursor: processingVerify ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                }}
+              >
+                <ShieldCheck size={16} />
+                <span>{processingVerify ? 'Verifying…' : 'Confirm & Credit Payment'}</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* INTERNAL PAYMENT INSPECTION MODAL */}
-      {inspectingPayment && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-          <Card className="glass-panel" style={{ width: '100%', maxWidth: 580, borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-            <Card.Content style={{ padding: '2rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <Receipt size={22} style={{ color: 'var(--accent-primary)' }} />
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>Payment Ledger Details</h3>
+      {inspectingPayment && ReactDOM.createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+            zIndex: 99999,
+          }}
+          onClick={() => setInspectingPayment(null)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '580px',
+              maxHeight: '92vh',
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.35rem 1.75rem', background: '#ffffff', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)',
+                }}>
+                  <Receipt size={20} />
                 </div>
-                <button type="button" onClick={() => setInspectingPayment(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
+                    Payment Ledger Details
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Reference #{inspectingPayment.paymentNumber}
+                  </div>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setInspectingPayment(null)}
+                style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '7px', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              <div style={{ background: 'var(--bg-secondary)', padding: '1.25rem', borderRadius: '10px', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.88rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Payment Reference:</span>
-                  <span style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>#{inspectingPayment.paymentNumber}</span>
+            <div style={{ padding: '1.25rem 1.75rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', background: '#f8fafc' }}>
+              <div style={{ background: '#ffffff', padding: '1.1rem 1.25rem', borderRadius: '14px', display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.88rem', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Payment Reference:</span>
+                  <span style={{ fontWeight: 800, color: '#6366f1' }}>#{inspectingPayment.paymentNumber}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Invoice Reference:</span>
-                  <span style={{ fontWeight: 700 }}>#{inspectingPayment.invoiceNumber}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Invoice Reference:</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>#{inspectingPayment.invoiceNumber}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Payer (Customer):</span>
-                  <span style={{ fontWeight: 700 }}>{inspectingPayment.payerName} {inspectingPayment.payerCompanyName ? `(${inspectingPayment.payerCompanyName})` : ''}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Payer (Customer):</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{inspectingPayment.payerName} {inspectingPayment.payerCompanyName ? `(${inspectingPayment.payerCompanyName})` : ''}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Beneficiary (Receiver):</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>Enterprise CRM Solutions Inc.</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Beneficiary (Receiver):</span>
+                  <span style={{ fontWeight: 700, color: '#16a34a' }}>Enterprise CRM Solutions Inc.</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Amount Credited:</span>
-                  <span style={{ fontWeight: 800, color: '#10b981', fontSize: '1.1rem' }}>{fmtMoney(inspectingPayment.amount)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Amount Credited:</span>
+                  <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.1rem' }}>{fmtMoney(inspectingPayment.amount)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Payment Method (Channel):</span>
-                  <span style={{ fontWeight: 600 }}>{inspectingPayment.paymentMethod}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Payment Method:</span>
+                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{inspectingPayment.paymentMethod}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Transaction / Check Ref:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{inspectingPayment.transactionReference || 'N/A'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Transaction / Check Ref:</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>{inspectingPayment.transactionReference || 'N/A'}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Payment Date:</span>
-                  <span>{formatDisplayDate(inspectingPayment.paymentDate)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                  <span style={{ color: '#64748b' }}>Payment Date:</span>
+                  <span style={{ color: '#0f172a' }}>{formatDisplayDate(inspectingPayment.paymentDate)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Verification Status:</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748b' }}>Verification Status:</span>
                   <span>{getStatusBadge(inspectingPayment.status)}</span>
                 </div>
                 {inspectingPayment.verifiedByName && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Verified By:</span>
-                    <span>{inspectingPayment.verifiedByName} on {formatDisplayDate(inspectingPayment.verifiedAt)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem' }}>
+                    <span style={{ color: '#64748b' }}>Verified By:</span>
+                    <span style={{ color: '#0f172a' }}>{inspectingPayment.verifiedByName} on {formatDisplayDate(inspectingPayment.verifiedAt)}</span>
                   </div>
                 )}
               </div>
 
               {inspectingPayment.notes && (
-                <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1.25rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  <strong>Accounting Remarks:</strong> {inspectingPayment.notes}
+                <div style={{ background: '#ffffff', padding: '0.85rem 1.1rem', borderRadius: '12px', fontSize: '0.82rem', color: '#475569', border: '1px solid #e2e8f0' }}>
+                  <strong style={{ color: '#0f172a' }}>Accounting Remarks:</strong> {inspectingPayment.notes}
                 </div>
               )}
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Button
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.75rem', background: '#ffffff', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => printPaymentReceipt(inspectingPayment)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.45rem',
+                  background: '#f8fafc',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: '10px',
+                  color: '#475569',
+                  fontWeight: 600,
+                  padding: '0.6rem 1.1rem',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                <Printer size={15} /> Print Receipt (PDF)
+              </button>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {inspectingPayment.status?.toLowerCase().includes('pending') && (
+                  <button
+                    onClick={() => {
+                      const target = inspectingPayment;
+                      setInspectingPayment(null);
+                      setVerifyingPayment(target);
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      padding: '0.6rem 1.25rem',
+                      fontSize: '0.88rem',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <ShieldCheck size={15} /> Verify Wire
+                  </button>
+                )}
+                <button
                   type="button"
-                  variant="secondary"
-                  onClick={() => printPaymentReceipt(inspectingPayment)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  onClick={() => setInspectingPayment(null)}
+                  style={{
+                    background: 'transparent',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    color: '#64748b',
+                    fontWeight: 600,
+                    padding: '0.6rem 1.1rem',
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <Printer size={15} /> Print Receipt (PDF)
-                </Button>
-
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {inspectingPayment.status?.toLowerCase().includes('pending') && (
-                    <Button
-                      onClick={() => {
-                        const target = inspectingPayment;
-                        setInspectingPayment(null);
-                        setVerifyingPayment(target);
-                      }}
-                      style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}
-                    >
-                      <ShieldCheck size={15} style={{ marginRight: 4 }} /> Verify Wire
-                    </Button>
-                  )}
-                  <Button type="button" variant="secondary" onClick={() => setInspectingPayment(null)}>
-                    Close
-                  </Button>
-                </div>
+                  Close
+                </button>
               </div>
-            </Card.Content>
-          </Card>
-        </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </Layout>

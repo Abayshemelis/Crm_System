@@ -11,7 +11,10 @@ namespace CrmSystem.Api.Hubs
     {
         public override async Task OnConnectedAsync()
         {
-            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                      ?? Context.User?.FindFirst("sub")?.Value
+                      ?? Context.UserIdentifier;
+
             if (!string.IsNullOrEmpty(userId))
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
@@ -21,7 +24,10 @@ namespace CrmSystem.Api.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                      ?? Context.User?.FindFirst("sub")?.Value
+                      ?? Context.UserIdentifier;
+
             if (!string.IsNullOrEmpty(userId))
             {
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user_{userId}");

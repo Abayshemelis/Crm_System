@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CrmSystem.Infrastructure.Migrations
 {
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260722121000_BackfillIdentityRoles")]
     public partial class BackfillIdentityRoles : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

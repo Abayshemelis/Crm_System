@@ -24,6 +24,7 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   token: string | null;
+  isLoading: boolean;
   login: (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => void;
   logout: () => void;
   isAdmin: boolean;
@@ -61,95 +62,110 @@ function parseJwt(token: string): any {
 function isTokenExpired(token: string): boolean {
   try {
     const payload = parseJwt(token);
-    if (!payload || !payload.exp) return true;
+    if (!payload || !payload.exp) return false;
     const exp = payload.exp * 1000; // Convert seconds to milliseconds
     return Date.now() >= (exp - 10000);
   } catch {
-    return true;
+    return false;
   }
 }
 
-// ── 4. AUTH PROVIDER COMPONENT ────────────────────────────────────────────────
+// ── 4. SYNCHRONOUS USER HYDRATION HELPER ──────────────────────────────────────
+function extractUserFromToken(t: string | null, explicitRoles?: string[]): { user: User | null; role: 'Admin' | 'Manager' | 'SalesRep' } {
+  if (!t || typeof t !== 'string') return { user: null, role: 'SalesRep' };
+  const payload = parseJwt(t);
+  if (!payload && !explicitRoles) return { user: null, role: 'SalesRep' };
+
+  const rolesFromServer = explicitRoles ?? [];
+  const claimRoles = payload ? (payload['role'] || payload['roles'] || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']) : null;
+  const roles: Array<'Admin' | 'Manager' | 'SalesRep'> = [];
+
+  if (rolesFromServer && rolesFromServer.length > 0) {
+    rolesFromServer.forEach((r) => {
+      if (r === 'Admin' || r === 'Manager' || r === 'SalesRep') roles.push(r);
+    });
+  } else if (Array.isArray(claimRoles)) {
+    claimRoles.forEach((role: string) => {
+      if (role === 'Admin' || role === 'Manager' || role === 'SalesRep') {
+        roles.push(role as any);
+      }
+    });
+  } else if (typeof claimRoles === 'string') {
+    claimRoles.split(',').map((r: string) => r.trim()).forEach((role: string) => {
+      if (role === 'Admin' || role === 'Manager' || role === 'SalesRep') {
+        roles.push(role as any);
+      }
+    });
+  }
+
+  const userId = Number(payload?.['sub'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? 0);
+  const cachedAvatar = userId && typeof localStorage !== 'undefined' ? localStorage.getItem(`crm_user_avatar_${userId}`) : null;
+
+  const email =
+    payload?.['email'] ??
+    payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ??
+    payload?.['http://schemas.microsoft.com/ws/2008/06/identity/claims/emailaddress'] ??
+    '';
+
+  const name =
+    payload?.['name'] ??
+    payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ??
+    payload?.['unique_name'] ??
+    (email ? email.split('@')[0] : 'User');
+
+  const finalRoles = (roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep']) as Array<'Admin' | 'Manager' | 'SalesRep'>;
+  const user: User = {
+    userId,
+    name,
+    email,
+    roles: finalRoles,
+    profileImage: cachedAvatar || null,
+  };
+
+  const userRoleKey = userId ? `crm_role_${userId}` : null;
+  const savedRole = userRoleKey && typeof localStorage !== 'undefined'
+    ? (localStorage.getItem(userRoleKey) as 'Admin' | 'Manager' | 'SalesRep' | null)
+    : null;
+
+  let role: 'Admin' | 'Manager' | 'SalesRep' = 'SalesRep';
+  if (savedRole && finalRoles.includes(savedRole)) {
+    role = savedRole;
+  } else if (finalRoles.includes('Manager')) {
+    role = 'Manager';
+  } else if (finalRoles.includes('Admin')) {
+    role = 'Admin';
+  } else {
+    role = 'SalesRep';
+  }
+
+  return { user, role };
+}
+
+// ── 5. AUTH PROVIDER COMPONENT ────────────────────────────────────────────────
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [user, setUser] = useState<User | null>(null);
-  const [selectedRole, setSelectedRole] = useState<'Admin' | 'Manager' | 'SalesRep'>('SalesRep');
+  const initialToken = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+  const initialAuth = extractUserFromToken(initialToken);
+
+  const [token, setToken] = useState<string | null>(initialToken);
+  const [user, setUser] = useState<User | null>(initialAuth.user);
+  const [selectedRole, setSelectedRole] = useState<'Admin' | 'Manager' | 'SalesRep'>(initialAuth.role);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (initialToken && isTokenExpired(initialToken)) {
+      return true;
+    }
+    return false;
+  });
 
   // Extracts user profile and roles from decoded JWT payload or server response
   const hydrateUser = useCallback((t: string, explicitRoles?: string[]) => {
-    const payload = parseJwt(t);
-    if (!payload && !explicitRoles) return;
-
-    const rolesFromServer = explicitRoles ?? [];
-    const claimRoles = payload ? (payload['role'] || payload['roles'] || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']) : null;
-    const roles: Array<'Admin' | 'Manager' | 'SalesRep'> = [];
-
-    if (rolesFromServer && rolesFromServer.length > 0) {
-      rolesFromServer.forEach((r) => {
-        if (r === 'Admin' || r === 'Manager' || r === 'SalesRep') roles.push(r);
-      });
-    } else if (Array.isArray(claimRoles)) {
-      claimRoles.forEach((role: string) => {
-        if (role === 'Admin' || role === 'Manager' || role === 'SalesRep') {
-          roles.push(role as any);
-        }
-      });
-    } else if (typeof claimRoles === 'string') {
-      claimRoles.split(',').map((r: string) => r.trim()).forEach((role: string) => {
-        if (role === 'Admin' || role === 'Manager' || role === 'SalesRep') {
-          roles.push(role as any);
-        }
-      });
+    const { user: extractedUser, role: extractedRole } = extractUserFromToken(t, explicitRoles);
+    if (extractedUser) {
+      setUser(extractedUser);
+      setSelectedRole(extractedRole);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('selectedRole');
+      }
     }
-
-    const userId = Number(payload?.['sub'] ?? payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? 0);
-    const cachedAvatar = userId ? localStorage.getItem(`crm_user_avatar_${userId}`) : null;
-
-    const email =
-      payload?.['email'] ??
-      payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] ??
-      payload?.['http://schemas.microsoft.com/ws/2008/06/identity/claims/emailaddress'] ??
-      '';
-
-    const name =
-      payload?.['name'] ??
-      payload?.['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'] ??
-      payload?.['unique_name'] ??
-      (email ? email.split('@')[0] : 'User');
-
-    setUser({
-      userId,
-      name,
-      email,
-      roles: roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'],
-      profileImage: cachedAvatar || null,
-    });
-
-    // Default the active working role — stored per-user so different accounts never share a role preference
-    const finalRoles = roles.length > 0 ? Array.from(new Set(roles)) : ['SalesRep'];
-    const userRoleKey = userId ? `crm_role_${userId}` : null;
-    const savedRole = userRoleKey
-      ? (localStorage.getItem(userRoleKey) as 'Admin' | 'Manager' | 'SalesRep' | null)
-      : null;
-
-    if (savedRole && finalRoles.includes(savedRole)) {
-      // Restore the user's previously chosen role preference
-      setSelectedRole(savedRole);
-    } else if (finalRoles.includes('Manager')) {
-      // Manager takes precedence — a user with Manager role should start as Manager,
-      // even if they also have Admin. They can switch to Admin view in the profile.
-      setSelectedRole('Manager');
-      if (userRoleKey) localStorage.setItem(userRoleKey, 'Manager');
-    } else if (finalRoles.includes('Admin')) {
-      // Pure Admin-only accounts (no Manager role)
-      setSelectedRole('Admin');
-      if (userRoleKey) localStorage.setItem(userRoleKey, 'Admin');
-    } else {
-      setSelectedRole('SalesRep');
-      if (userRoleKey) localStorage.setItem(userRoleKey, 'SalesRep');
-    }
-    // Clean up the old shared global key so it no longer contaminates new logins
-    localStorage.removeItem('selectedRole');
   }, []);
 
   // Sync profile data from server
@@ -184,20 +200,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (token) {
       if (isTokenExpired(token)) {
+        setIsLoading(true);
         (async () => {
           const refreshed = await refresh();
           if (!refreshed) {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
+            const storedToken = localStorage.getItem('token');
+            if (!storedToken) {
+              setToken(null);
+              setUser(null);
+            }
           }
+          setIsLoading(false);
         })();
       } else {
         hydrateUser(token);
         syncServerProfile(token);
+        setIsLoading(false);
       }
     } else {
       setUser(null);
+      setIsLoading(false);
     }
   }, [token, hydrateUser, syncServerProfile]);
 
@@ -207,13 +229,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newToken = localStorage.getItem('token');
       if (newToken && newToken !== token) {
         setToken(newToken);
+        hydrateUser(newToken);
       }
     };
     window.addEventListener('auth:token-refreshed', handleTokenRefreshed);
     return () => window.removeEventListener('auth:token-refreshed', handleTokenRefreshed);
-  }, [token]);
+  }, [token, hydrateUser]);
 
-  // ── 5. LOGIN ACTION ─────────────────────────────────────────────────────────
+  // ── 6. LOGIN ACTION ─────────────────────────────────────────────────────────
   const login = (tokenOrResponse: string | { accessToken?: string; roles?: string[]; refreshToken?: string }) => {
     if (typeof tokenOrResponse === 'string') {
       const newToken = tokenOrResponse;
@@ -221,6 +244,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(newToken);
       hydrateUser(newToken);
       syncServerProfile(newToken);
+      setIsLoading(false);
     } else {
       const newToken = tokenOrResponse.accessToken ?? null;
       if (newToken) {
@@ -234,14 +258,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newToken) {
         syncServerProfile(newToken);
       }
+      setIsLoading(false);
     }
   };
 
-  // ── 6. SILENT REFRESH TOKEN ROTATION ────────────────────────────────────────
+  // ── 7. SILENT REFRESH TOKEN ROTATION ────────────────────────────────────────
   // Automatically exchanges stored refresh token for a fresh JWT access token
   const refresh = async (): Promise<boolean> => {
     const storedRefresh = localStorage.getItem('refreshToken');
-    if (!storedRefresh) return false;
+    if (!storedRefresh) {
+      setIsLoading(false);
+      return false;
+    }
 
     try {
       const res = await fetch(buildUrl('/api/auth/refresh'), {
@@ -253,36 +281,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ refreshToken: storedRefresh }),
       });
       if (!res.ok) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        setToken(null);
-        setUser(null);
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          setToken(null);
+          setUser(null);
+        }
+        setIsLoading(false);
         return false;
       }
       const data = await res.json();
       login({ accessToken: data.accessToken, roles: data.roles, refreshToken: data.refreshToken });
+      setIsLoading(false);
       return true;
     } catch {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      setToken(null);
-      setUser(null);
+      setIsLoading(false);
       return false;
     }
   };
 
-  // ── 7. LOGOUT ACTION ────────────────────────────────────────────────────────
+  // ── 8. LOGOUT ACTION ────────────────────────────────────────────────────────
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     setToken(null);
     setUser(null);
+    setIsLoading(false);
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect();
     }
   };
 
-  // ── 8. UPDATE PROFILE IMAGE ─────────────────────────────────────────────────
+  // ── 9. UPDATE PROFILE IMAGE ─────────────────────────────────────────────────
   const updateProfileImage = async (imageUrl: string | null): Promise<boolean> => {
     if (user?.userId) {
       if (imageUrl) {
@@ -334,6 +364,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider value={{
       user,
       token,
+      isLoading,
       login,
       logout,
       refresh,

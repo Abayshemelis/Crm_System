@@ -265,6 +265,7 @@ app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
 app.UseMiddleware<IpRateLimitingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<SessionValidationMiddleware>();
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications"); // Map SignalR WebSocket route
 
@@ -327,6 +328,19 @@ using (var scope = app.Services.CreateScope())
                 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Contracts') AND name = 'CustomerSignedAt')
                 BEGIN
                     ALTER TABLE [Contracts] ADD [CustomerSignedAt] DATETIME2 NULL;
+                END
+
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('RefreshTokens') AND name = 'DeviceInfo')
+                BEGIN
+                    ALTER TABLE [RefreshTokens] ADD [DeviceInfo] NVARCHAR(255) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('RefreshTokens') AND name = 'IpAddress')
+                BEGIN
+                    ALTER TABLE [RefreshTokens] ADD [IpAddress] NVARCHAR(100) NULL;
+                END
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('RefreshTokens') AND name = 'LastActiveAt')
+                BEGIN
+                    ALTER TABLE [RefreshTokens] ADD [LastActiveAt] DATETIME2 NULL;
                 END
 
                 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Payments')
@@ -506,11 +520,10 @@ using (var scope = app.Services.CreateScope())
 
     var seedAdmins = new[]
     {
-        ("abayshemelisshiferaw@gmail.com", "admin123", "Admin User"),
-        ("admin@crm.com", "Admin@123", "Administrator"),
-        ("admin@test.com", "Admin123!", "Admin Demo"),
-        ("manager@test.com", "Manager123!", "Manager Demo"),
-        ("rep@test.com", "Rep123!", "Sales Rep Demo")
+        ("abayshemelisshiferaw@gmail.com", "abay1075", "Admin User"),
+        ("admin@crm.com", "abay1075", "Administrator"),
+        ("manager@crm.com", "Manager123!", "Manager Demo"),
+        ("rep@crm.com", "Rep123!", "Sales Rep Demo")
     };
 
     foreach (var (email, pass, name) in seedAdmins)

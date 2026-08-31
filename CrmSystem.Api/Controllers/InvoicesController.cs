@@ -781,6 +781,87 @@ public class InvoicesController : ControllerBase
         }
     }
 
+    [HttpPost("{id:int}/sync-pricing")]
+    public async Task<ActionResult<InvoiceReadDto>> SyncPricing(int id)
+    {
+        if (_currentUser.UserId == null) return Unauthorized();
+
+        var invoice = await _db.Invoices
+            .Include(i => i.Customer)
+                .ThenInclude(c => c.Company)
+            .Include(i => i.Contract)
+            .Include(i => i.Opportunity)
+                .ThenInclude(opp => opp!.LineItems)
+                    .ThenInclude(li => li.Product)
+            .Include(i => i.CreatedBy)
+            .Include(i => i.Payments)
+            .FirstOrDefaultAsync(i => i.InvoiceId == id && !i.IsDeleted);
+
+        if (invoice == null) return NotFound(new { message = "Invoice not found." });
+
+        if (!_currentUser.IsAdmin)
+        {
+            bool canAccess = _currentUser.CanAccessOwnedRecord(invoice.Customer?.AssignedRepId) ||
+                             invoice.CreatedById == _currentUser.UserId ||
+                             _currentUser.CanAccessOwnedRecord(invoice.Opportunity?.OwnerId);
+            if (!canAccess) return Forbid();
+        }
+
+        var oldAmount = invoice.Amount;
+        decimal newAmount = oldAmount;
+
+        if (invoice.Opportunity != null)
+        {
+            // Sync line items against product catalog
+            int updatedCount = 0;
+            foreach (var item in invoice.Opportunity.LineItems)
+            {
+                if (item.Product != null && item.UnitPrice != item.Product.Price)
+                {
+                    item.UnitPrice = item.Product.Price;
+                    updatedCount++;
+                }
+            }
+
+            if (invoice.Opportunity.LineItems.Any())
+            {
+                var calculatedTotal = invoice.Opportunity.LineItems
+                    .Sum(li => li.Quantity * li.UnitPrice * (1 - li.DiscountPercent / 100m));
+                invoice.Opportunity.EstimatedValue = calculatedTotal;
+                invoice.Opportunity.UpdatedAt = DateTime.UtcNow;
+                newAmount = calculatedTotal;
+            }
+            else
+            {
+                newAmount = invoice.Opportunity.EstimatedValue;
+            }
+        }
+        else if (invoice.Contract != null && invoice.Contract.ContractValue > 0)
+        {
+            newAmount = invoice.Contract.ContractValue;
+        }
+
+        invoice.Amount = newAmount;
+        invoice.TaxAmount = invoice.Amount * (invoice.TaxRate / 100m);
+        invoice.TotalAmount = invoice.Amount + invoice.TaxAmount;
+        invoice.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Invoice");
+        if (entityType != null && oldAmount != invoice.Amount)
+        {
+            var changes = new List<(string Field, string? OldValue, string? NewValue)>
+            {
+                ("Amount", oldAmount.ToString("F2"), invoice.Amount.ToString("F2")),
+                ("TotalAmount", (oldAmount + (oldAmount * invoice.TaxRate / 100m)).ToString("F2"), invoice.TotalAmount.ToString("F2"))
+            };
+            await _auditService.LogFieldChangesAsync(entityType.EntityTypeId, invoice.InvoiceId, changes, "Update", _currentUser.UserId.Value);
+        }
+
+        return Ok(MapToReadDto(invoice));
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

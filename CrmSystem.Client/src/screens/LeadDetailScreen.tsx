@@ -736,7 +736,7 @@ export const LeadDetailScreen: React.FC = () => {
                                     Assigned Sales Rep
                                 </h3>
                                 <SearchableSelect
-                                    value={lead.assignedRepId ?? ''}
+                                    value={lead.assignedRepId ? String(lead.assignedRepId) : ''}
                                     options={[
                                         { value: '', label: 'Unassigned' },
                                         ...users.map(u => ({ value: String(u.id), label: u.name }))

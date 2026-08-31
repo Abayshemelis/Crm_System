@@ -1,10 +1,13 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CrmSystem.Infrastructure.Migrations
 {
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260821120000_AddDualPartySignaturesToContract")]
     /// <inheritdoc />
     public partial class AddDualPartySignaturesToContract : Migration
     {

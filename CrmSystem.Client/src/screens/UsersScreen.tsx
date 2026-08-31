@@ -68,7 +68,7 @@ export const UsersScreen: React.FC = () => {
     try {
       const data = await api.get<RoleItem[]>('/api/users/roles');
       const filteredRoles = (data ?? []).filter(role => {
-        if (selectedRole === 'Admin') return role.name === 'Manager' || role.name === 'SalesRep';
+        if (selectedRole === 'Admin') return true;
         if (selectedRole === 'Manager') return role.name === 'SalesRep';
         return false;
       });

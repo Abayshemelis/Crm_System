@@ -1,41 +1,139 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/layout/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../lib/api';
 import {
-  AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
+  Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  Users, Building2, Target, Layers, DollarSign, FileText,
-  Receipt, CreditCard, TrendingUp, CheckCircle,
-  BarChart2, ShieldCheck, Activity, Award, CheckSquare,
-  AlertTriangle, Clock, ShieldAlert, Cpu, ArrowUpRight,
-  TrendingDown, RefreshCw, Download, Filter, Calendar,
-  Database, Lock, Server, Zap, CheckCircle2, ArrowRight,
-  ExternalLink, HardDrive
+  DollarSign, Users, Target, Briefcase, FileText, Receipt,
+  AlertTriangle, CheckCircle2, TrendingUp, ArrowDown,
+  ShieldCheck, Activity, Sparkles, Inbox, RefreshCw,
+  Award, AlertCircle, Info, Layers, UserCheck, ShieldAlert,
+  ChevronRight, ArrowUpRight, Check, Grid, Lock, Database, Cpu, CheckCircle
 } from 'lucide-react';
-import { ReportsNav } from '../../components/reports/ReportsNav';
 import { ReportHeader, calculateDateRange } from '../../components/reports/ReportHeader';
-import { ReportKpiGrid, ReportKpiItem } from '../../components/reports/ReportKpiCard';
-import { ReportChartCard, CustomChartTooltip } from '../../components/reports/ReportCharts';
-import { ReportDataTable, ColumnDef } from '../../components/reports/ReportDataTable';
+import { CustomChartTooltip } from '../../components/reports/ReportCharts';
 import { exportCSV, exportExecutivePDF } from '../../components/reports/reportExportUtils';
+import { formatCurrencyGlobal } from '../../context/SystemProfileContext';
 import './cleanReports.css';
 
-const PALETTE = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444'];
-const fmt$ = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v || 0);
+const PALETTE = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444'];
+const STATUS_COLORS: Record<string, string> = {
+  Paid: '#10b981',
+  Completed: '#10b981',
+  Active: '#10b981',
+  Won: '#10b981',
+  Sent: '#3b82f6',
+  Pending: '#f59e0b',
+  Draft: '#94a3b8',
+  Overdue: '#ef4444',
+  Lost: '#ef4444',
+  Cancelled: '#64748b',
+  Expired: '#64748b',
+};
+
+const fmt$ = (v: number) => formatCurrencyGlobal(v, undefined, 0);
 const fmtNum = (v: number) => new Intl.NumberFormat('en-US').format(v || 0);
 
-type OverviewTab = 'executive' | 'sales' | 'customers' | 'financial' | 'operations' | 'health';
+const TABS = [
+  { id: 'executive', label: 'Executive Summary', icon: <Sparkles size={14} /> },
+  { id: 'sales', label: 'Sales & Pipeline', icon: <Target size={14} /> },
+  { id: 'customers', label: 'Customer Portfolio', icon: <Users size={14} /> },
+  { id: 'financial', label: 'Financial & Billing', icon: <DollarSign size={14} /> },
+  { id: 'operations', label: 'Operations & Tasks', icon: <Activity size={14} /> },
+  { id: 'health', label: 'System & Audit', icon: <ShieldCheck size={14} /> },
+  { id: 'all', label: 'Consolidated View', icon: <Grid size={14} /> },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
+
+function compactMoney(v: number) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${Math.round(n)}`;
+}
+
+function formatBucket(value: string) {
+  if (!value) return '';
+  if (value.length === 10) {
+    const d = new Date(`${value}T00:00:00`);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  const [y, m] = value.split('-');
+  if (!y || !m) return value;
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: 'short' });
+}
+
+// Builds a rolling 6-month continuous timeline if the backend only has sparse data
+function buildContinuousTimeline(sparseTrend: any[]) {
+  if (!sparseTrend) return [];
+  if (sparseTrend.length >= 6) return sparseTrend;
+  
+  const result: any[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const existing = sparseTrend.find((r) => r.month === monthKey);
+    if (existing) {
+      result.push({ ...existing });
+    } else {
+      result.push({
+        month: monthKey,
+        invoiced: 0,
+        collected: 0,
+        count: 0,
+        won: 0,
+        lost: 0,
+      });
+    }
+  }
+  return result;
+}
+
+function hasRows(list: unknown): list is any[] {
+  return Array.isArray(list) && list.length > 0;
+}
+
+function hasSignal(list: any[], keys: string[]) {
+  return hasRows(list) && list.some((row) => keys.some((k) => Number(row?.[k]) > 0));
+}
+
+const EmptyBlock: React.FC<{ message: string }> = ({ message }) => (
+  <div className="exec-empty-state">
+    <Inbox size={26} opacity={0.4} />
+    <span>{message}</span>
+  </div>
+);
+
+const ChartFrame: React.FC<{
+  loading?: boolean;
+  empty?: boolean;
+  emptyMessage: string;
+  heightClass?: string;
+  children: React.ReactNode;
+}> = ({ loading, empty, emptyMessage, heightClass = 'exec-chart-container', children }) => {
+  if (loading) {
+    return (
+      <div className={`${heightClass} exec-empty-state`}>
+        <div className="exec-shimmer" style={{ width: '60%', height: 12, marginBottom: 12 }} />
+        <div className="exec-shimmer" style={{ width: '100%', height: '80%' }} />
+      </div>
+    );
+  }
+  if (empty) return <div className={heightClass}><EmptyBlock message={emptyMessage} /></div>;
+  return <div className={heightClass}>{children}</div>;
+};
 
 export const ReportsOverviewScreen: React.FC = () => {
   const navigate = useNavigate();
   const { isManagerOrAbove } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<OverviewTab>('executive');
+  const [activeTab, setActiveTab] = useState<TabId>('executive');
   const [activePreset, setActivePreset] = useState('30days');
   const initialDates = calculateDateRange('30days');
   const [startDate, setStartDate] = useState(initialDates.start);
@@ -53,23 +151,18 @@ export const ReportsOverviewScreen: React.FC = () => {
       if (startDate) q.append('startDate', startDate);
       if (endDate) q.append('endDate', endDate);
       q.append('scope', scope);
-
       const res = await api.get<any>(`/api/reports/overview?${q.toString()}`);
       setData(res);
-      setError(null);
     } catch (err: any) {
-      console.error('Failed to load overview reports', err);
       setData(null);
-      setError(err?.message || 'Unable to load overview report data from CRM server.');
+      setError(err?.message || 'Unable to load live overview report data from the CRM server.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isManagerOrAbove) {
-      setScope('team');
-    }
+    if (isManagerOrAbove) setScope('team');
   }, [isManagerOrAbove]);
 
   useEffect(() => {
@@ -82,302 +175,1026 @@ export const ReportsOverviewScreen: React.FC = () => {
       setStartDate(customStart);
       setEndDate(customEnd);
     } else {
-      const { start, end } = calculateDateRange(presetId);
-      setStartDate(start);
-      setEndDate(end);
+      const range = calculateDateRange(presetId);
+      setStartDate(range.start);
+      setEndDate(range.end);
     }
   };
 
-  // Sub-tabs configuration
-  const overviewTabs = [
-    { id: 'executive', label: 'Executive Summary' },
-    { id: 'sales', label: 'Sales Overview' },
-    { id: 'customers', label: 'Customer Overview' },
-    { id: 'financial', label: 'Financial Overview' },
-    { id: 'operations', label: 'Operations Overview' },
-    { id: 'health', label: 'System Health' },
-  ];
+  const ready = !loading && !error && data != null;
+  const val = (n: number | undefined) => (ready ? fmtNum(Number(n) || 0) : loading ? '…' : '—');
+  const money = (n: number | undefined) => (ready ? fmt$(Number(n) || 0) : loading ? '…' : '—');
+  const pct = (n: number | undefined) => (ready ? `${Number(n || 0).toFixed(1)}%` : loading ? '…' : '—');
 
-  // 1. Executive Summary KPIs
-  const executiveKpis: ReportKpiItem[] = [
-    {
-      label: 'Total Customers',
-      value: data ? fmtNum(data.totalCustomers) : '0',
-      sub: `${data?.newCustomers ?? 0} new in period`,
-      icon: <Users size={18} />,
-      color: '#3b82f6',
-      delta: data?.newCustomers > 0 ? `+${data.newCustomers}` : undefined,
-      deltaUp: true,
-    },
-    {
-      label: 'Total Leads',
-      value: data ? fmtNum(data.totalLeads) : '0',
-      sub: `${data?.newLeads ?? 0} acquired in period`,
-      icon: <Target size={18} />,
-      color: '#06b6d4',
-    },
-    {
-      label: 'Total Opportunities',
-      value: data ? fmtNum(data.totalOpportunities) : '0',
-      sub: `${data?.openDeals ?? 0} active open deals`,
-      icon: <Layers size={18} />,
-      color: '#8b5cf6',
-    },
-    {
-      label: 'Pipeline Value',
-      value: data ? fmt$(data.pipelineValue) : '$0',
-      sub: 'Open active valuation',
-      icon: <TrendingUp size={18} />,
-      color: '#ec4899',
-    },
-    {
-      label: 'Won Deals Value',
-      value: data ? fmt$(data.wonRevenueTotal) : '$0',
-      sub: `${data?.wonDealsCount ?? 0} deals won (${data?.winRate ?? 0}% win rate)`,
-      icon: <Award size={18} />,
-      color: '#10b981',
-      deltaUp: true,
-    },
-    {
-      label: 'Total Contracts',
-      value: data ? fmtNum(data.totalContracts) : '0',
-      sub: `${data?.activeContracts ?? 0} active agreements`,
-      icon: <FileText size={18} />,
-      color: '#a855f7',
-    },
-    {
-      label: 'Total Invoiced',
-      value: data ? fmt$(data.totalInvoicedValue) : '$0',
-      sub: `${data?.totalInvoices ?? 0} total invoices billed`,
-      icon: <Receipt size={18} />,
-      color: '#f59e0b',
-    },
-    {
-      label: 'Payments Collected',
-      value: data ? fmt$(data.totalPaymentsCollected) : '$0',
-      sub: `${data?.collectionRate ?? 0}% collection rate`,
-      icon: <DollarSign size={18} />,
-      color: '#10b981',
-      deltaUp: true,
-    },
-    {
-      label: 'Outstanding Receivables',
-      value: data ? fmt$(data.outstandingReceivables) : '$0',
-      sub: `${data?.overdueCount ?? 0} invoices overdue`,
-      icon: <CreditCard size={18} />,
-      color: '#ef4444',
-    },
-    {
-      label: 'Lead Conversion Rate',
-      value: data ? `${Number(data.conversionRate || 0).toFixed(1)}%` : '0.0%',
-      sub: `${data?.convertedLeads ?? 0} converted leads`,
-      icon: <CheckCircle size={18} />,
-      color: '#14b8a6',
-    },
-    {
-      label: 'Total Activities',
-      value: data ? fmtNum(data.totalActivities) : '0',
-      sub: 'Calls, meetings, tasks & emails',
-      icon: <Activity size={18} />,
-      color: '#3b82f6',
-    },
-    {
-      label: 'Open / Overdue Tasks',
-      value: data ? `${data.openTasks ?? 0}` : '0',
-      sub: `${data?.overdueTasks ?? 0} overdue tasks`,
-      icon: <AlertTriangle size={18} />,
-      color: data?.overdueTasks > 0 ? '#ef4444' : '#10b981',
-    },
-  ];
+  // Trend and breakdown arrays from API with continuous smoothing
+  const rawRevenueTrend = data?.revenueTrend || [];
+  const revenueTrend = useMemo(() => buildContinuousTimeline(rawRevenueTrend), [rawRevenueTrend]);
+  
+  const pipeline = data?.pipelineDistribution || [];
+  const leadStatus = data?.leadStatusBreakdown || [];
+  const wonLostTrend = useMemo(() => buildContinuousTimeline(data?.wonLostTrend || []), [data?.wonLostTrend]);
+  const salesByOwner = data?.salesByOwner || [];
+  const customerGrowth = useMemo(() => buildContinuousTimeline(data?.customerGrowthTrend || []), [data?.customerGrowthTrend]);
+  const customersBySource = data?.customersBySource || [];
+  const invoicesByStatus = data?.invoicesByStatus || [];
+  const activitiesByType = data?.activitiesByType || [];
+  const contractsByStatus = data?.contractsByStatus || [];
+  const alerts = data?.alerts || [];
+  const recentAudit = data?.recentAuditLogs || [];
 
-  // 2. Sales KPIs
-  const salesKpis: ReportKpiItem[] = [
-    { label: 'Leads Created', value: data ? fmtNum(data.newLeads) : '0', sub: 'In selected period', icon: <Target size={18} />, color: '#06b6d4' },
-    { label: 'Qualified Leads', value: data ? fmtNum(data.qualifiedLeads) : '0', sub: 'Passed qualification', icon: <CheckCircle size={18} />, color: '#3b82f6' },
-    { label: 'Converted Leads', value: data ? fmtNum(data.convertedLeads) : '0', sub: `${data?.conversionRate ?? 0}% conversion rate`, icon: <CheckSquare size={18} />, color: '#10b981' },
-    { label: 'Pipeline Value', value: data ? fmt$(data.pipelineValue) : '$0', sub: `${data?.openDeals ?? 0} open deals`, icon: <TrendingUp size={18} />, color: '#8b5cf6' },
-    { label: 'Won Deal Value', value: data ? fmt$(data.wonRevenueTotal) : '$0', sub: `${data?.wonDealsCount ?? 0} won deals`, icon: <Award size={18} />, color: '#10b981' },
-    { label: 'Lost Deal Value', value: data ? fmt$(data.lostValueTotal) : '$0', sub: `${data?.lostDealsCount ?? 0} lost deals`, icon: <TrendingDown size={18} />, color: '#ef4444' },
-    { label: 'Average Deal Size', value: data ? fmt$(data.averageDealSize) : '$0', sub: 'Across all opportunities', icon: <DollarSign size={18} />, color: '#f59e0b' },
-    { label: 'Win Rate', value: data ? `${data.winRate}%` : '0%', sub: 'Deals closed won', icon: <Award size={18} />, color: '#ec4899' },
-  ];
+  const totalLeads = Number(data?.totalLeads) || 0;
+  const qualifiedLeads = Number(data?.qualifiedLeads) || 0;
+  const oppsCount = Number(data?.totalOpportunities) || 0;
+  const wonCount = Number(data?.wonDealsCount) || 0;
+  const activeContracts = Number(data?.activeContracts) || 0;
 
-  // 3. Customer KPIs
-  const customerKpis: ReportKpiItem[] = [
-    { label: 'Total Customers', value: data ? fmtNum(data.totalCustomers) : '0', sub: 'Registered accounts', icon: <Users size={18} />, color: '#3b82f6' },
-    { label: 'Total Organizations (B2B)', value: data ? fmtNum(data.totalCompanies) : '0', sub: `${data?.newCompanies ?? 0} new in period`, icon: <Building2 size={18} />, color: '#2563eb' },
-    { label: 'New Customers', value: data ? fmtNum(data.newCustomers) : '0', sub: 'Acquired in selected period', icon: <TrendingUp size={18} />, color: '#10b981' },
-    { label: 'Active Accounts', value: data ? fmtNum(data.activeCustomers) : '0', sub: 'Active engagement', icon: <CheckCircle size={18} />, color: '#6366f1' },
-    { label: 'Conversion Source', value: data?.customersBySource?.[0]?.source || 'Direct', sub: 'Top customer acquisition channel', icon: <Award size={18} />, color: '#f59e0b' },
-  ];
+  const maxFunnel = Math.max(totalLeads, oppsCount, wonCount, activeContracts, 1);
 
-  // 4. Financial KPIs
-  const financialKpis: ReportKpiItem[] = [
-    { label: 'Total Contract Value', value: data ? fmt$(data.totalContractValue) : '$0', sub: `${data?.totalContracts ?? 0} total contracts`, icon: <FileText size={18} />, color: '#a855f7' },
-    { label: 'Total Invoiced', value: data ? fmt$(data.totalInvoicedValue) : '$0', sub: `${data?.totalInvoices ?? 0} invoices issued`, icon: <Receipt size={18} />, color: '#3b82f6' },
-    { label: 'Total Collected', value: data ? fmt$(data.totalPaymentsCollected) : '$0', sub: 'Realized cash revenue', icon: <DollarSign size={18} />, color: '#10b981' },
-    { label: 'Outstanding Balance', value: data ? fmt$(data.outstandingReceivables) : '$0', sub: 'Uncollected receivables', icon: <CreditCard size={18} />, color: '#f59e0b' },
-    { label: 'Overdue Receivables', value: data ? fmt$(data.overdueValue) : '$0', sub: `${data?.overdueCount ?? 0} past due invoices`, icon: <AlertTriangle size={18} />, color: '#ef4444' },
-    { label: 'Collection Rate', value: data ? `${data.collectionRate}%` : '0%', sub: 'Collected / Invoiced', icon: <CheckCircle size={18} />, color: '#14b8a6' },
-  ];
+  const funnelSteps = ready
+    ? [
+        {
+          id: 'leads',
+          label: '1. Leads Inflow',
+          count: totalLeads,
+          metric: `${data?.newLeads || 0} new`,
+          color: '#06b6d4',
+          icon: <Target size={13} color="#06b6d4" />,
+        },
+        {
+          id: 'qual',
+          label: '2. Qualified',
+          count: qualifiedLeads,
+          metric: `${Number(data?.conversionRate || 0).toFixed(1)}% conv`,
+          color: '#3b82f6',
+          icon: <UserCheck size={13} color="#3b82f6" />,
+        },
+        {
+          id: 'opps',
+          label: '3. Active Deals',
+          count: oppsCount,
+          metric: fmt$(data?.pipelineValue || 0),
+          color: '#8b5cf6',
+          icon: <Briefcase size={13} color="#8b5cf6" />,
+        },
+        {
+          id: 'won',
+          label: '4. Closed Won',
+          count: wonCount,
+          metric: fmt$(data?.wonRevenueTotal || 0),
+          color: '#10b981',
+          icon: <CheckCircle2 size={13} color="#10b981" />,
+        },
+        {
+          id: 'contracts',
+          label: '5. Contracts',
+          count: activeContracts,
+          metric: `${activeContracts} active`,
+          color: '#f59e0b',
+          icon: <FileText size={13} color="#f59e0b" />,
+        },
+      ]
+    : [];
 
-  // 5. Operations KPIs
-  const operationsKpis: ReportKpiItem[] = [
-    { label: 'Total Activities', value: data ? fmtNum(data.totalActivities) : '0', sub: 'All logged touchpoints', icon: <Activity size={18} />, color: '#3b82f6' },
-    { label: 'Total Tasks', value: data ? fmtNum(data.totalTasks) : '0', sub: 'Workflow items', icon: <CheckSquare size={18} />, color: '#6366f1' },
-    { label: 'Completed Tasks', value: data ? fmtNum(data.completedTasks) : '0', sub: 'Finished items', icon: <CheckCircle size={18} />, color: '#10b981' },
-    { label: 'Open Tasks', value: data ? fmtNum(data.openTasks) : '0', sub: 'In progress or pending', icon: <Clock size={18} />, color: '#f59e0b' },
-    { label: 'Overdue Tasks', value: data ? fmtNum(data.overdueTasks) : '0', sub: 'Passed due date', icon: <AlertTriangle size={18} />, color: '#ef4444' },
-    { label: 'Due Today', value: data ? fmtNum(data.dueTodayTasks) : '0', sub: 'Require urgent action', icon: <Clock size={18} />, color: '#06b6d4' },
-  ];
-
-  // 6. System Health KPIs & Entity Records
-  const totalEntityRecords = (data?.totalCustomers ?? 0) +
-    (data?.totalCompanies ?? 0) +
-    (data?.totalOpportunities ?? 0) +
-    (data?.totalContracts ?? 0) +
-    (data?.totalInvoices ?? 0) +
-    (data?.totalTasks ?? 0) +
-    (data?.totalActivities ?? 0);
-
-  const healthKpis: ReportKpiItem[] = [
-    { label: 'Active User Accounts', value: data ? fmtNum(data.activeUsersCount) : '0', sub: 'Authentication identities', icon: <Users size={18} />, color: '#10b981' },
-    { label: 'Audit Trail Journal', value: data ? fmtNum(data.totalAuditLogsCount) : '0', sub: 'Immutable logged operations', icon: <ShieldCheck size={18} />, color: '#6366f1' },
-    { label: 'Entity Records Stored', value: data ? fmtNum(totalEntityRecords) : '0', sub: 'Across 7 active CRM modules', icon: <Database size={18} />, color: '#3b82f6' },
-    { label: 'Security & Auth Guard', value: '100% Protected', sub: 'JWT & RBAC session active', icon: <Lock size={18} />, color: '#10b981' },
-  ];
-
-  // Table Columns
-  const pipelineColumns: ColumnDef<any>[] = [
-    { key: 'stage', header: 'Pipeline Stage', width: '40%' },
-    { key: 'count', header: 'Open Deals', align: 'center', render: (r) => <span className="clean-badge clean-badge-primary">{r.count}</span> },
-    { key: 'value', header: 'Stage Value', align: 'right', render: (r) => <strong>{fmt$(r.value)}</strong> },
-  ];
-
-  const sourceColumns: ColumnDef<any>[] = [
-    { key: 'source', header: 'Acquisition Source', width: '40%' },
-    { key: 'count', header: 'Customers Count', align: 'center', render: (r) => <span className="clean-badge clean-badge-info">{r.count}</span> },
-    { key: 'percentage', header: 'Share', align: 'right', render: (r) => <strong>{r.percentage}%</strong> },
-  ];
-
-  const auditColumns: ColumnDef<any>[] = [
-    {
-      key: 'entity',
-      header: 'Module & Record',
-      width: '20%',
-      render: (r) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="clean-badge clean-badge-secondary" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
-            {r.entity}
-          </span>
-          {r.AuditLogId && <span style={{ fontSize: '0.72rem', opacity: 0.6 }}>#{r.AuditLogId}</span>}
-        </div>
-      )
-    },
-    {
-      key: 'action',
-      header: 'Action',
-      width: '14%',
-      render: (r) => {
-        const isDelete = (r.action || '').toLowerCase().includes('delete');
-        const isCreate = (r.action || '').toLowerCase().includes('create') || (r.action || '').toLowerCase().includes('insert');
-        const badgeBg = isDelete ? 'rgba(239, 68, 68, 0.12)' : isCreate ? 'rgba(16, 185, 129, 0.12)' : 'rgba(99, 102, 241, 0.12)';
-        const badgeColor = isDelete ? '#ef4444' : isCreate ? '#10b981' : '#6366f1';
-        return (
-          <span
-            className="clean-badge"
-            style={{ background: badgeBg, color: badgeColor, border: `1px solid ${badgeColor}33`, fontSize: '0.68rem', fontWeight: 700 }}
-          >
-            {r.action}
-          </span>
-        );
-      }
-    },
-    {
-      key: 'user',
-      header: 'Actor / User',
-      width: '18%',
-      render: (r) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#6366f1', color: '#fff', fontSize: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {(r.user || 'S')[0].toUpperCase()}
-          </div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{r.user}</span>
-        </div>
-      )
-    },
-    {
-      key: 'change',
-      header: 'Field Diff / Payload',
-      width: '32%',
-      render: (r) => (
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-          {r.field ? (
-            <span>
-              <strong style={{ color: '#6366f1' }}>{r.field}:</strong>{' '}
-              <span style={{ textDecoration: 'line-through', color: '#ef4444', opacity: 0.75 }}>{r.oldValue ?? 'ø'}</span>
-              {' → '}
-              <span style={{ color: '#10b981', fontWeight: 600 }}>{r.newValue ?? 'ø'}</span>
-            </span>
-          ) : (
-            <span>{r.oldValue || r.newValue || 'Operation logged'}</span>
-          )}
-        </div>
-      )
-    },
-    {
-      key: 'time',
-      header: 'Timestamp',
-      width: '16%',
-      align: 'right',
-      render: (r) => <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', month: 'short', day: 'numeric' })}</span>
-    },
-  ];
-
-  // PDF Export
   const handleExportPDF = () => {
     if (!data) return;
-    const kpisToExport = activeTab === 'executive' ? executiveKpis : activeTab === 'sales' ? salesKpis : activeTab === 'financial' ? financialKpis : customerKpis;
     exportExecutivePDF(
-      data.pipelineDistribution || [],
-      `CRM Master System Report (${activeTab.toUpperCase()})`,
-      `Performance Report Period: ${startDate} to ${endDate}`,
-      kpisToExport.map(k => ({ label: k.label, value: k.value, sub: k.sub })),
+      pipeline,
+      'Executive CRM Overview Report',
+      `Period: ${startDate} to ${endDate} (${scope === 'team' ? 'Entire Organization' : 'Personal Scope'})`,
       [
-        `Total Customers: ${fmtNum(data.totalCustomers || 0)} (${data.newCustomers || 0} new in period).`,
-        `Pipeline Value: ${fmt$(data.pipelineValue || 0)} across ${data.openDeals || 0} active open deals.`,
-        `Realized Revenue: ${fmt$(data.totalPaymentsCollected || 0)} cash collected with ${fmt$(data.outstandingReceivables || 0)} outstanding balance.`
+        { label: 'Net Collected', value: fmt$(data.totalPaymentsCollected || 0) },
+        { label: 'Active Pipeline', value: fmt$(data.pipelineValue || 0) },
+        { label: 'Total Clients', value: fmtNum(data.totalCustomers || 0) },
+        { label: 'Deal Win Rate', value: `${data.winRate || 0}%` },
       ],
-      `crm_master_system_report_${activeTab}`
+      [
+        `Total collected revenue is ${fmt$(data.totalPaymentsCollected || 0)} with ${fmt$(data.outstandingReceivables || 0)} outstanding.`,
+        `${fmtNum(data.openDeals || 0)} open deals active in pipeline totaling ${fmt$(data.pipelineValue || 0)}.`,
+        `${fmtNum(data.newLeads || 0)} new leads captured; period conversion rate is ${Number(data.periodConversionRate || 0).toFixed(1)}%.`,
+      ],
+      'executive_report_overview'
     );
   };
 
-  // CSV Export
   const handleExportCSV = () => {
     if (!data) return;
-    const exportData = (data.pipelineDistribution || []).map((s: any) => ({
-      'Pipeline Stage': s.stage,
-      'Open Deals Count': s.count,
-      'Total Value ($)': s.value
-    }));
-    exportCSV(exportData, `system_overview_report_${new Date().toISOString().split('T')[0]}`);
+    exportCSV(
+      (pipeline.length ? pipeline : [{ stage: 'No pipeline stages', count: 0, value: 0 }]).map((s: any) => ({
+        Stage: s.stage,
+        Deals: s.count,
+        Value: s.value,
+      })),
+      `executive_overview_${startDate}_${endDate}`
+    );
   };
+
+  const chartTooltipMoney = <CustomChartTooltip formatter={(v: any) => fmt$(Number(v))} />;
+  const chartTooltipNum = <CustomChartTooltip />;
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SECTION COMPONENTS (Full Data Density & Zero Empty Boxes)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  const renderSectionExecutive = () => (
+    <section className="exec-section exec-tab-view">
+      {/* Top Telemetry Strip */}
+      <div className="exec-telemetry-bar">
+        <div className="exec-telemetry-item highlight-green">
+          <DollarSign size={15} color="#10b981" />
+          <span className="telemetry-label">Collected:</span>
+          <strong>{money(data?.totalPaymentsCollected)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>({money(data?.periodCollectedValue)} period)</span>
+        </div>
+        <div className="exec-telemetry-item highlight-blue">
+          <Briefcase size={15} color="#6366f1" />
+          <span className="telemetry-label">Pipeline:</span>
+          <strong>{money(data?.pipelineValue)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>({val(data?.openDeals)} deals)</span>
+        </div>
+        <div className="exec-telemetry-item">
+          <Users size={15} color="#06b6d4" />
+          <span className="telemetry-label">Clients:</span>
+          <strong>{val(data?.totalCustomers)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>({val(data?.newCustomers)} new)</span>
+        </div>
+        <div className="exec-telemetry-item">
+          <Target size={15} color="#3b82f6" />
+          <span className="telemetry-label">Leads:</span>
+          <strong>{val(data?.totalLeads)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>({pct(data?.conversionRate)} conv)</span>
+        </div>
+        <div className="exec-telemetry-item">
+          <FileText size={15} color="#f59e0b" />
+          <span className="telemetry-label">Contracts:</span>
+          <strong>{val(data?.activeContracts)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>of {val(data?.totalContracts)}</span>
+        </div>
+        <div className="exec-telemetry-item highlight-amber">
+          <Receipt size={15} color="#f59e0b" />
+          <span className="telemetry-label">Outstanding:</span>
+          <strong>{money(data?.outstandingReceivables)}</strong>
+          <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>({val(data?.overdueCount)} overdue)</span>
+        </div>
+        <div className="exec-telemetry-item">
+          <Activity size={15} color="#8b5cf6" />
+          <span className="telemetry-label">Tasks:</span>
+          <strong>{val(data?.openTasks)}</strong>
+          <span style={{ fontSize: '0.72rem', color: Number(data?.overdueTasks) > 0 ? '#ef4444' : 'inherit' }}>
+            ({val(data?.overdueTasks)} overdue)
+          </span>
+        </div>
+      </div>
+
+      {/* Horizontal Stepper Conversion Funnel */}
+      {ready && (
+        <div className="exec-horizontal-funnel">
+          {funnelSteps.map((step) => {
+            const pctWidth = Math.max(10, Math.min(100, (step.count / maxFunnel) * 100));
+            return (
+              <div key={step.id} className="exec-funnel-col">
+                <div className="exec-funnel-col-head">
+                  <div className="exec-funnel-col-title">
+                    {step.icon}
+                    <span>{step.label}</span>
+                  </div>
+                  <span className="exec-funnel-col-sub">{step.metric}</span>
+                </div>
+                <div className="exec-funnel-col-body">
+                  <span className="exec-funnel-col-val">{fmtNum(step.count)}</span>
+                </div>
+                <div className="exec-funnel-bar-bg">
+                  <div
+                    className="exec-funnel-bar-fill"
+                    style={{
+                      width: `${pctWidth}%`,
+                      background: `linear-gradient(90deg, ${step.color}90, ${step.color})`,
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Side-by-Side Visuals: Invoicing Velocity & Pipeline Stages */}
+      <div className="exec-bento-grid">
+        {/* Left: Invoicing Velocity vs Cash Realization */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Invoicing Velocity vs Cash Realization</h3>
+                <p className="exec-panel-sub">Volume of issued invoices compared against collected cash</p>
+              </div>
+              <div className="exec-stat-capsules">
+                <span className="exec-stat-capsule" style={{ borderColor: 'rgba(16, 185, 129, 0.35)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                  Collected: <strong style={{ color: '#10b981' }}>{money(data?.totalPaymentsCollected)}</strong>
+                </span>
+                <span className="exec-stat-capsule" style={{ borderColor: 'rgba(99, 102, 241, 0.35)' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1' }} />
+                  Invoiced: <strong style={{ color: '#6366f1' }}>{money(data?.totalInvoicedValue)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <ChartFrame loading={loading} empty={ready && !hasSignal(revenueTrend, ['invoiced', 'collected'])} emptyMessage="No billing or payment activity in this date range" heightClass="exec-chart-container">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="execInvGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="execColGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                  <XAxis dataKey="month" tickFormatter={formatBucket} stroke="#94a3b8" tickLine={false} style={{ fontSize: 10 }} />
+                  <YAxis stroke="#94a3b8" tickLine={false} width={48} tickFormatter={compactMoney} style={{ fontSize: 10 }} />
+                  <Tooltip content={chartTooltipMoney} />
+                  <Legend wrapperStyle={{ paddingTop: 4, fontSize: 10 }} />
+                  <Area type="monotone" dataKey="invoiced" name="Invoiced" stroke="#6366f1" strokeWidth={2.5} fill="url(#execInvGrad)" />
+                  <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={2.5} fill="url(#execColGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          </div>
+        </div>
+
+        {/* Right: Pipeline Stages */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Active Pipeline by Stage</h3>
+                <p className="exec-panel-sub">Monetary valuation and volume across stages</p>
+              </div>
+              <span className="exec-panel-badge">{val(data?.openDeals)} Deals ({money(data?.pipelineValue)})</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !pipeline.some((s: any) => s.value > 0 || s.count > 0)} emptyMessage="No active deals in pipeline" heightClass="exec-chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pipeline} margin={{ top: 8, right: 8, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                    <XAxis dataKey="stage" stroke="#94a3b8" tickLine={false} angle={-15} textAnchor="end" interval={0} style={{ fontSize: 9 }} />
+                    <YAxis stroke="#94a3b8" tickLine={false} width={45} tickFormatter={compactMoney} style={{ fontSize: 10 }} />
+                    <Tooltip content={chartTooltipMoney} />
+                    <Bar dataKey="value" name="Stage Value" fill="#8b5cf6" radius={[4, 4, 0, 0]}>
+                      {pipeline.map((_: any, idx: number) => (
+                        <Cell key={`pipe-cell-${idx}`} fill={PALETTE[idx % PALETTE.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Stage Breakdown Data Rows */}
+              <div className="exec-breakdown-list">
+                {pipeline.slice(0, 5).map((stg: any, idx: number) => (
+                  <div key={stg.stage || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{stg.stage}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{stg.count}</span>
+                      <span className="exec-breakdown-val">{fmt$(stg.value)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Executive Takeaways Highlights Ribbon */}
+      {ready && (
+        <div className="exec-highlights-strip">
+          <div className="exec-highlight-item">
+            <div className="exec-highlight-icon">
+              <TrendingUp size={16} />
+            </div>
+            <div className="exec-highlight-text">
+              <strong>Revenue Generation:</strong> Collected {money(data?.totalPaymentsCollected)} lifetime with {money(data?.periodCollectedValue)} collected in this reporting period.
+            </div>
+          </div>
+          <div className="exec-highlight-item">
+            <div className="exec-highlight-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+              <CheckCircle2 size={16} />
+            </div>
+            <div className="exec-highlight-text">
+              <strong>Pipeline Health:</strong> {val(data?.openDeals)} active deals worth {money(data?.pipelineValue)} are currently advancing toward closing.
+            </div>
+          </div>
+          <div className="exec-highlight-item">
+            <div className="exec-highlight-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
+              <AlertCircle size={16} />
+            </div>
+            <div className="exec-highlight-text">
+              <strong>Operational Workload:</strong> {val(data?.openTasks)} open tasks pending across teams, with {val(data?.overdueTasks)} items flagged overdue.
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+
+  const renderSectionSales = () => (
+    <section className="exec-section exec-tab-view">
+      <div className="exec-section-head">
+        <div className="exec-section-title-wrap">
+          <h2 className="exec-section-title">Sales &amp; Pipeline Performance</h2>
+          <p className="exec-section-sub">Lead conversion, opportunity stage distribution, win/loss trends, and sales metrics.</p>
+        </div>
+        <div className="exec-stat-capsules">
+          <span className="exec-stat-capsule">Lead Conv: <strong style={{ color: '#06b6d4' }}>{pct(data?.conversionRate)}</strong></span>
+          <span className="exec-stat-capsule">Win Rate: <strong style={{ color: '#10b981' }}>{pct(data?.winRate)}</strong></span>
+          <span className="exec-stat-capsule">Avg Deal: <strong>{money(data?.averageDealSize)}</strong></span>
+          <span className="exec-stat-capsule">Won Total: <strong style={{ color: '#10b981' }}>{money(data?.wonRevenueTotal)}</strong></span>
+        </div>
+      </div>
+
+      <div className="exec-bento-grid">
+        {/* Sales Execution & Metrics */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Commercial Execution Matrix</h3>
+                <p className="exec-panel-sub">Performance velocity and pipeline generation</p>
+              </div>
+              <span className="exec-panel-badge"><Award size={13} /> Performance</span>
+            </div>
+
+            {loading ? (
+              <div className="exec-chart-container exec-empty-state">
+                <div className="exec-shimmer" style={{ width: '100%', height: 160 }} />
+              </div>
+            ) : salesByOwner && salesByOwner.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="exec-table-compact">
+                  <thead>
+                    <tr>
+                      <th>Sales Rep</th>
+                      <th style={{ textAlign: 'center' }}>Won Deals</th>
+                      <th style={{ textAlign: 'right' }}>Won Revenue</th>
+                      <th style={{ textAlign: 'right' }}>Open Pipeline</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salesByOwner.map((rep: any, idx: number) => (
+                      <tr key={rep.name || idx}>
+                        <td style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                          <span style={{
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: PALETTE[idx % PALETTE.length],
+                            color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.62rem', fontWeight: 800
+                          }}>
+                            {idx + 1}
+                          </span>
+                          {rep.name}
+                        </td>
+                        <td style={{ textAlign: 'center', color: '#10b981', fontWeight: 700 }}>{rep.wonDeals}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#10b981' }}>{fmt$(rep.wonValue)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{fmt$(rep.pipelineValue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="exec-breakdown-list">
+                <div className="exec-breakdown-row">
+                  <div className="exec-breakdown-left">
+                    <Briefcase size={14} color="#6366f1" />
+                    <span className="exec-breakdown-label">Active Commercial Pipeline</span>
+                  </div>
+                  <div className="exec-breakdown-right">
+                    <span className="exec-breakdown-count">{val(data?.openDeals)} deals</span>
+                    <span className="exec-breakdown-val">{money(data?.pipelineValue)}</span>
+                  </div>
+                </div>
+                <div className="exec-breakdown-row">
+                  <div className="exec-breakdown-left">
+                    <CheckCircle2 size={14} color="#10b981" />
+                    <span className="exec-breakdown-label">Realized Closed-Won Deals</span>
+                  </div>
+                  <div className="exec-breakdown-right">
+                    <span className="exec-breakdown-count">{val(data?.wonDealsCount)} won</span>
+                    <span className="exec-breakdown-val" style={{ color: '#10b981', fontWeight: 700 }}>{money(data?.wonRevenueTotal)}</span>
+                  </div>
+                </div>
+                <div className="exec-breakdown-row">
+                  <div className="exec-breakdown-left">
+                    <Target size={14} color="#06b6d4" />
+                    <span className="exec-breakdown-label">Lead Qualification Velocity</span>
+                  </div>
+                  <div className="exec-breakdown-right">
+                    <span className="exec-breakdown-count">{val(data?.qualifiedLeads)} / {val(data?.totalLeads)}</span>
+                    <span className="exec-breakdown-val">{pct(data?.conversionRate)}</span>
+                  </div>
+                </div>
+                <div className="exec-breakdown-row">
+                  <div className="exec-breakdown-left">
+                    <DollarSign size={14} color="#f59e0b" />
+                    <span className="exec-breakdown-label">Average Deal Realization</span>
+                  </div>
+                  <div className="exec-breakdown-right">
+                    <span className="exec-breakdown-count">{money(data?.averageDealSize)}</span>
+                    <span className="exec-breakdown-val">{pct(data?.winRate)} win</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Lead Status Breakdown with Split Layout */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Lead Qualification Status</h3>
+                <p className="exec-panel-sub">Breakdown of leads by qualification stage</p>
+              </div>
+              <span className="exec-panel-badge">{val(data?.totalLeads)} Total</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !hasSignal(leadStatus, ['count'])} emptyMessage="No leads recorded" heightClass="exec-chart-container-sm">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={leadStatus}
+                      dataKey="count"
+                      nameKey="status"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={32}
+                      outerRadius={52}
+                      paddingAngle={3}
+                    >
+                      {leadStatus.map((entry: any, index: number) => (
+                        <Cell key={`lead-pie-${index}`} fill={STATUS_COLORS[entry.status] || PALETTE[index % PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={chartTooltipNum} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Lead Status Data Rows */}
+              <div className="exec-breakdown-list">
+                {leadStatus.map((entry: any, idx: number) => (
+                  <div key={entry.status || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: STATUS_COLORS[entry.status] || PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{entry.status}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{entry.count}</span>
+                      <span className="exec-breakdown-val">
+                        {totalLeads > 0 ? `${((entry.count / totalLeads) * 100).toFixed(0)}%` : '0%'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Won vs Lost Trend */}
+        <div className="exec-col-12">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Closed Deal Realization: Won vs Lost</h3>
+                <p className="exec-panel-sub">Comparison of won revenue against lost deals over time</p>
+              </div>
+              <span className="exec-panel-badge">{pct(data?.periodWinRate)} Win Rate</span>
+            </div>
+
+            <ChartFrame loading={loading} empty={ready && !hasSignal(wonLostTrend, ['won', 'lost'])} emptyMessage="No closed deals in this date range">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={wonLostTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                  <XAxis dataKey="month" tickFormatter={formatBucket} stroke="#94a3b8" tickLine={false} style={{ fontSize: 11 }} />
+                  <YAxis stroke="#94a3b8" tickLine={false} width={45} tickFormatter={compactMoney} style={{ fontSize: 11 }} />
+                  <Tooltip content={chartTooltipMoney} />
+                  <Legend wrapperStyle={{ paddingTop: 6, fontSize: 11 }} />
+                  <Bar dataKey="won" name="Won Value" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="lost" name="Lost Value" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderSectionCustomers = () => (
+    <section className="exec-section exec-tab-view">
+      <div className="exec-section-head">
+        <div className="exec-section-title-wrap">
+          <h2 className="exec-section-title">Customer &amp; Account Portfolio</h2>
+          <p className="exec-section-sub">Client portfolio growth, acquisition source channels, and account engagement status.</p>
+        </div>
+        <div className="exec-stat-capsules">
+          <span className="exec-stat-capsule">Total Clients: <strong style={{ color: '#6366f1' }}>{val(data?.totalCustomers)}</strong></span>
+          <span className="exec-stat-capsule">New in Period: <strong style={{ color: '#10b981' }}>{val(data?.newCustomers)}</strong></span>
+          <span className="exec-stat-capsule">Engaged: <strong style={{ color: '#3b82f6' }}>{val(data?.activeCustomers)}</strong></span>
+          <span className="exec-stat-capsule">Companies: <strong>{val(data?.totalCompanies)}</strong></span>
+        </div>
+      </div>
+
+      <div className="exec-bento-grid">
+        {/* Customer Growth Trend */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Customer Acquisition Velocity</h3>
+                <p className="exec-panel-sub">New customer accounts onboarded across timeline</p>
+              </div>
+              <span className="exec-panel-badge">{val(data?.newCustomers)} Onboarded</span>
+            </div>
+
+            <ChartFrame loading={loading} empty={ready && !hasSignal(customerGrowth, ['count'])} emptyMessage="No new customer onboarding in this date range">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={customerGrowth} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="custGrowthGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                  <XAxis dataKey="month" tickFormatter={formatBucket} stroke="#94a3b8" tickLine={false} style={{ fontSize: 11 }} />
+                  <YAxis stroke="#94a3b8" tickLine={false} width={35} style={{ fontSize: 11 }} />
+                  <Tooltip content={chartTooltipNum} />
+                  <Area type="monotone" dataKey="count" name="New Clients" stroke="#6366f1" strokeWidth={2.5} fill="url(#custGrowthGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          </div>
+        </div>
+
+        {/* Customer Source Distribution with Split Layout */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Acquisition Channels Attribution</h3>
+                <p className="exec-panel-sub">Origin sources of registered customer accounts</p>
+              </div>
+              <span className="exec-panel-badge">{customersBySource.length} Channels</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !hasSignal(customersBySource, ['count'])} emptyMessage="No customer channel data">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={customersBySource}
+                      dataKey="count"
+                      nameKey="source"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={42}
+                      outerRadius={68}
+                      paddingAngle={3}
+                    >
+                      {customersBySource.map((_: any, index: number) => (
+                        <Cell key={`cust-src-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={chartTooltipNum} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Source Breakdown Data Rows */}
+              <div className="exec-breakdown-list">
+                {customersBySource.map((src: any, idx: number) => (
+                  <div key={src.source || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{src.source}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{src.count} clients</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderSectionFinancial = () => (
+    <section className="exec-section exec-tab-view">
+      <div className="exec-section-head">
+        <div className="exec-section-title-wrap">
+          <h2 className="exec-section-title">Financial &amp; Billing Performance</h2>
+          <p className="exec-section-sub">Cashflow realization, invoice status portfolio, outstanding receivables, and collection health.</p>
+        </div>
+        <div className="exec-stat-capsules">
+          <span className="exec-stat-capsule">Collected: <strong style={{ color: '#10b981' }}>{money(data?.totalPaymentsCollected)}</strong></span>
+          <span className="exec-stat-capsule">Invoiced: <strong style={{ color: '#6366f1' }}>{money(data?.totalInvoicedValue)}</strong></span>
+          <span className="exec-stat-capsule">Outstanding: <strong style={{ color: '#f59e0b' }}>{money(data?.outstandingReceivables)}</strong></span>
+          <span className="exec-stat-capsule">Overdue: <strong style={{ color: '#ef4444' }}>{money(data?.overdueValue)}</strong></span>
+        </div>
+      </div>
+
+      <div className="exec-bento-grid">
+        {/* Invoicing vs Payments Bar Chart */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Invoiced vs Payment Receipts Timeline</h3>
+                <p className="exec-panel-sub">Periodic billing issued vs realized customer cash payments</p>
+              </div>
+              <span className="exec-panel-badge">{money(data?.periodCollectedValue)} Collected</span>
+            </div>
+
+            <ChartFrame loading={loading} empty={ready && !hasSignal(revenueTrend, ['invoiced', 'collected'])} emptyMessage="No financial transaction records in this range">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                  <XAxis dataKey="month" tickFormatter={formatBucket} stroke="#94a3b8" tickLine={false} style={{ fontSize: 11 }} />
+                  <YAxis stroke="#94a3b8" tickLine={false} width={45} tickFormatter={compactMoney} style={{ fontSize: 11 }} />
+                  <Tooltip content={chartTooltipMoney} />
+                  <Legend wrapperStyle={{ paddingTop: 6, fontSize: 11 }} />
+                  <Bar dataKey="invoiced" name="Invoices Issued" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="collected" name="Payments Realized" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartFrame>
+          </div>
+        </div>
+
+        {/* Invoice Status Distribution with Split Layout */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Invoice Portfolio Status</h3>
+                <p className="exec-panel-sub">Volume breakdown by payment &amp; settlement status</p>
+              </div>
+              <span className="exec-panel-badge">{val(data?.totalInvoices)} Invoices</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !hasSignal(invoicesByStatus, ['count'])} emptyMessage="No invoice status records">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={invoicesByStatus}
+                      dataKey="count"
+                      nameKey="status"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={42}
+                      outerRadius={68}
+                      paddingAngle={3}
+                    >
+                      {invoicesByStatus.map((entry: any, index: number) => (
+                        <Cell key={`inv-stat-${index}`} fill={STATUS_COLORS[entry.status] || PALETTE[index % PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={chartTooltipNum} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Invoice Status Data Rows */}
+              <div className="exec-breakdown-list">
+                {invoicesByStatus.map((entry: any, idx: number) => (
+                  <div key={entry.status || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: STATUS_COLORS[entry.status] || PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{entry.status}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{entry.count} invoices</span>
+                      <span className="exec-breakdown-val">{fmt$(entry.value)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderSectionOperations = () => (
+    <section className="exec-section exec-tab-view">
+      <div className="exec-section-head">
+        <div className="exec-section-title-wrap">
+          <h2 className="exec-section-title">Operational &amp; Execution Overview</h2>
+          <p className="exec-section-sub">Task completion rates, customer interaction logging, contract lifecycles, and pending deliverables.</p>
+        </div>
+        <div className="exec-stat-capsules">
+          <span className="exec-stat-capsule">Activities: <strong style={{ color: '#3b82f6' }}>{val(data?.totalActivities)}</strong></span>
+          <span className="exec-stat-capsule">Open Tasks: <strong>{val(data?.openTasks)}</strong></span>
+          <span className="exec-stat-capsule">Overdue: <strong style={{ color: Number(data?.overdueTasks) > 0 ? '#ef4444' : 'inherit' }}>{val(data?.overdueTasks)}</strong></span>
+          <span className="exec-stat-capsule">Contracts: <strong style={{ color: '#10b981' }}>{val(data?.activeContracts)}</strong></span>
+        </div>
+      </div>
+
+      <div className="exec-bento-grid">
+        {/* Activity Breakdown with Split Layout */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Customer Touchpoints by Channel</h3>
+                <p className="exec-panel-sub">Volume of calls, meetings, emails, and follow-ups executed</p>
+              </div>
+              <span className="exec-panel-badge">{val(data?.totalActivities)} Total</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !hasSignal(activitiesByType, ['count'])} emptyMessage="No activities recorded">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activitiesByType} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.15)" />
+                    <XAxis dataKey="type" stroke="#94a3b8" tickLine={false} style={{ fontSize: 10 }} />
+                    <YAxis stroke="#94a3b8" tickLine={false} width={30} style={{ fontSize: 10 }} />
+                    <Tooltip content={chartTooltipNum} />
+                    <Bar dataKey="count" name="Logged Activities" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                      {activitiesByType.map((_: any, idx: number) => (
+                        <Cell key={`act-cell-${idx}`} fill={PALETTE[idx % PALETTE.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Activity Data Rows */}
+              <div className="exec-breakdown-list">
+                {activitiesByType.map((act: any, idx: number) => (
+                  <div key={act.type || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{act.type}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{act.count} logged</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Contract Status Distribution with Split Layout */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Contract Lifecycle Distribution</h3>
+                <p className="exec-panel-sub">Current status of customer agreements &amp; legal contracts</p>
+              </div>
+              <span className="exec-panel-badge">{money(data?.totalContractValue)} Total Value</span>
+            </div>
+
+            <div className="exec-split-layout">
+              <ChartFrame loading={loading} empty={ready && !hasSignal(contractsByStatus, ['count'])} emptyMessage="No contracts recorded">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={contractsByStatus}
+                      dataKey="count"
+                      nameKey="status"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={42}
+                      outerRadius={68}
+                      paddingAngle={3}
+                    >
+                      {contractsByStatus.map((entry: any, index: number) => (
+                        <Cell key={`contract-pie-${index}`} fill={STATUS_COLORS[entry.status] || PALETTE[index % PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={chartTooltipNum} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+
+              {/* Contract Breakdown Data Rows */}
+              <div className="exec-breakdown-list">
+                {contractsByStatus.map((entry: any, idx: number) => (
+                  <div key={entry.status || idx} className="exec-breakdown-row">
+                    <div className="exec-breakdown-left">
+                      <span className="exec-breakdown-dot" style={{ background: STATUS_COLORS[entry.status] || PALETTE[idx % PALETTE.length] }} />
+                      <span className="exec-breakdown-label">{entry.status}</span>
+                    </div>
+                    <div className="exec-breakdown-right">
+                      <span className="exec-breakdown-count">{entry.count} contracts</span>
+                      <span className="exec-breakdown-val">{fmt$(entry.value)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderSectionHealth = () => (
+    <section className="exec-section exec-tab-view">
+      <div className="exec-section-head">
+        <div className="exec-section-title-wrap">
+          <h2 className="exec-section-title">System Health, Security &amp; Audit Overview</h2>
+          <p className="exec-section-sub">Authentication events, active user sessions, audit trail monitoring, and operational alerts.</p>
+        </div>
+        <div className="exec-stat-capsules">
+          <span className="exec-stat-capsule">Active Users: <strong style={{ color: '#10b981' }}>{val(data?.activeUsersCount)}</strong></span>
+          <span className="exec-stat-capsule">Active Sessions: <strong style={{ color: '#6366f1' }}>{val(data?.activeSessionsCount)}</strong></span>
+          <span className="exec-stat-capsule">Audit Events: <strong>{val(data?.auditInPeriodCount)}</strong></span>
+          <span className="exec-stat-capsule">Auth/Security: <strong style={{ color: '#3b82f6' }}>{val(data?.authEventCount)}</strong></span>
+        </div>
+      </div>
+
+      <div className="exec-bento-grid">
+        {/* Left: System Health, Security & Diagnostic Monitor */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">System Diagnostics &amp; Health Console</h3>
+                <p className="exec-panel-sub">Real-time status of security, services, and operational health</p>
+              </div>
+              <span className="exec-panel-badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.25)' }}>
+                ● All Systems Healthy
+              </span>
+            </div>
+
+            {/* Diagnostic Metrics Matrix */}
+            <div className="exec-breakdown-list">
+              <div className="exec-breakdown-row">
+                <div className="exec-breakdown-left">
+                  <Users size={14} color="#10b981" />
+                  <span className="exec-breakdown-label">Active User Accounts</span>
+                </div>
+                <div className="exec-breakdown-right">
+                  <span className="exec-breakdown-count">{val(data?.activeUsersCount)} active</span>
+                  <span className="exec-breakdown-val">Admin, Manager &amp; Sales</span>
+                </div>
+              </div>
+              <div className="exec-breakdown-row">
+                <div className="exec-breakdown-left">
+                  <Lock size={14} color="#6366f1" />
+                  <span className="exec-breakdown-label">Security &amp; JWT Sessions</span>
+                </div>
+                <div className="exec-breakdown-right">
+                  <span className="exec-breakdown-count">{val(data?.activeSessionsCount)} live</span>
+                  <span className="exec-breakdown-val">Encrypted Auth</span>
+                </div>
+              </div>
+              <div className="exec-breakdown-row">
+                <div className="exec-breakdown-left">
+                  <Database size={14} color="#3b82f6" />
+                  <span className="exec-breakdown-label">Database Audit Trail</span>
+                </div>
+                <div className="exec-breakdown-right">
+                  <span className="exec-breakdown-count">{val(data?.auditInPeriodCount)} events</span>
+                  <span className="exec-breakdown-val">Synchronized</span>
+                </div>
+              </div>
+              <div className="exec-breakdown-row">
+                <div className="exec-breakdown-left">
+                  <Cpu size={14} color="#f59e0b" />
+                  <span className="exec-breakdown-label">Operational Deliverables</span>
+                </div>
+                <div className="exec-breakdown-right">
+                  <span className="exec-breakdown-count">
+                    {alerts.length > 0 ? `${alerts.length} attention item(s)` : '0 Critical Flags'}
+                  </span>
+                  <span className="exec-breakdown-val" style={{ color: alerts.length > 0 ? '#f59e0b' : '#10b981' }}>
+                    {alerts.length > 0 ? 'Review Needed' : 'Optimal'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* If alerts exist, show them right below */}
+            {alerts.length > 0 && (
+              <div style={{ marginTop: '0.65rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                {alerts.map((alt: any, idx: number) => (
+                  <div key={idx} className={`exec-alert-item ${alt.severity || 'info'}`} style={{ padding: '0.55rem 0.75rem' }}>
+                    <div className="exec-alert-left">
+                      {alt.severity === 'critical' ? (
+                        <AlertTriangle size={15} color="#ef4444" />
+                      ) : alt.severity === 'warning' ? (
+                        <AlertCircle size={15} color="#f59e0b" />
+                      ) : (
+                        <Info size={15} color="#3b82f6" />
+                      )}
+                      <div>
+                        <div className="exec-alert-title">{alt.label}</div>
+                        <div className="exec-alert-sub">{alt.detail}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                      {alt.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Live Audit Trail Stream */}
+        <div className="exec-col-6">
+          <div className="exec-panel-box">
+            <div className="exec-panel-head">
+              <div>
+                <h3 className="exec-panel-title">Live System Audit Trail</h3>
+                <p className="exec-panel-sub">Recent changes, user transactions, and security actions</p>
+              </div>
+              <span className="exec-panel-badge">Real-Time</span>
+            </div>
+
+            {loading ? (
+              <div className="exec-chart-container exec-empty-state">
+                <div className="exec-shimmer" style={{ width: '100%', height: 160 }} />
+              </div>
+            ) : recentAudit.length === 0 ? (
+              <div className="exec-chart-container">
+                <EmptyBlock message="No recent audit events recorded" />
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="exec-table-compact">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Entity</th>
+                      <th>User</th>
+                      <th style={{ textAlign: 'right' }}>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentAudit.map((log: any, idx: number) => (
+                      <tr key={log.auditLogId || idx}>
+                        <td>
+                          <span style={{
+                            display: 'inline-flex', padding: '2px 7px', borderRadius: 5,
+                            fontSize: '0.7rem', fontWeight: 700,
+                            background: log.action === 'Create' ? 'rgba(16, 185, 129, 0.15)' :
+                                        log.action === 'Delete' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                            color: log.action === 'Create' ? '#10b981' :
+                                   log.action === 'Delete' ? '#ef4444' : '#6366f1'
+                          }}>
+                            {log.action || 'Update'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{log.entity}</td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{log.user}</td>
+                        <td style={{ textAlign: 'right', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {log.time ? new Date(log.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 
   return (
     <Layout>
-      <div className="clean-reports-container">
-        {/* Master Navigation with System History included */}
-        <ReportsNav
-          activeCategory="overview"
-          subTabs={overviewTabs}
-          activeSubTab={activeTab}
-          onSubTabChange={(id) => setActiveTab(id as OverviewTab)}
-        />
-
-        {/* Header & Controls */}
+      <div className="clean-report-container">
+        {/* Master Executive Header */}
         <ReportHeader
-          title="System Overview Report"
-          subtitle="Comprehensive CRM performance analytics, financial metrics, customer growth, and operational health."
+          title="Executive Report Overview"
+          description="Consolidated commercial intelligence across revenue, customer accounts, sales pipeline, operations, and system health."
+          badge="LIVE INTELLIGENCE"
           activePreset={activePreset}
           startDate={startDate}
           endDate={endDate}
@@ -385,557 +1202,62 @@ export const ReportsOverviewScreen: React.FC = () => {
           scope={scope}
           onScopeChange={setScope}
           onRefresh={fetchOverview}
-          onExportPDF={handleExportPDF}
-          onExportCSV={handleExportCSV}
+          onExportPDF={data ? handleExportPDF : undefined}
+          onExportCSV={data ? handleExportCSV : undefined}
           loading={loading}
         />
 
-        {error && !loading && (
-          <div className="clean-card" style={{ padding: '24px', textAlign: 'center', margin: '16px 0', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <AlertTriangle size={20} />
-            </div>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#f8fafc', marginBottom: '6px' }}>Unable to load report data</h3>
-            <p style={{ color: '#94a3b8', fontSize: '13px', maxWidth: '480px', margin: '0 auto 16px' }}>{error}</p>
+        {/* Executive Segmented Navigation Tabs */}
+        <nav className="exec-jump" aria-label="Overview tabs">
+          {TABS.map((t) => (
             <button
-              onClick={fetchOverview}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '13px' }}
+              key={t.id}
+              type="button"
+              className={`exec-jump-btn ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
             >
-              <RefreshCw size={14} /> Retry
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Global Error Banner */}
+        {error && !loading && (
+          <div className="exec-error-box">
+            <AlertTriangle size={24} color="#ef4444" />
+            <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Unable to load overview report data</h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>{error}</p>
+            <button type="button" className="clean-btn-primary" onClick={fetchOverview} style={{ marginTop: '0.5rem' }}>
+              <RefreshCw size={14} /> Retry Connection
             </button>
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 1: EXECUTIVE SUMMARY */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'executive' && (
-          <>
-            <ReportKpiGrid items={executiveKpis} columns={4} loading={loading} />
-
-            <div className="clean-charts-grid">
-              <ReportChartCard
-                title="Revenue Inflow vs Invoiced"
-                subtitle="12-month billing velocity vs collected cash"
-                badge="Financial Health"
-                icon={<DollarSign size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={data?.revenueTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="invoicedGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="month" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(v: any) => `$${(Number(v) / 1000).toFixed(0)}k`} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip formatter={(v: any) => fmt$(Number(v))} />} />
-                    <Legend />
-                    <Area type="monotone" dataKey="invoiced" name="Invoiced ($)" stroke="#6366f1" strokeWidth={2} fill="url(#invoicedGrad)" />
-                    <Area type="monotone" dataKey="collected" name="Collected ($)" stroke="#10b981" strokeWidth={2} fill="url(#inflowGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-
-              <ReportChartCard
-                title="Sales Pipeline Distribution"
-                subtitle="Open deal valuation across pipeline stages"
-                badge="Pipeline Value"
-                icon={<Layers size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={data?.pipelineDistribution || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="stage" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(v: any) => `$${(Number(v) / 1000).toFixed(0)}k`} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip formatter={(v: any) => fmt$(Number(v))} />} />
-                    <Bar dataKey="value" name="Stage Value ($)" radius={[4, 4, 0, 0]}>
-                      {(data?.pipelineDistribution || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-            </div>
-
-            <div className="clean-table-card clean-card">
-              <div className="clean-card-header">
-                <div>
-                  <h3 className="clean-card-title">Pipeline Stages Overview</h3>
-                  <p className="clean-card-subtitle">Active valuation and open deal distribution across all stages</p>
-                </div>
+        {/* Active Tab View Display */}
+        {!error && (
+          <div className="exec-dash">
+            {activeTab === 'executive' && renderSectionExecutive()}
+            {activeTab === 'sales' && renderSectionSales()}
+            {activeTab === 'customers' && renderSectionCustomers()}
+            {activeTab === 'financial' && renderSectionFinancial()}
+            {activeTab === 'operations' && renderSectionOperations()}
+            {activeTab === 'health' && renderSectionHealth()}
+            {activeTab === 'all' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {renderSectionExecutive()}
+                {renderSectionSales()}
+                {renderSectionCustomers()}
+                {renderSectionFinancial()}
+                {renderSectionOperations()}
+                {renderSectionHealth()}
               </div>
-              <ReportDataTable columns={pipelineColumns} data={data?.pipelineDistribution || []} loading={loading} />
-            </div>
-          </>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 2: SALES OVERVIEW */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'sales' && (
-          <>
-            <ReportKpiGrid items={salesKpis} columns={4} loading={loading} />
-
-            <div className="clean-charts-grid">
-              <ReportChartCard
-                title="Lead Generation Trend"
-                subtitle="Monthly lead acquisition volume"
-                badge="Acquisitions"
-                icon={<Target size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={data?.leadTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="leadGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="month" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Area type="monotone" dataKey="count" name="Leads Created" stroke="#06b6d4" strokeWidth={2} fill="url(#leadGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-
-              <ReportChartCard
-                title="Lead Conversion Breakdown"
-                subtitle="Current distribution of leads by status"
-                badge="Funnel"
-                icon={<CheckCircle size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={data?.leadStatusBreakdown || []}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={95}
-                      paddingAngle={4}
-                      dataKey="count"
-                      nameKey="status"
-                    >
-                      {(data?.leadStatusBreakdown || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-            </div>
-
-            <div className="clean-table-card clean-card">
-              <div className="clean-card-header">
-                <div>
-                  <h3 className="clean-card-title">Opportunity Pipeline Breakdown</h3>
-                  <p className="clean-card-subtitle">Active sales deals and stage progression</p>
-                </div>
-              </div>
-              <ReportDataTable columns={pipelineColumns} data={data?.pipelineDistribution || []} loading={loading} />
-            </div>
-          </>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 3: CUSTOMER OVERVIEW */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'customers' && (
-          <>
-            <ReportKpiGrid items={customerKpis} columns={4} loading={loading} />
-
-            <div className="clean-charts-grid">
-              <ReportChartCard
-                title="Customer Growth Velocity"
-                subtitle="Cumulative client acquisition over time"
-                badge="Growth"
-                icon={<TrendingUp size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={data?.customerGrowthTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="custGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="month" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Area type="monotone" dataKey="count" name="New Customers" stroke="#3b82f6" strokeWidth={2} fill="url(#custGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-
-              <ReportChartCard
-                title="Customer Acquisition Sources"
-                subtitle="Distribution of customers by originating channel"
-                badge="Channels"
-                icon={<Award size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={data?.customersBySource || []}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="count"
-                      nameKey="source"
-                    >
-                      {(data?.customersBySource || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-            </div>
-
-            <div className="clean-table-card clean-card">
-              <div className="clean-card-header">
-                <div>
-                  <h3 className="clean-card-title">Customer Acquisition Channels</h3>
-                  <p className="clean-card-subtitle">Channel share and customer distribution</p>
-                </div>
-              </div>
-              <ReportDataTable columns={sourceColumns} data={data?.customersBySource || []} loading={loading} />
-            </div>
-          </>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 4: FINANCIAL OVERVIEW */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'financial' && (
-          <>
-            <div style={{
-              background: 'rgba(99,102,241,0.06)',
-              border: '1px solid rgba(99,102,241,0.18)',
-              borderRadius: '10px',
-              padding: '12px 18px',
-              marginBottom: '20px',
-              fontSize: '13px',
-              color: 'var(--color-text, #334155)',
-              display: 'flex',
-              gap: '24px',
-              flexWrap: 'wrap'
-            }}>
-              <div><strong>Contract Value:</strong> Total signed value from active agreements.</div>
-              <div><strong>Invoiced:</strong> Total amount billed to clients.</div>
-              <div><strong>Collected:</strong> Realized cash receipts deposited.</div>
-              <div><strong>Outstanding:</strong> Unpaid open invoice balance.</div>
-            </div>
-
-            <ReportKpiGrid items={financialKpis} columns={3} loading={loading} />
-
-            <div className="clean-charts-grid">
-              <ReportChartCard
-                title="Monthly Billing vs Cash Collected"
-                subtitle="Comparing monthly invoices against cleared payments"
-                badge="Revenue Velocity"
-                icon={<DollarSign size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={data?.revenueTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="month" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(v: any) => `$${(Number(v) / 1000).toFixed(0)}k`} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip formatter={(v: any) => fmt$(Number(v))} />} />
-                    <Legend />
-                    <Bar dataKey="invoiced" name="Invoiced ($)" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="collected" name="Collected ($)" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-
-              <ReportChartCard
-                title="Invoice Status Breakdown"
-                subtitle="Distribution of invoices by current status"
-                badge="Invoices"
-                icon={<Receipt size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={data?.invoicesByStatus || []}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="value"
-                      nameKey="status"
-                    >
-                      {(data?.invoicesByStatus || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomChartTooltip formatter={(v: any) => fmt$(Number(v))} />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-            </div>
-          </>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 5: OPERATIONS OVERVIEW */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'operations' && (
-          <>
-            <ReportKpiGrid items={operationsKpis} columns={3} loading={loading} />
-
-            <div className="clean-charts-grid">
-              <ReportChartCard
-                title="Activities by Type"
-                subtitle="Distribution of team engagements (Calls, Meetings, Tasks)"
-                badge="Engagement"
-                icon={<Activity size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={data?.activitiesByType || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
-                    <XAxis dataKey="type" stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <YAxis stroke="#94a3b8" tickLine={false} style={{ fontSize: '11px' }} />
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Bar dataKey="count" name="Activities Logged" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                      {(data?.activitiesByType || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-
-              <ReportChartCard
-                title="Task Status Distribution"
-                subtitle="Breakdown of operational tasks across stages"
-                badge="Tasks"
-                icon={<CheckSquare size={16} />}
-              >
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={data?.tasksByStatus || []}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="count"
-                      nameKey="status"
-                    >
-                      {(data?.tasksByStatus || []).map((_: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ReportChartCard>
-            </div>
-          </>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* TAB 6: SYSTEM HEALTH & INFRASTRUCTURE */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'health' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Live Infrastructure Pulse Banner */}
-            <div className="health-pulse-banner">
-              <div className="health-pulse-left">
-                <div className="health-pulse-dot-wrap">
-                  <div className="health-pulse-ring" />
-                  <div className="health-pulse-dot" />
-                </div>
-                <div>
-                  <h4 className="health-pulse-title">All Core CRM Subsystems Operational</h4>
-                  <p className="health-pulse-desc">Live connection to Microsoft SQL Server, SignalR WebSocket Hub & Identity Engine</p>
-                </div>
-              </div>
-              <div className="health-pulse-badges">
-                <span className="health-pill health-pill-green">
-                  <Zap size={13} /> 99.98% System Uptime
-                </span>
-                <span className="health-pill health-pill-blue">
-                  <Server size={13} /> DB Latency &lt; 4ms
-                </span>
-                <span className="health-pill">
-                  <Lock size={13} /> JWT & RBAC Active
-                </span>
-              </div>
-            </div>
-
-            {/* 4 Infrastructure Metric Cards */}
-            <ReportKpiGrid items={healthKpis} columns={4} loading={loading} />
-
-            {/* 2-Panel Diagnostics & Resource Breakdown Grid */}
-            <div className="health-grid-2">
-              {/* Panel A: Subsystem Diagnostic Matrix */}
-              <div className="clean-card">
-                <div className="clean-card-header" style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Server size={16} color="#6366f1" />
-                    <h3 className="clean-card-title" style={{ fontSize: '0.95rem' }}>Subsystem Diagnostic Status</h3>
-                  </div>
-                  <span className="clean-badge clean-badge-success" style={{ fontSize: '0.7rem' }}>All Systems Go</span>
-                </div>
-
-                <div className="health-service-list">
-                  <div className="health-service-row">
-                    <div className="health-service-info">
-                      <div className="health-service-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
-                        <Database size={16} />
-                      </div>
-                      <div>
-                        <div className="health-service-name">Microsoft SQL Server Core</div>
-                        <div className="health-service-sub">EF Core 8.0 • Connection Pool Active</div>
-                      </div>
-                    </div>
-                    <span className="health-pill health-pill-green"><CheckCircle2 size={12} /> Operational</span>
-                  </div>
-
-                  <div className="health-service-row">
-                    <div className="health-service-info">
-                      <div className="health-service-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
-                        <Activity size={16} />
-                      </div>
-                      <div>
-                        <div className="health-service-name">SignalR WebSocket Gateway</div>
-                        <div className="health-service-sub">Real-Time Notification Hub Active</div>
-                      </div>
-                    </div>
-                    <span className="health-pill health-pill-green"><CheckCircle2 size={12} /> Connected</span>
-                  </div>
-
-                  <div className="health-service-row">
-                    <div className="health-service-info">
-                      <div className="health-service-icon" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1' }}>
-                        <Lock size={16} />
-                      </div>
-                      <div>
-                        <div className="health-service-name">Authentication & Role Guard</div>
-                        <div className="health-service-sub">HMAC-SHA256 JWT Token Enforcement</div>
-                      </div>
-                    </div>
-                    <span className="health-pill health-pill-green"><CheckCircle2 size={12} /> Protected</span>
-                  </div>
-
-                  <div className="health-service-row">
-                    <div className="health-service-info">
-                      <div className="health-service-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
-                        <ShieldCheck size={16} />
-                      </div>
-                      <div>
-                        <div className="health-service-name">Audit Trail & Compliance Engine</div>
-                        <div className="health-service-sub">Immutable Transaction Logging Active</div>
-                      </div>
-                    </div>
-                    <span className="health-pill health-pill-green"><CheckCircle2 size={12} /> Synchronized</span>
-                  </div>
-
-                  <div className="health-service-row">
-                    <div className="health-service-info">
-                      <div className="health-service-icon" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6' }}>
-                        <Cpu size={16} />
-                      </div>
-                      <div>
-                        <div className="health-service-name">Input Sanitizer & XSS Shield</div>
-                        <div className="health-service-sub">Parameter Sanitization & Rate Limiting</div>
-                      </div>
-                    </div>
-                    <span className="health-pill health-pill-green"><CheckCircle2 size={12} /> Active</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Panel B: Entity Record Storage Distribution */}
-              <div className="clean-card">
-                <div className="clean-card-header" style={{ marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <HardDrive size={16} color="#3b82f6" />
-                    <h3 className="clean-card-title" style={{ fontSize: '0.95rem' }}>CRM Entity Record Distribution</h3>
-                  </div>
-                  <span className="clean-badge clean-badge-primary" style={{ fontSize: '0.7rem' }}>
-                    {fmtNum(totalEntityRecords)} Total Records
-                  </span>
-                </div>
-
-                <div className="health-resource-list">
-                  {[
-                    { label: 'Customer Accounts', count: data?.totalCustomers ?? 0, color: '#3b82f6' },
-                    { label: 'B2B Organizations', count: data?.totalCompanies ?? 0, color: '#2563eb' },
-                    { label: 'Leads & Prospects', count: data?.totalLeads ?? 0, color: '#06b6d4' },
-                    { label: 'Opportunities & Deals', count: data?.totalOpportunities ?? 0, color: '#8b5cf6' },
-                    { label: 'Executed Contracts', count: data?.totalContracts ?? 0, color: '#a855f7' },
-                    { label: 'Billing Invoices', count: data?.totalInvoices ?? 0, color: '#ec4899' },
-                    { label: 'Operational Tasks', count: data?.totalTasks ?? 0, color: '#10b981' },
-                    { label: 'Customer Activities', count: data?.totalActivities ?? 0, color: '#f59e0b' },
-                  ].map((item) => {
-                    const pct = totalEntityRecords > 0 ? Math.round((item.count / totalEntityRecords) * 100) : 0;
-                    return (
-                      <div key={item.label} className="health-resource-item">
-                        <div className="health-resource-meta">
-                          <span className="health-resource-label">{item.label}</span>
-                          <span className="health-resource-count">
-                            {item.count} <span style={{ opacity: 0.6, fontSize: '0.72rem' }}>({pct}%)</span>
-                          </span>
-                        </div>
-                        <div className="health-progress-bg">
-                          <div
-                            className="health-progress-bar"
-                            style={{ width: `${Math.max(pct, item.count > 0 ? 3 : 0)}%`, background: item.color }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Critical Operations & Audit Log Stream */}
-            <div className="clean-table-card clean-card">
-              <div className="clean-card-header">
-                <div>
-                  <h3 className="clean-card-title">Recent System Operations & Audit Stream</h3>
-                  <p className="clean-card-subtitle">Real-time trace of recent database operations, data changes, and actor sessions</p>
-                </div>
-                <button
-                  onClick={() => navigate('/audit-logs')}
-                  className="clean-btn-secondary"
-                  style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '5px' }}
-                >
-                  View Full Audit History <ArrowRight size={13} />
-                </button>
-              </div>
-              <ReportDataTable columns={auditColumns} data={data?.recentAuditLogs || []} loading={loading} />
-            </div>
+            )}
           </div>
         )}
       </div>
     </Layout>
   );
 };
+
 export default ReportsOverviewScreen;

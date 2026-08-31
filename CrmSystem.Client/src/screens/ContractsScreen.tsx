@@ -7,11 +7,12 @@ import { Input } from '../components/ui/Input';
 import { ContractModal, ContractItem } from '../components/contracts/ContractModal';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
-import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2, Users, UserCheck, CreditCard } from 'lucide-react';
+import { Plus, Search, FileText, CheckCircle, Clock, Receipt, MoreVertical, Eye, Edit3, Link as LinkIcon, FileCheck, Mail, Trash2, Users, UserCheck, CreditCard, RefreshCw } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
+import { useSystemProfile, useFormatCurrency } from '../context/SystemProfileContext';
 import { validateName, validatePositiveNumber, validateRequiredSelect, validateDateRange } from '../lib/validators';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
@@ -25,7 +26,8 @@ const ContractActionMenu: React.FC<{
   onDelete: (c: ContractItem) => void;
   onInvoice: (c: ContractItem) => void;
   onView: (c: ContractItem) => void;
-}> = ({ contract, onCopyLink, onCopyPaymentLink, onSendEmail, onEdit, onDelete, onInvoice, onView }) => {
+  onSyncPricing?: (c: ContractItem) => void;
+}> = ({ contract, onCopyLink, onCopyPaymentLink, onSendEmail, onEdit, onDelete, onInvoice, onView, onSyncPricing }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +77,16 @@ const ContractActionMenu: React.FC<{
           >
             <Edit3 size={14} /> Edit Details
           </button>
+
+          {!isSigned && onSyncPricing && (
+            <button
+              type="button"
+              className="crm-action-menu-item"
+              onClick={(e) => { e.stopPropagation(); onSyncPricing(contract); setOpen(false); }}
+            >
+              <RefreshCw size={14} style={{ color: '#f59e0b' }} /> Sync Catalog Pricing
+            </button>
+          )}
 
           <button
             type="button"
@@ -136,6 +148,8 @@ const ContractActionMenu: React.FC<{
 export const ContractsScreen: React.FC = () => {
   const navigate = useNavigate();
   const { isManagerOrAboveSelected, selectedRole } = useAuth();
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [contracts, setContracts] = useState<ContractItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -417,6 +431,16 @@ export const ContractsScreen: React.FC = () => {
     }
   };
 
+  const handleSyncPricing = async (c: ContractItem) => {
+    try {
+      await api.post(`/api/contracts/${c.contractId}/sync-pricing`, {});
+      showToast(`Contract ${c.contractNumber} pricing synchronized with product catalog!`);
+      fetchContracts();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync contract pricing', 'error');
+    }
+  };
+
   // Central "is signed" truth — mirrors statusBadge logic
   const contractIsSigned = (c: ContractItem) =>
     (c.status || '').toLowerCase() === 'signed' ||
@@ -552,9 +576,9 @@ export const ContractsScreen: React.FC = () => {
               <span className="metric-title" style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>Total Contract Portfolio</span>
               <FileText className="metric-icon" size={20} style={{ color: '#6366f1' }} />
             </div>
-            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>${totalContractValue.toLocaleString()}</div>
+            <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{formatCurrency(totalContractValue, profile?.currency || currency)}</div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Avg: <strong>${Math.round(avgContractValue).toLocaleString()}</strong> per deal
+              Avg: <strong>{formatCurrency(Math.round(avgContractValue), profile?.currency || currency)}</strong> per deal
             </div>
           </Card.Content>
         </Card>
@@ -567,7 +591,7 @@ export const ContractsScreen: React.FC = () => {
             </div>
             <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>{activeContractsCount}</div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Value: <strong>${signedContractValue.toLocaleString()}</strong> ({executionRate}% rate)
+              Value: <strong>{formatCurrency(signedContractValue, profile?.currency || currency)}</strong> ({executionRate}% rate)
             </div>
           </Card.Content>
         </Card>
@@ -740,7 +764,7 @@ export const ContractsScreen: React.FC = () => {
                           }
                         </td>
                         <td style={{ padding: '1rem 1.25rem', fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                          ${c.contractValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatCurrency(c.contractValue, profile?.currency || currency, 2)}
                         </td>
                         <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>{statusBadge(c)}</td>
                         <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
@@ -835,7 +859,7 @@ export const ContractsScreen: React.FC = () => {
                                     }}
                                   >
                                     <CreditCard size={11} />
-                                    <span>{isPartiallyPaid && c.invoiceBalanceDue ? `Copy Pay Link ($${c.invoiceBalanceDue.toLocaleString()} Due)` : 'Copy Pay Link'}</span>
+                                    <span>{isPartiallyPaid && c.invoiceBalanceDue ? `Copy Pay Link (${formatCurrency(c.invoiceBalanceDue, profile?.currency || currency)} Due)` : 'Copy Pay Link'}</span>
                                   </button>
                                 ) : (
                                   <button
@@ -894,6 +918,7 @@ export const ContractsScreen: React.FC = () => {
                             onDelete={handleDeleteContract}
                             onInvoice={handleGenerateInvoice}
                             onView={setSelectedContract}
+                            onSyncPricing={handleSyncPricing}
                           />
                         </td>
                       </tr>
@@ -921,7 +946,7 @@ export const ContractsScreen: React.FC = () => {
                       {statusBadge(c)}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.65rem 0.85rem', borderRadius: '8px', margin: '0.25rem 0' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.1rem', whiteSpace: 'nowrap' }}>${c.contractValue.toLocaleString()}</span>
+                      <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1.1rem', whiteSpace: 'nowrap' }}>{formatCurrency(c.contractValue, profile?.currency || currency)}</span>
                       {c.opportunityTitle && (
                         <span style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 600, fontSize: '0.78rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           💼 {c.opportunityTitle}
@@ -938,6 +963,7 @@ export const ContractsScreen: React.FC = () => {
                         onDelete={handleDeleteContract}
                         onInvoice={handleGenerateInvoice}
                         onView={setSelectedContract}
+                        onSyncPricing={handleSyncPricing}
                       />
                     </div>
                   </div>

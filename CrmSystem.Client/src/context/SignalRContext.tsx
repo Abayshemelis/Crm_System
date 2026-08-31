@@ -16,13 +16,13 @@ interface SignalRContextType {
 const SignalRContext = createContext<SignalRContextType>({
     connected: false,
     unreadCount: 0,
-    setUnreadCount: () => {},
+    setUnreadCount: () => { },
 });
 
 // ── 2. REAL-TIME SIGNALR PROVIDER ─────────────────────────────────────────────
 // Manages the persistent WebSocket lifecycle between the frontend and ASP.NET Core backend.
 export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
     const [connected, setConnected] = useState<boolean>(false);
     const [unreadCount, setUnreadCount] = useState<number>(0);
     const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -37,7 +37,7 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 const conn = connectionRef.current;
                 connectionRef.current = null;
                 if (conn.state === signalR.HubConnectionState.Connected) {
-                    conn.stop().catch(() => {});
+                    conn.stop().catch(() => { });
                 }
             }
             return;
@@ -102,6 +102,35 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
             window.dispatchEvent(new CustomEvent('app:notification', { detail: data }));
         });
 
+        // 4. Session Revoked Event (Real-time force-logout when session is terminated remotely)
+        connection.on('SessionRevoked', async (data: { sessionId?: number; message?: string }) => {
+            const storedRefresh = localStorage.getItem('refreshToken');
+            if (!storedRefresh) return;
+
+            try {
+                const res = await fetch(`${apiHost.replace(/\/+$/, '')}/api/auth/check-session`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                        'ngrok-skip-browser-warning': 'true'
+                    },
+                    body: JSON.stringify({ refreshToken: storedRefresh })
+                });
+
+                if (res.ok) {
+                    const checkResult = await res.json();
+                    if (checkResult.isRevoked) {
+                        showToast(data?.message || 'Your session was terminated from another device.', 'error');
+                        logout();
+                        window.location.href = '/login';
+                    }
+                }
+            } catch {
+                // Fail silently
+            }
+        });
+
         // Connection status tracking
         connection.onreconnecting(() => setConnected(false));
         connection.onreconnected(() => setConnected(true));
@@ -113,7 +142,7 @@ export const SignalRProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 setConnected(true);
                 try {
                     const res = await fetch(`${apiHost.replace(/\/+$/, '')}/api/notifications/count`, {
-                        headers: { 
+                        headers: {
                             Authorization: `Bearer ${token}`,
                             'ngrok-skip-browser-warning': 'true'
                         }

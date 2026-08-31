@@ -552,6 +552,81 @@ public class ContractsController : ControllerBase
         });
     }
 
+    [HttpPost("{id:int}/sync-pricing")]
+    public async Task<ActionResult<ContractReadDto>> SyncPricing(int id)
+    {
+        if (_currentUser.UserId == null) return Unauthorized();
+
+        var contract = await _db.Contracts
+            .Include(c => c.Customer)
+                .ThenInclude(cust => cust.Company)
+            .Include(c => c.Opportunity)
+                .ThenInclude(opp => opp!.LineItems)
+                    .ThenInclude(li => li.Product)
+            .Include(c => c.CreatedBy)
+            .FirstOrDefaultAsync(c => c.ContractId == id && !c.IsDeleted);
+
+        if (contract == null) return NotFound(new { message = "Contract not found." });
+
+        if (!_currentUser.IsAdmin &&
+            !_currentUser.CanAccessOwnedRecord(contract.Customer?.AssignedRepId) &&
+            contract.CreatedById != _currentUser.UserId &&
+            !_currentUser.CanAccessOwnedRecord(contract.Opportunity?.OwnerId))
+        {
+            return Forbid();
+        }
+
+        var oldVal = contract.ContractValue;
+        decimal newVal = oldVal;
+
+        if (contract.Opportunity != null)
+        {
+            // Sync line items against product catalog
+            int updatedCount = 0;
+            foreach (var item in contract.Opportunity.LineItems)
+            {
+                if (item.Product != null && item.UnitPrice != item.Product.Price)
+                {
+                    item.UnitPrice = item.Product.Price;
+                    updatedCount++;
+                }
+            }
+
+            if (contract.Opportunity.LineItems.Any())
+            {
+                var calculatedTotal = contract.Opportunity.LineItems
+                    .Sum(li => li.Quantity * li.UnitPrice * (1 - li.DiscountPercent / 100m));
+                contract.Opportunity.EstimatedValue = calculatedTotal;
+                contract.Opportunity.UpdatedAt = DateTime.UtcNow;
+                newVal = calculatedTotal;
+            }
+            else
+            {
+                newVal = contract.Opportunity.EstimatedValue;
+            }
+        }
+
+        contract.ContractValue = newVal;
+        contract.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var entityType = await _db.EntityTypes.FirstOrDefaultAsync(e => e.Name == "Contract");
+        if (entityType != null && oldVal != contract.ContractValue)
+        {
+            var changes = new List<(string Field, string? OldValue, string? NewValue)>
+            {
+                ("ContractValue", oldVal.ToString("F2"), contract.ContractValue.ToString("F2"))
+            };
+            await _auditService.LogFieldChangesAsync(entityType.EntityTypeId, contract.ContractId, changes, "Update", _currentUser.UserId.Value);
+        }
+
+        var invoice = await _db.Invoices
+            .Include(i => i.Payments)
+            .FirstOrDefaultAsync(i => i.ContractId == id && !i.IsDeleted);
+
+        return Ok(MapToReadDto(contract, invoice));
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {

@@ -9,14 +9,17 @@ interface PhoneInputProps {
   error?: string;
   className?: string;
   label?: string;
+  defaultCountryCode?: string;
+  showInlineValidation?: boolean;
+  placeholder?: string;
 }
 
-export const PhoneInput: React.FC<PhoneInputProps> = ({ value, onChange, error, className = '', label }) => {
+export const PhoneInput: React.FC<PhoneInputProps> = ({ value, onChange, error, className = '', label, defaultCountryCode, showInlineValidation, placeholder }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   
   // Extract dial code and actual number if possible. 
-  const matchedCountry = PHONE_COUNTRIES.find(c => value.startsWith(c.dialCode)) || PHONE_COUNTRIES.find(c => c.code === 'ET') || PHONE_COUNTRIES[0];
+  const matchedCountry = PHONE_COUNTRIES.find(c => value.startsWith(c.dialCode)) || PHONE_COUNTRIES.find(c => c.code === (defaultCountryCode || 'ET')) || PHONE_COUNTRIES[0];
   
   const [selectedCountry, setSelectedCountry] = useState(matchedCountry);
   

@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '../components/ui/Skeleton';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { getExpectedCloseDateStatus } from '../lib/dateUtils';
+import { useFormatCurrency } from '../context/SystemProfileContext';
 import './screens.css';
 
 interface Opportunity {
@@ -55,6 +56,7 @@ interface User {
 export const PipelineScreen: React.FC = () => {
     const navigate = useNavigate();
     const { isManagerOrAboveSelected } = useAuth();
+    const { formatCurrency } = useFormatCurrency();
     
     const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
     const [stages, setStages] = useState<OpportunityStage[]>([]);
@@ -334,7 +336,7 @@ export const PipelineScreen: React.FC = () => {
                                 </div>
                                 <div className="pipeline-column-stats">
                                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{stageOpps.length}</span>
-                                    <span>${stageTotal.toLocaleString()}</span>
+                                    <span>{formatCurrency(stageTotal)}</span>
                                 </div>
                             </div>
                             <div className="pipeline-column-content">
@@ -381,7 +383,7 @@ export const PipelineScreen: React.FC = () => {
 
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.4rem 0' }}>
                                                     <p className="opportunity-value" style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--accent-primary)' }}>
-                                                        ${opp.estimatedValue.toLocaleString()}
+                                                        {formatCurrency(opp.estimatedValue)}
                                                     </p>
                                                 </div>
                                                 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
@@ -22,6 +22,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import Attachments from '../components/attachments/Attachments';
 import { AiOpportunityAssistant } from '../components/ai/AiOpportunityAssistant';
 import { getExpectedCloseDateStatus, getStandardCloseDatePresets, formatDisplayDate, getLocalDateString } from '../lib/dateUtils';
+import { useSystemProfile, useFormatCurrency } from '../context/SystemProfileContext';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
 
@@ -90,6 +91,8 @@ export const OpportunityDetailScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [lineItems, setLineItems] = useState<OpportunityLineItem[]>([]);
@@ -97,6 +100,7 @@ export const OpportunityDetailScreen: React.FC = () => {
   const [stages, setStages] = useState<Stage[]>([]);
   const [users, setUsers] = useState<UserLookup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [syncingPrices, setSyncingPrices] = useState(false);
 
   // Contracts & Invoices states
   const [contracts, setContracts] = useState<ContractItem[]>([]);
@@ -129,6 +133,8 @@ export const OpportunityDetailScreen: React.FC = () => {
   const [newInvoiceNotes, setNewInvoiceNotes] = useState('');
   const [newInvoiceTerms, setNewInvoiceTerms] = useState('Payment due within 30 days of issue date.');
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [syncingContractId, setSyncingContractId] = useState<number | null>(null);
+  const [syncingInvoiceId, setSyncingInvoiceId] = useState<number | null>(null);
 
   // Invoice Edit Modal State
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
@@ -225,6 +231,19 @@ export const OpportunityDetailScreen: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  const lineItemsTotal = useMemo(() => {
+    return lineItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice * (1 - (item.discountPercent || 0) / 100)), 0);
+  }, [lineItems]);
+
+  const currentQuotedTotal = lineItems.length > 0 ? lineItemsTotal : (opportunity?.estimatedValue || 0);
+
+  const hasOutdatedCatalogPrices = useMemo(() => {
+    return lineItems.some(item => {
+      const catalog = products.find(p => p.productId === item.productId);
+      return catalog && Math.abs(catalog.price - item.unitPrice) > 0.001;
+    });
+  }, [lineItems, products]);
+
   const handleFieldChange = (field: keyof Opportunity, value: any) => {
     setEditedOpportunity(prev => ({ ...prev, [field]: value }));
   };
@@ -285,7 +304,7 @@ export const OpportunityDetailScreen: React.FC = () => {
       setActiveTab('contracts');
       return;
     }
-    const defaultValue = calculatedTotal > 0 ? calculatedTotal : opportunity.estimatedValue;
+    const defaultValue = currentQuotedTotal > 0 ? currentQuotedTotal : opportunity.estimatedValue;
     setNewContractTitle(`Service Agreement: ${opportunity.title}`);
     setNewContractValue(defaultValue);
     setShowCreateContractModal(true);
@@ -324,6 +343,19 @@ export const OpportunityDetailScreen: React.FC = () => {
   };
 
   // --- CONTRACT CRUD HANDLERS ---
+  const handleSyncContractPricing = async (contractId: number) => {
+    setSyncingContractId(contractId);
+    try {
+      await api.post(`/api/contracts/${contractId}/sync-pricing`, {});
+      showToast('Contract value synchronized with latest quote & product catalog prices!');
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync contract pricing', 'error');
+    } finally {
+      setSyncingContractId(null);
+    }
+  };
+
   const handleOpenEditContract = (c: ContractItem) => {
     setEditingContract(c);
     setEditContractTitle(c.title || '');
@@ -378,8 +410,21 @@ export const OpportunityDetailScreen: React.FC = () => {
   };
 
   // --- INVOICE CRUD HANDLERS ---
+  const handleSyncInvoicePricing = async (invoiceId: number) => {
+    setSyncingInvoiceId(invoiceId);
+    try {
+      await api.post(`/api/invoices/${invoiceId}/sync-pricing`, {});
+      showToast('Invoice amount synchronized with latest quote & product catalog prices!');
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync invoice pricing', 'error');
+    } finally {
+      setSyncingInvoiceId(null);
+    }
+  };
+
   const handleOpenCreateInvoice = (contract?: ContractItem) => {
-    const defaultAmt = contract?.contractValue ?? (calculatedTotal > 0 ? calculatedTotal : opportunity?.estimatedValue ?? 0);
+    const defaultAmt = contract?.contractValue ?? (currentQuotedTotal > 0 ? currentQuotedTotal : opportunity?.estimatedValue ?? 0);
     setNewInvoiceAmount(defaultAmt);
     setNewInvoiceTaxRate(0);
     setNewInvoiceContractId(contract?.contractId ?? (contracts.length > 0 ? contracts[0].contractId : null));
@@ -689,6 +734,21 @@ export const OpportunityDetailScreen: React.FC = () => {
     }
   };
 
+  const handleSyncCatalogPrices = async () => {
+    if (!id || !opportunity) return;
+    setSyncingPrices(true);
+    try {
+      const res = await api.post<any>(`/api/opportunitylineitems/${id}/sync-prices`, {});
+      showToast(res.message || 'Product line items updated to current catalog prices!');
+      await loadData();
+      setAuditRefreshTrigger(t => t + 1);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync prices with catalog', 'error');
+    } finally {
+      setSyncingPrices(false);
+    }
+  };
+
   const handleQuoteEmailSend = (summaryText: string) => {
     setEmailSubject(`Proposal Quote: ${opportunity?.title || 'Commercial Quote'}`);
     setEmailBody(summaryText);
@@ -820,9 +880,35 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <Tag size={15} />
                 <span>Stage: <strong>{opportunity.stageName}</strong></span>
               </div>
-              <div className="detail-row">
-                <Building2 size={15} />
-                <span>Value: <strong>${opportunity.estimatedValue.toLocaleString()}</strong></span>
+              <div className="detail-row" style={{ alignItems: 'flex-start' }}>
+                <Building2 size={15} style={{ marginTop: '3px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '100%' }}>
+                  <span>Value: <strong>{formatCurrency(opportunity.estimatedValue)}</strong></span>
+                  {lineItems.length > 0 && Math.abs(opportunity.estimatedValue - calculatedTotal) > 0.01 && (
+                    <button
+                      type="button"
+                      onClick={handleSyncEstimatedValue}
+                      style={{
+                        background: 'rgba(245, 158, 11, 0.15)',
+                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                        color: '#f59e0b',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.4rem',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        marginTop: '3px',
+                        textAlign: 'left',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Sync opportunity deal value with current line items total"
+                    >
+                      <RefreshCw size={11} /> Sync to Products ({formatCurrency(calculatedTotal)})
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="detail-row" style={{ alignItems: 'flex-start' }}>
                 <Calendar size={15} style={{ marginTop: '3px' }} />
@@ -917,7 +1003,26 @@ export const OpportunityDetailScreen: React.FC = () => {
                   </div>
 
                   <div className="profile-field">
-                    <label>Estimated Value</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                      <label style={{ margin: 0 }}>Estimated Value ({profile?.currency || currency})</label>
+                      {lineItems.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleFieldChange('estimatedValue', calculatedTotal)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#818cf8',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: 0
+                          }}
+                        >
+                          ⚡ Use Products Total ({formatCurrency(calculatedTotal)})
+                        </button>
+                      )}
+                    </div>
                     <Input
                       type="number"
                       min="0"
@@ -989,6 +1094,11 @@ export const OpportunityDetailScreen: React.FC = () => {
                 const variance = dealEstimatedValue - calculatedTotal;
                 const isValueSynced = Math.abs(variance) < 0.01;
 
+                const outdatedPriceItems = lineItems.filter(item => {
+                  const catProd = products.find(p => p.productId === item.productId);
+                  return catProd && Math.abs(catProd.price - item.unitPrice) > 0.001;
+                });
+
                 return (
                   <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     {/* Header & Main Actions */}
@@ -1003,6 +1113,17 @@ export const OpportunityDetailScreen: React.FC = () => {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleSyncCatalogPrices}
+                          disabled={syncingPrices || lineItems.length === 0}
+                          style={outdatedPriceItems.length > 0 ? { borderColor: '#f59e0b', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)' } : {}}
+                          title="Update all line items with latest unit prices configured in Settings/Products"
+                        >
+                          <RefreshCw size={14} className={syncingPrices ? 'spin' : ''} style={{ marginRight: 5 }} />
+                          {syncingPrices ? 'Syncing…' : outdatedPriceItems.length > 0 ? `Sync Catalog Prices (${outdatedPriceItems.length})` : 'Sync Catalog Prices'}
+                        </Button>
                         <Button
                           variant="secondary"
                           size="sm"
@@ -1025,9 +1146,9 @@ export const OpportunityDetailScreen: React.FC = () => {
                           variant="secondary"
                           size="sm"
                           onClick={() => {
-                            const itemsSummary = lineItems.map(i => `- ${i.product?.name || 'Product'} (Qty: ${i.quantity}, Price: $${i.unitPrice}, Total: $${i.totalPrice.toFixed(2)})`).join('\n');
+                            const itemsSummary = lineItems.map(i => `- ${i.product?.name || 'Product'} (Qty: ${i.quantity}, Price: ${formatCurrency(i.unitPrice)}, Total: ${formatCurrency(i.totalPrice)})`).join('\n');
                             const quoteNumber = `QT-${new Date().getFullYear()}-${String(opportunity.opportunityId).padStart(5, '0')}`;
-                            const emailBody = `Dear ${opportunity.customerFirstName} ${opportunity.customerLastName},\n\nPlease find your proposal quote details below:\n\nQuote Reference: ${quoteNumber}\nDeal: ${opportunity.title}\nDate: ${new Date().toLocaleDateString()}\n\nPROPOSAL ITEMS:\n${itemsSummary || 'Standard Deal Proposal'}\n\nGRAND TOTAL: $${calculatedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nPlease let us know if you have any questions.\n\nBest regards,\n${opportunity.ownerName || currentUser?.name || 'Sales Team'}`;
+                            const emailBody = `Dear ${opportunity.customerFirstName} ${opportunity.customerLastName},\n\nPlease find your proposal quote details below:\n\nQuote Reference: ${quoteNumber}\nDeal: ${opportunity.title}\nDate: ${new Date().toLocaleDateString()}\n\nPROPOSAL ITEMS:\n${itemsSummary || 'Standard Deal Proposal'}\n\nGRAND TOTAL: ${formatCurrency(calculatedTotal)}\n\nPlease let us know if you have any questions.\n\nBest regards,\n${opportunity.ownerName || currentUser?.name || 'Sales Team'}`;
                             setEmailSubject(`Proposal Quote: ${opportunity.title} (${quoteNumber})`);
                             setEmailBody(emailBody);
                             setShowEmailComposer(true);
@@ -1049,12 +1170,49 @@ export const OpportunityDetailScreen: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Outdated Catalog Prices Alert Banner */}
+                    {outdatedPriceItems.length > 0 && (
+                      <div style={{
+                        padding: '0.85rem 1.1rem',
+                        background: 'rgba(245, 158, 11, 0.12)',
+                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                        borderRadius: '0.75rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.75rem'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <AlertTriangle size={20} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#f59e0b' }}>
+                              Product Catalog Price Changes Detected in Settings
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                              {outdatedPriceItems.length} product line item(s) have unit prices different from current Settings/Products catalog prices.
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleSyncCatalogPrices}
+                          disabled={syncingPrices}
+                          style={{ background: '#f59e0b', borderColor: '#d97706', color: '#000', fontWeight: 700 }}
+                        >
+                          <RefreshCw size={13} className={syncingPrices ? 'spin' : ''} style={{ marginRight: 4 }} />
+                          {syncingPrices ? 'Updating Prices…' : 'Sync All to Current Catalog Prices'}
+                        </Button>
+                      </div>
+                    )}
+
                     {/* Financial Metric Cards Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.85rem' }}>
                       <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: '1px solid var(--border-color)' }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Total Quoted Value</span>
                         <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#10b981', marginTop: '0.15rem' }}>
-                          ${calculatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatCurrency(calculatedTotal, profile?.currency || currency, 2)}
                         </div>
                       </div>
 
@@ -1068,7 +1226,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                       <div style={{ padding: '0.85rem 1rem', background: 'var(--bg-secondary)', borderRadius: '0.65rem', border: '1px solid var(--border-color)' }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Discount Savings</span>
                         <div style={{ fontSize: '1.35rem', fontWeight: 800, color: totalDiscountSavings > 0 ? '#f59e0b' : 'var(--text-secondary)', marginTop: '0.15rem' }}>
-                          ${totalDiscountSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatCurrency(totalDiscountSavings, profile?.currency || currency, 2)}
                         </div>
                       </div>
 
@@ -1081,7 +1239,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                             </>
                           ) : (
                             <>
-                              <AlertTriangle size={16} /> Variance: ${Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              <AlertTriangle size={16} /> Variance: {formatCurrency(Math.abs(variance), profile?.currency || currency, 2)}
                             </>
                           )}
                         </div>
@@ -1096,7 +1254,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                         </h4>
                         {newLineItem.productId > 0 && (
                           <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10b981' }}>
-                            Row Subtotal: ${(newLineItem.quantity * newLineItem.unitPrice * (1 - newLineItem.discountPercent / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Row Subtotal: {formatCurrency(newLineItem.quantity * newLineItem.unitPrice * (1 - newLineItem.discountPercent / 100), profile?.currency || currency, 2)}
                           </span>
                         )}
                       </div>
@@ -1110,7 +1268,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                               { value: '', label: 'Select a product catalog item...' },
                               ...products.map(p => ({
                                 value: String(p.productId),
-                                label: `${p.name} ($${p.price.toLocaleString()})`
+                                label: `${p.name} (${formatCurrency(p.price, profile?.currency || currency, 2)})`
                               }))
                             ]}
                             onChange={val => handleProductChange(Number(val))}
@@ -1130,7 +1288,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
                         <div>
                           <Input
-                            label="Unit Price ($) *"
+                            label={`Unit Price (${profile?.currency || currency}) *`}
                             type="number"
                             step="0.01"
                             min="0"
@@ -1180,48 +1338,62 @@ export const OpportunityDetailScreen: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {lineItems.map((item, idx) => (
-                              <tr key={item.lineItemId} style={{ borderBottom: idx < lineItems.length - 1 ? '1px solid var(--border-color)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)' }}>
-                                <td style={{ padding: '0.85rem 1rem' }}>
-                                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.product?.name || 'Custom Product'}</div>
-                                  {item.product?.sku && (
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.1rem 0.35rem', borderRadius: '3px', marginTop: '2px', display: 'inline-block' }}>
-                                      SKU: {item.product.sku}
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
-                                  {item.product?.productCategory?.name ? (
-                                    <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                                      {item.product.productCategory.name}
-                                    </span>
-                                  ) : '—'}
-                                </td>
-                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
-                                <td style={{ padding: '0.85rem 1rem', textAlign: 'right', color: 'var(--text-secondary)' }}>${item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
-                                  {item.discountPercent > 0 ? (
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
-                                      {item.discountPercent}% OFF
-                                    </span>
-                                  ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                                </td>
-                                <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: '0.92rem' }}>
-                                  ${item.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                                <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
-                                  <button
-                                    type="button"
-                                    className="icon-btn danger"
-                                    onClick={() => handleDeleteLineItem(item.lineItemId)}
-                                    title="Remove item"
-                                    style={{ padding: '0.35rem', color: 'var(--text-muted)', transition: 'color 0.15s ease' }}
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
+                            {lineItems.map((item, idx) => {
+                              const catalogProduct = products.find(p => p.productId === item.productId);
+                              const hasPriceChanged = catalogProduct && Math.abs(catalogProduct.price - item.unitPrice) > 0.001;
+
+                              return (
+                                <tr key={item.lineItemId} style={{ borderBottom: idx < lineItems.length - 1 ? '1px solid var(--border-color)' : 'none', background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)' }}>
+                                  <td style={{ padding: '0.85rem 1rem' }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.product?.name || 'Custom Product'}</div>
+                                    {item.product?.sku && (
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.1rem 0.35rem', borderRadius: '3px', marginTop: '2px', display: 'inline-block' }}>
+                                        SKU: {item.product.sku}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)' }}>
+                                    {item.product?.productCategory?.name ? (
+                                      <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '1rem', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                                        {item.product.productCategory.name}
+                                      </span>
+                                    ) : '—'}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center', fontWeight: 600 }}>{item.quantity}</td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {formatCurrency(item.unitPrice, profile?.currency || currency, 2)}
+                                    </div>
+                                    {hasPriceChanged && (
+                                      <div style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '2px', fontWeight: 600 }} title="Current price configured in Settings/Products catalog">
+                                        Catalog: {formatCurrency(catalogProduct.price, profile?.currency || currency, 2)}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    {item.discountPercent > 0 ? (
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>
+                                        {item.discountPercent}% OFF
+                                      </span>
+                                    ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontWeight: 700, color: '#10b981', fontSize: '0.92rem' }}>
+                                    {formatCurrency(item.totalPrice, profile?.currency || currency, 2)}
+                                  </td>
+                                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className="icon-btn danger"
+                                      onClick={() => handleDeleteLineItem(item.lineItemId)}
+                                      title="Remove item"
+                                      style={{ padding: '0.35rem', color: 'var(--text-muted)', transition: 'color 0.15s ease' }}
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                           <tfoot>
                             <tr style={{ background: 'var(--bg-secondary)', borderTop: '2px solid var(--border-color)', fontWeight: 700 }}>
@@ -1229,7 +1401,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 Quotation Grand Total:
                               </td>
                               <td style={{ padding: '0.85rem 1rem', textAlign: 'right', fontSize: '1.05rem', color: '#10b981', fontWeight: 800 }}>
-                                ${calculatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatCurrency(calculatedTotal, profile?.currency || currency, 2)}
                               </td>
                               <td></td>
                             </tr>
@@ -1276,13 +1448,15 @@ export const OpportunityDetailScreen: React.FC = () => {
                           Turn your deal and line item quote into a binding legal contract with online e-signatures.
                         </p>
                         <Button variant="secondary" size="sm" onClick={handleOpenCreateContract}>
-                          <Plus size={14} style={{ marginRight: 4 }} /> Create Contract for ${calculatedTotal > 0 ? calculatedTotal.toLocaleString() : opportunity.estimatedValue.toLocaleString()}
+                          <Plus size={14} style={{ marginRight: 4 }} /> Create Contract for {formatCurrency(currentQuotedTotal > 0 ? currentQuotedTotal : opportunity.estimatedValue, profile?.currency || currency)}
                         </Button>
                       </div>
                     ) : (
                       <div className="bounded-scroll-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px' }}>
                         {contracts.map(contract => {
                           const isSigned = contract.status === 'Signed' || contract.status === 'Active' || !!contract.signatureDataUrl || !!contract.signedAt;
+                          const isContractOutdated = !isSigned && (Math.abs((contract.contractValue || 0) - currentQuotedTotal) > 0.01 || hasOutdatedCatalogPrices);
+
                           return (
                             <div
                               key={contract.contractId}
@@ -1290,7 +1464,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 padding: '1rem 1.25rem',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: '0.75rem',
-                                border: isSigned ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                                border: isSigned ? '1px solid rgba(16, 185, 129, 0.3)' : isContractOutdated ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid var(--border-color)',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
@@ -1317,10 +1491,15 @@ export const OpportunityDetailScreen: React.FC = () => {
                                   >
                                     {isSigned ? 'Signed & Active' : (contract.status || 'Draft')}
                                   </span>
+                                  {isContractOutdated && (
+                                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.12rem 0.45rem', borderRadius: '4px', fontWeight: 600 }} title="Contract value differs from current quote/catalog price">
+                                      ⚠️ Price Outdated (Quote: {formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                  <span>Value: <strong style={{ color: '#10b981' }}>${contract.contractValue?.toLocaleString()}</strong></span>
+                                  <span>Value: <strong style={{ color: '#10b981' }}>{formatCurrency(contract.contractValue, profile?.currency || currency)}</strong></span>
                                   <span>Start: {formatDisplayDate(contract.startDate)}</span>
                                   <span>End: {formatDisplayDate(contract.endDate)}</span>
                                   {contract.signedByName && <span>Signed By: <strong>{contract.signedByName}</strong></span>}
@@ -1328,6 +1507,20 @@ export const OpportunityDetailScreen: React.FC = () => {
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                {isContractOutdated && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleSyncContractPricing(contract.contractId)}
+                                    disabled={syncingContractId === contract.contractId}
+                                    style={{ border: '1px solid #f59e0b', color: '#f59e0b', fontSize: '0.8rem', background: 'rgba(245, 158, 11, 0.1)' }}
+                                    title="Synchronize contract value to current product catalog and quote total"
+                                  >
+                                    <RefreshCw size={13} style={{ marginRight: 4 }} className={syncingContractId === contract.contractId ? 'animate-spin' : ''} />
+                                    {syncingContractId === contract.contractId ? 'Syncing…' : 'Sync Value'}
+                                  </Button>
+                                )}
+
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1422,7 +1615,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                           Generate an invoice from this deal or contract to collect client payments via Stripe or manual recording.
                         </p>
                         <Button variant="secondary" size="sm" onClick={() => handleOpenCreateInvoice()}>
-                          <Plus size={14} style={{ marginRight: 4 }} /> Create Invoice for ${calculatedTotal > 0 ? calculatedTotal.toLocaleString() : opportunity.estimatedValue.toLocaleString()}
+                          <Plus size={14} style={{ marginRight: 4 }} /> Create Invoice for {formatCurrency(currentQuotedTotal > 0 ? currentQuotedTotal : opportunity.estimatedValue, profile?.currency || currency)}
                         </Button>
                       </div>
                     ) : (
@@ -1434,6 +1627,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                           const isCancelledOrRefunded = invStatus === 'cancelled' || invStatus === 'refunded';
                           const isPendingVerification = invStatus === 'pendingverification';
                           const isPayable = !isPaid && !isCancelledOrRefunded && !isPendingVerification;
+                          const isInvoiceOutdated = (invStatus === 'draft' || invStatus === 'sent') && (Math.abs((inv.amount || 0) - currentQuotedTotal) > 0.01 || hasOutdatedCatalogPrices);
 
                           const statusBg = isPaid ? 'rgba(16, 185, 129, 0.15)' : isPartiallyPaid ? 'rgba(99, 102, 241, 0.15)' : inv.status === 'Sent' ? 'rgba(99, 102, 241, 0.15)' : isCancelledOrRefunded ? 'rgba(239, 68, 68, 0.15)' : inv.status === 'Overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)';
                           const statusColor = isPaid ? '#10b981' : isPartiallyPaid ? '#818cf8' : inv.status === 'Sent' ? '#818cf8' : isCancelledOrRefunded ? '#ef4444' : inv.status === 'Overdue' ? '#ef4444' : '#f59e0b';
@@ -1446,7 +1640,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                                 padding: '1rem 1.25rem',
                                 background: 'var(--bg-secondary)',
                                 borderRadius: '0.75rem',
-                                border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+                                border: isPaid ? '1px solid rgba(16, 185, 129, 0.3)' : isInvoiceOutdated ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid var(--border-color)',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
@@ -1475,12 +1669,17 @@ export const OpportunityDetailScreen: React.FC = () => {
                                       Contract: {inv.contract.contractNumber}
                                     </span>
                                   )}
+                                  {isInvoiceOutdated && (
+                                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '0.12rem 0.45rem', borderRadius: '4px', fontWeight: 600 }} title="Invoice amount differs from current quote/catalog price">
+                                      ⚠️ Price Outdated (Quote: {formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                                    </span>
+                                  )}
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                  <span>Total: <strong style={{ color: '#10b981', fontSize: '0.9rem' }}>${(inv.totalAmount ?? inv.amount)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                                  {inv.amountPaid > 0 && <span style={{ color: '#10b981' }}>Paid: ${Number(inv.amountPaid).toLocaleString()}</span>}
-                                  {inv.balanceDue > 0 && <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Due: ${Number(inv.balanceDue).toLocaleString()}</span>}
-                                  {inv.taxAmount > 0 && <span>(Tax: ${inv.taxAmount.toLocaleString()})</span>}
+                                  <span>Total: <strong style={{ color: '#10b981', fontSize: '0.9rem' }}>{formatCurrency(inv.totalAmount ?? inv.amount, profile?.currency || currency, 2)}</strong></span>
+                                  {inv.amountPaid > 0 && <span style={{ color: '#10b981' }}>Paid: {formatCurrency(inv.amountPaid, profile?.currency || currency, 2)}</span>}
+                                  {inv.balanceDue > 0 && <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Due: {formatCurrency(inv.balanceDue, profile?.currency || currency, 2)}</span>}
+                                  {inv.taxAmount > 0 && <span>(Tax: {formatCurrency(inv.taxAmount, profile?.currency || currency, 2)})</span>}
                                   <span>Issue: {formatDisplayDate(inv.issueDate)}</span>
                                   <span>Due: {formatDisplayDate(inv.dueDate)}</span>
                                   {isPaid && inv.paymentMethod && <span>Paid via: <strong>{inv.paymentMethod}</strong></span>}
@@ -1488,6 +1687,20 @@ export const OpportunityDetailScreen: React.FC = () => {
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                {isInvoiceOutdated && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleSyncInvoicePricing(inv.invoiceId)}
+                                    disabled={syncingInvoiceId === inv.invoiceId}
+                                    style={{ border: '1px solid #f59e0b', color: '#f59e0b', fontSize: '0.8rem', background: 'rgba(245, 158, 11, 0.1)' }}
+                                    title="Synchronize invoice amount to current product catalog and quote total"
+                                  >
+                                    <RefreshCw size={13} style={{ marginRight: 4 }} className={syncingInvoiceId === inv.invoiceId ? 'animate-spin' : ''} />
+                                    {syncingInvoiceId === inv.invoiceId ? 'Syncing…' : 'Sync Amount'}
+                                  </Button>
+                                )}
+
                                 {isPayable && (
                                   <Button
                                     variant="secondary"
@@ -1683,9 +1896,20 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Contract Value ($) *
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Contract Value ({profile?.currency || currency}) *
+                    </label>
+                    {currentQuotedTotal > 0 && Math.abs(newContractValue - currentQuotedTotal) > 0.01 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewContractValue(currentQuotedTotal)}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        ⚡ Use Quoted Total ({formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                      </button>
+                    )}
+                  </div>
                   <Input
                     type="number"
                     step="0.01"
@@ -1779,9 +2003,20 @@ export const OpportunityDetailScreen: React.FC = () => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Contract Value ($) *
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Contract Value ({profile?.currency || currency}) *
+                    </label>
+                    {currentQuotedTotal > 0 && Math.abs(editContractValue - currentQuotedTotal) > 0.01 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditContractValue(currentQuotedTotal)}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        ⚡ Use Quoted Total ({formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                      </button>
+                    )}
+                  </div>
                   <Input
                     type="number"
                     step="0.01"
@@ -1906,9 +2141,20 @@ export const OpportunityDetailScreen: React.FC = () => {
             <form onSubmit={handleCreateInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Invoice Amount ($) *
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Invoice Amount ({profile?.currency || currency}) *
+                    </label>
+                    {currentQuotedTotal > 0 && Math.abs(newInvoiceAmount - currentQuotedTotal) > 0.01 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewInvoiceAmount(currentQuotedTotal)}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        ⚡ Use Quoted Total ({formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                      </button>
+                    )}
+                  </div>
                   <Input
                     type="number"
                     step="0.01"
@@ -1943,7 +2189,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                     onChange={val => setNewInvoiceContractId(Number(val) > 0 ? Number(val) : null)}
                     options={[
                       { value: '0', label: '— No linked contract —' },
-                      ...contracts.map(c => ({ value: String(c.contractId), label: `${c.contractNumber} (${c.title}) - $${c.contractValue?.toLocaleString()}` }))
+                      ...contracts.map(c => ({ value: String(c.contractId), label: `${c.contractNumber} (${c.title}) - ${formatCurrency(c.contractValue, profile?.currency || currency)}` }))
                     ]}
                   />
                 </div>
@@ -1988,7 +2234,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
                 <span>Grand Total (incl. Tax):</span>
                 <strong style={{ color: '#10b981', fontSize: '1.15rem' }}>
-                  ${(newInvoiceAmount + (newInvoiceAmount * (newInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatCurrency(newInvoiceAmount + (newInvoiceAmount * (newInvoiceTaxRate / 100)), profile?.currency || currency, 2)}
                 </strong>
               </div>
 
@@ -2042,9 +2288,20 @@ export const OpportunityDetailScreen: React.FC = () => {
             <form onSubmit={handleEditInvoiceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Invoice Amount ($) *
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Invoice Amount ({profile?.currency || currency}) *
+                    </label>
+                    {currentQuotedTotal > 0 && Math.abs(editInvoiceAmount - currentQuotedTotal) > 0.01 && (
+                      <button
+                        type="button"
+                        onClick={() => setEditInvoiceAmount(currentQuotedTotal)}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                      >
+                        ⚡ Use Quoted Total ({formatCurrency(currentQuotedTotal, profile?.currency || currency)})
+                      </button>
+                    )}
+                  </div>
                   <Input
                     type="number"
                     step="0.01"
@@ -2125,7 +2382,7 @@ export const OpportunityDetailScreen: React.FC = () => {
               <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-color)' }}>
                 <span>Calculated Total (incl. Tax):</span>
                 <strong style={{ color: '#10b981', fontSize: '1.15rem' }}>
-                  ${(editInvoiceAmount + (editInvoiceAmount * (editInvoiceTaxRate / 100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatCurrency(editInvoiceAmount + (editInvoiceAmount * (editInvoiceTaxRate / 100)), profile?.currency || currency, 2)}
                 </strong>
               </div>
 
@@ -2149,7 +2406,7 @@ export const OpportunityDetailScreen: React.FC = () => {
 
         return (
           <div className="crm-modal-overlay">
-            <div className="crm-modal-container" style={{ maxWidth: '520px' }}>
+            <div className="crm-modal-container" style={{ maxWidth: '580px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                   <div style={{
@@ -2163,8 +2420,8 @@ export const OpportunityDetailScreen: React.FC = () => {
                     <ShieldCheck size={22} />
                   </div>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      Record &amp; Verify Payment
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Record Offline / Manual Payment
                     </h3>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
                       Invoice #{payingInvoice.invoiceNumber} · Internal Ledger Verification
@@ -2181,15 +2438,15 @@ export const OpportunityDetailScreen: React.FC = () => {
               </div>
 
               {/* Internal Verification Notice */}
-              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
+              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1.2rem', fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.65rem', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
                 <div>
-                  <strong style={{ color: 'var(--text-primary)' }}>Internal Verification:</strong> Record that the <strong>Customer (Payer)</strong> has made a verified payment to <strong>Our Company (Receiver)</strong>.
+                  <strong style={{ color: 'var(--text-primary)' }}>Direct Ledger Credit:</strong> Record that the <strong>Customer (Payer)</strong> has made a verified offline payment to <strong>Our Company (Receiver)</strong>.
                 </div>
               </div>
 
               {/* Payer vs Receiver Card */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.5rem' }}>
                 <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>👤 Payer (Customer)</div>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>
@@ -2202,62 +2459,101 @@ export const OpportunityDetailScreen: React.FC = () => {
                 <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>🏢 Receiver (Our Company)</div>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>Enterprise CRM Solutions</div>
-                  <div style={{ fontSize: '0.76rem', color: '#10b981', fontWeight: 600 }}>Balance: ${remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>Balance Due: ${remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                 </div>
               </div>
 
-              <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="crm-form-2col">
-                  <div>
-                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Amount Paid ($) *
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      max={remainingBal > 0 ? remainingBal : (payingInvoice.totalAmount || payingInvoice.amount)}
-                      value={paymentAmount}
-                      onChange={e => setPaymentAmount(Number(e.target.value))}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Payment Date *
-                    </label>
-                    <Input
-                      type="date"
-                      value={paymentDate}
-                      onChange={e => setPaymentDate(e.target.value)}
-                      required
-                    />
+              <form onSubmit={handlePaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+                {/* Payment Method Quick Selector */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.45rem' }}>
+                    Payment Method / Channel *
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                    {[
+                      { id: 'Bank Transfer', label: '🏦 Bank Wire' },
+                      { id: 'Cash', label: '💵 Cash' },
+                      { id: 'Check', label: '📑 Cheque' },
+                      { id: 'Telebirr / CBE Birr', label: '📱 Telebirr/CBE' },
+                      { id: 'Stripe', label: '💳 Card / POS' },
+                      { id: 'SWIFT Wire Transfer', label: '🌐 SWIFT Int.' }
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id)}
+                        style={{
+                          padding: '0.45rem 0.5rem',
+                          borderRadius: '8px',
+                          border: paymentMethod === m.id ? '1.5px solid #10b981' : '1px solid var(--border-color)',
+                          background: paymentMethod === m.id ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-secondary)',
+                          color: paymentMethod === m.id ? '#10b981' : 'var(--text-secondary)',
+                          fontSize: '0.78rem',
+                          fontWeight: paymentMethod === m.id ? 700 : 500,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
+                {/* Amount & Date with Quick Fill Chips */}
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Payment Method (How Customer Paid) *
-                  </label>
-                  <SearchableSelect
-                    value={paymentMethod}
-                    onChange={val => setPaymentMethod(String(val))}
-                    options={[
-                      { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
-                      { value: 'Stripe', label: '💳 Stripe (Credit / Debit Card)' },
-                      { value: 'Cash', label: '💵 Cash Settlement' },
-                      { value: 'Check', label: '📑 Business Check / Cheque' },
-                      { value: 'Telebirr / CBE Birr', label: '📱 Telebirr / CBE Birr' },
-                      { value: 'SWIFT Wire Transfer', label: '🌐 SWIFT International Wire' },
-                      { value: 'Other', label: '⚡ Other Supported Method' }
-                    ]}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Amount Paid ($) *
+                    </label>
+                    {remainingBal > 0 && (
+                      <div style={{ display: 'flex', gap: '0.35rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(remainingBal)}
+                          style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          Full (${remainingBal.toLocaleString()})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(Math.round((remainingBal / 2) * 100) / 100)}
+                          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600, padding: '0.15rem 0.45rem', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          50% (${(remainingBal / 2).toLocaleString()})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="crm-form-2col">
+                    <div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={remainingBal > 0 ? remainingBal : (payingInvoice.totalAmount || payingInvoice.amount)}
+                        value={paymentAmount}
+                        onChange={e => setPaymentAmount(Number(e.target.value))}
+                        required
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        type="date"
+                        value={paymentDate}
+                        onChange={e => setPaymentDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {isBankMethod && (
                   <div>
                     <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Bank Name (Customer's / Receiving Bank)
+                      Receiving / Customer Bank Name
                     </label>
                     <SearchableSelect
                       value={paymentBankName}
@@ -2271,6 +2567,7 @@ export const OpportunityDetailScreen: React.FC = () => {
                         { value: 'Zemen Bank', label: 'Zemen Bank' },
                         { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
                         { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
+                        { value: 'Telebirr / Ethio Telecom', label: 'Telebirr / Ethio Telecom' },
                         { value: 'Other Supported Bank', label: 'Other Supported Bank' }
                       ]}
                     />
@@ -2279,19 +2576,33 @@ export const OpportunityDetailScreen: React.FC = () => {
 
                 <div>
                   <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Transaction / Check Reference (Optional)
+                    Transaction / Slip / Check Reference (Optional)
                   </label>
                   <Input
                     value={paymentRef}
                     onChange={e => setPaymentRef(e.target.value)}
-                    placeholder="e.g. Bank Ref #TXN-928374, Stripe ID, or Check #4092"
+                    placeholder="e.g. Bank Deposit Slip #TXN-928374, Check #4092, or Telebirr ID"
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Accounting Remarks (Optional)
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      Accounting Remarks / Verification Notes
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                      {['Direct Bank Deposit', 'Cash in Office', 'Verified on Statement'].map(tag => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setPaymentNotes(tag)}
+                          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.7rem', padding: '0.1rem 0.35rem', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <Input
                     value={paymentNotes}
                     onChange={e => setPaymentNotes(e.target.value)}

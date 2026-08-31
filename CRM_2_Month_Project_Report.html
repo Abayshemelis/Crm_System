@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise CRM System — 2-Month Development Lifecycle Report (9 Weeks)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --primary: #4f46e5;
+      --primary-light: #eef2ff;
+      --primary-dark: #3730a3;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --bg-card: #f8fafc;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --info: #0ea5e9;
+      --purple: #8b5cf6;
+      --pink: #ec4899;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text-main);
+      background: #f1f5f9;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 60px 70px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    }
+
+    /* Header & Cover Banner */
+    .header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 30px;
+      margin-bottom: 40px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-primary { background: var(--primary-light); color: var(--primary); }
+    .badge-analysis { background: #fef3c7; color: #b45309; }
+    .badge-design { background: #f3e8ff; color: #7e22ce; }
+    .badge-backend { background: #e0f2fe; color: #0369a1; }
+    .badge-frontend { background: #dcfce7; color: #15803d; }
+    .badge-security { background: #fee2e2; color: #b91c1c; }
+    .badge-integration { background: #ffedd5; color: #c2410c; }
+    .badge-ai { background: #fae8ff; color: #a21caf; border: 1px solid #f0abfc; }
+    .badge-qa { background: #f1f5f9; color: #475569; }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 15px;
+      line-height: 1.25;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 25px;
+      background: var(--bg-card);
+      padding: 18px 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .meta-item span {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .meta-item strong {
+      font-size: 0.95rem;
+      color: #0f172a;
+    }
+
+    /* Section Styling */
+    h2 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 40px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 2px solid var(--primary-light);
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--primary-dark);
+      margin-top: 28px;
+      margin-bottom: 14px;
+    }
+
+    p {
+      margin-bottom: 15px;
+      color: #334155;
+    }
+
+    /* Week Cards */
+    .week-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .week-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .week-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .day-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .day-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .day-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 0.92rem;
+      color: #1e293b;
+    }
+
+    .day-desc {
+      font-size: 0.88rem;
+      color: #475569;
+      padding-left: 2px;
+      line-height: 1.5;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 25px 0;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--bg-card);
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    tr:nth-child(even) {
+      background: #fdfdfe;
+    }
+
+    /* Print Specifics */
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .container {
+        box-shadow: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .no-print {
+        display: none;
+      }
+      .week-card {
+        page-break-inside: avoid;
+      }
+      h2 {
+        page-break-before: auto;
+      }
+    }
+
+    .print-btn {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: var(--primary);
+      color: #ffffff;
+      padding: 14px 24px;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      border: none;
+      box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .print-btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body>
+
+  <button class="print-btn no-print" onclick="window.print()">
+    🖨️ Save as PDF / Print
+  </button>
+
+  <div class="container">
+    <!-- Header / Meta -->
+    <div class="header">
+      <span class="badge badge-primary">Agile SDLC Project Report</span>
+      <h1>Enterprise CRM System<br><span style="font-size: 1.5rem; font-weight: 500; color: var(--text-muted);">Development Lifecycle, AI Integration & Daily Task Classification</span></h1>
+      
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span>Project Duration</span>
+          <strong>9 Weeks (45 Working Days)</strong>
+        </div>
+        <div class="meta-item">
+          <span>Total Effort</span>
+          <strong>~360 Engineering Hours</strong>
+        </div>
+        <div class="meta-item">
+          <span>Backend Framework</span>
+          <strong>ASP.NET Core 9 / EF Core</strong>
+        </div>
+        <div class="meta-item">
+          <span>Frontend Framework</span>
+          <strong>React 18 / TypeScript / Vite</strong>
+        </div>
+        <div class="meta-item">
+          <span>AI Engine</span>
+          <strong>Google Gemini LLM (Flash 2.5 / 1.5)</strong>
+        </div>
+        <div class="meta-item">
+          <span>Database & Scale</span>
+          <strong>28 Entities / 46 Screens</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <h2>📌 Executive Summary</h2>
+    <p>
+      This document presents the complete engineering report for the Enterprise Customer Relationship Management (CRM) System. The development process adhered to Agile-Scrum methodology, beginning with thorough requirements analysis, entity-relationship modeling, and clean architecture scaffolding, and progressing through core sales operations, digital e-signature contracts, real-time WebSocket communications, Google Gemini AI integration, 14 BI analytics modules, and multi-device session security management.
+    </p>
+
+    <!-- Phase 1 -->
+    <h2>🗓️ Phase 1: Requirements Engineering & System Design</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 1: Domain Discovery, SRS, ERD & Wireframing</span>
+        <span class="badge badge-analysis">Requirements & Design</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-analysis">ANALYSIS</span>
+            <span>Day 1 (Mon) — Stakeholder Discovery & Requirement Gathering</span>
+          </div>
+          <div class="day-desc">Interviewed stakeholders across Admin, Manager, and Sales Rep personas to identify pain points in lead tracking, pipeline visualization, digital contract turnaround, and billing.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-analysis">ANALYSIS</span>
+            <span>Day 2 (Tue) — Software Requirements Specification (SRS)</span>
+          </div>
+          <div class="day-desc">Documented formal functional specifications (28 functional modules) and non-functional requirements (sub-50ms WebSocket latency, responsive layout, RBAC security matrix).</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-design">DESIGN</span>
+            <span>Day 3 (Wed) — Entity-Relationship (ERD) & Schema Modeling</span>
+          </div>
+          <div class="day-desc">Designed a fully normalized relational database schema comprising 28 entities across Auth, Sales, Billing, and System domains with foreign key cascades and index strategies.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-design">DESIGN</span>
+            <span>Day 4 (Thu) — UI/UX Wireframing & Screen Flow Design</span>
+          </div>
+          <div class="day-desc">Created wireframes and navigation maps for 46 application screens, defining a glassmorphic design token system, light/dark themes, and responsive mobile layouts.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-design">DESIGN</span>
+            <span>Day 5 (Fri) — Technical Architecture & REST API Contracts</span>
+          </div>
+          <div class="day-desc">Defined RESTful API contracts (standard camelCase JSON DTOs, HTTP status conventions) and WebSocket real-time event schemas.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 2 -->
+    <h2>🗓️ Phase 2: Architecture Setup & Database Implementation</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 2: Clean Architecture, EF Core & React Scaffolding</span>
+        <span class="badge badge-backend">Backend & Setup</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 6 (Mon) — Solution Scaffolding & Multi-Project Structure</span>
+          </div>
+          <div class="day-desc">Structured .NET solution (`CrmSystem.Api`, `CrmSystem.Domain`, `CrmSystem.Infrastructure`) and scaffolded React TypeScript SPA using Vite.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 7 (Tue) — EF Core Domain & Fluent API Configuration</span>
+          </div>
+          <div class="day-desc">Implemented 28 C# domain entities and configured `AppDbContext` with Fluent API mappings, composite keys, and property constraints.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 8 (Wed) — SQL Server Migrations & Health Checks</span>
+          </div>
+          <div class="day-desc">Executed initial EF Core database migrations, validated SQL Server tables, and created API health check endpoints (`/api/health`).</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 9 (Thu) — Automated Database Seeding Engine</span>
+          </div>
+          <div class="day-desc">Implemented startup data seeder to initialize default administrator credentials, pipeline stages, lookup statuses, and activity types.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 10 (Fri) — Layout Shell, Theme Engine & API Wrapper</span>
+          </div>
+          <div class="day-desc">Built collapsable sidebar navigation (`Layout.tsx`), theme switcher, and centralized `api.ts` fetch client with automatic header injection.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 3 -->
+    <h2>🗓️ Phase 3: Authentication & Access Control (RBAC)</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 3: Cryptographic Auth, JWT & Google SSO</span>
+        <span class="badge badge-security">Security & Auth</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-security">SECURITY</span>
+            <span>Day 11 (Mon) — Password Hashing & Identity Services</span>
+          </div>
+          <div class="day-desc">Built `BCryptPasswordHasher` for salted one-way password encryption and configured Identity authentication policies.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-security">SECURITY</span>
+            <span>Day 12 (Tue) — JWT Generation & Refresh Token Rotation</span>
+          </div>
+          <div class="day-desc">Developed `JwtTokenService` generating HMAC-SHA256 JWT access tokens and secure refresh tokens with sliding expiration.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">INTEGRATION</span>
+            <span>Day 13 (Wed) — Google OAuth2 Single Sign-On (SSO)</span>
+          </div>
+          <div class="day-desc">Integrated Google OAuth token verification (`POST /api/auth/google`) for 1-click single sign-on with automatic user provisioning.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-security">SECURITY</span>
+            <span>Day 14 (Thu) — Secure Password Recovery Flow</span>
+          </div>
+          <div class="day-desc">Developed forgot password and reset password endpoints (`PasswordResetToken`) with time-limited tokens and security checks.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 15 (Fri) — Auth Screens & Role-Gated Route Guards</span>
+          </div>
+          <div class="day-desc">Built `AuthContext.tsx`, `LoginScreen.tsx` with demo quick-fill, and `ProtectedRoute.tsx` enforcing RBAC permissions.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 4 -->
+    <h2>🗓️ Phase 4: Core CRM — Customers, Companies & Leads</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 4: Contact Management & Lead Conversion Engine</span>
+        <span class="badge badge-frontend">Core CRM</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 16 (Mon) — Customer & Company REST APIs</span>
+          </div>
+          <div class="day-desc">Implemented `CustomersController` and `CompaniesController` with server-side pagination, multi-column search, and sorting.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 17 (Tue) — Customer Directory & 360° Profile Cockpit</span>
+          </div>
+          <div class="day-desc">Built `CustomersScreen.tsx` data grid and `CustomerDetailScreen.tsx` displaying complete contact history, deals, and activities.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 18 (Wed) — Company Management & Form Modals</span>
+          </div>
+          <div class="day-desc">Built `CompaniesScreen.tsx` and `CompanyDetailScreen.tsx` showing linked contacts and aggregated corporate deal values.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 19 (Thu) — Lead Scoring & Pipeline Qualification</span>
+          </div>
+          <div class="day-desc">Developed `LeadsController` and scoring engine evaluating lead readiness; built `LeadsScreen.tsx` with score-based sorting.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">INTEGRATION</span>
+            <span>Day 20 (Fri) — 1-Click Atomic Lead Conversion Flow</span>
+          </div>
+          <div class="day-desc">Developed `POST /api/leads/{id}/convert` atomically generating a Customer, Company, and Opportunity with `LeadConvertModal.tsx`.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 5 -->
+    <h2>🗓️ Phase 5: Visual Sales Pipeline & Product Catalog</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 5: Drag-and-Drop Kanban & Opportunity Cockpit</span>
+        <span class="badge badge-frontend">Sales Pipeline</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 21 (Mon) — Pipeline & Stage Duration Tracking</span>
+          </div>
+          <div class="day-desc">Built `OpportunitiesController` and `StageHistory` tracking to record time spent in each stage for sales velocity calculations.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 22 (Tue) — Interactive Drag-and-Drop Kanban Board</span>
+          </div>
+          <div class="day-desc">Built `PipelineScreen.tsx` featuring an interactive Kanban board with deal cards, column revenue summaries, and live stage updating.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 23 (Wed) — Opportunity Detail Cockpit & Line Items</span>
+          </div>
+          <div class="day-desc">Developed `OpportunityDetailScreen.tsx` displaying deal win probability, expected value, stage timeline, and itemized products.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 24 (Thu) — Product Catalog & Price Book</span>
+          </div>
+          <div class="day-desc">Developed `ProductsController` and `ProductsScreen.tsx` with SKUs, category classifications, and pricing management.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 25 (Fri) — Opportunity Form & Pipeline Configuration</span>
+          </div>
+          <div class="day-desc">Built `OpportunityFormScreen.tsx` and `PipelineStagesScreen.tsx` allowing managers to customize sales stages and win probabilities.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 6 -->
+    <h2>🗓️ Phase 6: Financials, E-Sign Contracts & Invoicing</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 6: Digital Signature Portal, Billing & Payments</span>
+        <span class="badge badge-backend">Financials</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 26 (Mon) — Contract Engine & Tokenized Signatures</span>
+          </div>
+          <div class="day-desc">Modeled `Contract.cs` supporting unique security signing tokens, terms, and digital audit stamps for client signature links.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 27 (Tue) — Public Client E-Signature Portal</span>
+          </div>
+          <div class="day-desc">Built `PublicContractSignScreen.tsx` allowing external clients to review legal terms and sign with an interactive HTML5 canvas.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 28 (Wed) — Invoicing & Tax Calculation Engine</span>
+          </div>
+          <div class="day-desc">Developed `InvoicesController` calculating line items, tax percentages, balance due, and overdue dates; built `InvoicesScreen.tsx`.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">INTEGRATION</span>
+            <span>Day 29 (Thu) — Public Client Payment Portal & PDF Export</span>
+          </div>
+          <div class="day-desc">Built `PublicInvoicePayScreen.tsx` for client payment checkout and implemented client-side printable PDF generation.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 30 (Fri) — Payment Processing & Receipt Generation</span>
+          </div>
+          <div class="day-desc">Built `PaymentsController` and `PaymentsScreen.tsx` recording transaction receipts and auto-updating invoice status to `Paid`.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 7 -->
+    <h2>🗓️ Phase 7: Tasks, Attachments & SignalR WebSockets</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 7: Real-Time Alerts, Activity Feed & Documents</span>
+        <span class="badge badge-integration">Real-Time</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-backend">BACKEND</span>
+            <span>Day 31 (Mon) — Activity Logging & Timeline Engine</span>
+          </div>
+          <div class="day-desc">Developed `ActivitiesController` supporting calls, meetings, emails, and notes linked across all CRM entity detail screens.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 32 (Tue) — Task Management & Productivity Hub</span>
+          </div>
+          <div class="day-desc">Developed `CrmTasksController` and `TasksScreen.tsx` supporting due dates, priority filters (`Urgent`, `High`), and quick completion.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">INTEGRATION</span>
+            <span>Day 33 (Wed) — File Attachment Repository</span>
+          </div>
+          <div class="day-desc">Built `AttachmentsController` supporting multipart document uploads, size validation, and file previews for deals and contracts.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">INTEGRATION</span>
+            <span>Day 34 (Thu) — SignalR WebSocket Infrastructure</span>
+          </div>
+          <div class="day-desc">Configured `NotificationHub.cs` mapped to `/hubs/notifications` and built `SignalRContext.tsx` on React to maintain active connections.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 35 (Fri) — Live Event Broadcasts & Audio Chimes</span>
+          </div>
+          <div class="day-desc">Implemented real-time push broadcasts for `ContractSigned`, `LeadAssigned`, and `TaskDueToday` with synthesized audio chimes.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 8: AI Integration -->
+    <h2>🗓️ Phase 8: Artificial Intelligence (AI) & Google Gemini LLM Integration</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 8: Gemini LLM Engine, Predictive Insights & Conversational Copilot</span>
+        <span class="badge badge-ai">✨ AI & LLM Engine</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-ai">AI BACKEND</span>
+            <span>Day 36 (Mon) — Google Gemini LLM Integration & Resilience Architecture</span>
+          </div>
+          <div class="day-desc">Implemented `GeminiService.cs` with multi-model fallback cascade (`gemini-2.5-flash`, `gemini-1.5-flash`, `gemini-2.0-flash`) and secure prompt structuring.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-ai">AI BACKEND</span>
+            <span>Day 37 (Tue) — AI Deal Win Predictor & Stalled Deal Diagnosis</span>
+          </div>
+          <div class="day-desc">Developed `AiInsightService.cs` to analyze deal velocity, customer engagement history, win probabilities, and automated next-best-action recommendations.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">AI FRONTEND</span>
+            <span>Day 38 (Wed) — Contextual AI Assistants on Leads & Opportunities</span>
+          </div>
+          <div class="day-desc">Built `AiOpportunityAssistant.tsx` and `AiLeadAssistant.tsx` providing sales reps with live deal health ratings, risk alerts, and AI-recommended negotiation steps.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">AI FRONTEND</span>
+            <span>Day 39 (Thu) — Global Floating AI Copilot (`GlobalAiCopilot.tsx`)</span>
+          </div>
+          <div class="day-desc">Developed the global CRM floating AI copilot enabling sales teams to ask conversational queries ("Summarize active pipeline", "Draft follow-up email").</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-integration">AI INTEGRATION</span>
+            <span>Day 40 (Fri) — Public AI Assistant & Multi-modal File Understanding</span>
+          </div>
+          <div class="day-desc">Built `PublicAiAssistant.tsx` for client inquiry automation on the landing page and added document/image context attachments for AI analysis.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Phase 9: BI, Security & QA -->
+    <h2>🗓️ Phase 9: 14 BI Reports, Multi-Device Security & Release</h2>
+    <div class="week-card">
+      <div class="week-header">
+        <span class="week-title">Week 9: BI Analytics, Real-Time Force-Logout & Production Handover</span>
+        <span class="badge badge-qa">BI, Security & QA</span>
+      </div>
+      <ul class="day-list">
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 41 (Mon) — 14 Dedicated Business Intelligence (BI) Reports</span>
+          </div>
+          <div class="day-desc">Built 14 dedicated BI reporting modules (Customer, Company, Lead, Pipeline, Opportunity, Contract, Invoice, Payment, Activity, Task, Team Performance) with CSV/Excel export.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-security">SECURITY</span>
+            <span>Day 42 (Tue) — Multi-Device Session Tracking Architecture</span>
+          </div>
+          <div class="day-desc">Added `DeviceInfo`, `IpAddress`, `LastActiveAt` to `RefreshToken.cs` and built `SecuritySessionsTab.tsx` with active device badges.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-security">SECURITY</span>
+            <span>Day 43 (Wed) — Real-Time Force-Logout Middleware (&lt;50ms)</span>
+          </div>
+          <div class="day-desc">Embedded `sessionId` in JWT tokens, built `SessionValidationMiddleware.cs`, and connected SignalR `SessionRevoked` push for instant kick-out.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-frontend">FRONTEND</span>
+            <span>Day 44 (Thu) — Global Multi-Entity Search & System Branding</span>
+          </div>
+          <div class="day-desc">Built `SearchResultsScreen.tsx` for global search and configured `SystemProfileContext.tsx` for company logos, currency, and PWA manifest.</div>
+        </li>
+        <li class="day-item">
+          <div class="day-title-row">
+            <span class="badge badge-qa">TESTING & QA</span>
+            <span>Day 45 (Fri) — Regression Testing, Build Optimization & Release</span>
+          </div>
+          <div class="day-desc">Executed comprehensive testing across all 46 screens and 28 entity endpoints; verified `tsc -b &amp;&amp; vite build` bundled cleanly with 0 errors.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Summary Metrics -->
+    <h2>📊 Project Deliverables Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Classification</th>
+          <th>Days</th>
+          <th>Key Outcomes & Deliverables</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-analysis">ANALYSIS</span></td>
+          <td><strong>3 Days</strong></td>
+          <td>Stakeholder discovery, SRS document, RBAC permission matrix</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-design">DESIGN</span></td>
+          <td><strong>3 Days</strong></td>
+          <td>28-Entity ERD schema, DFDs, 46 screen wireframes, REST API contracts</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-backend">BACKEND</span></td>
+          <td><strong>11 Days</strong></td>
+          <td>ASP.NET Core 9 Web APIs, EF Core, SQL migrations, seed engine, contracts</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-frontend">FRONTEND</span></td>
+          <td><strong>13 Days</strong></td>
+          <td>46 React screens, Kanban board, 14 BI reports, theme tokens</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-ai">AI & LLM</span></td>
+          <td><strong>5 Days</strong></td>
+          <td>Google Gemini LLM, Global Copilot, Win Predictors, Stalled Deal Diagnosis</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-security">SECURITY</span></td>
+          <td><strong>4 Days</strong></td>
+          <td>BCrypt, JWT rotation, Google OAuth, real-time device revocation middleware</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-integration">INTEGRATION</span></td>
+          <td><strong>4 Days</strong></td>
+          <td>SignalR WebSockets, audio feedback, printable PDF invoices, attachments</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-qa">TESTING & QA</span></td>
+          <td><strong>2 Days</strong></td>
+          <td>Full regression testing, Vite bundling optimization, production handover</td>
+        </tr>
+        <tr style="background: var(--primary-light); font-weight: 700;">
+          <td>TOTAL</td>
+          <td>45 Days (9 Wks)</td>
+          <td>100% Completed, Fully Working Enterprise CRM + Gemini AI</td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div>
+
+</body>
+</html>

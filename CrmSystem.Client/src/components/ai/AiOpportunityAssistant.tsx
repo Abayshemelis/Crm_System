@@ -4,6 +4,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { showToast } from '../../lib/toast';
 import { Sparkles, CheckCircle2, AlertOctagon, ArrowRight, TrendingUp, ShieldAlert, RefreshCw } from 'lucide-react';
+import { formatCurrencyGlobal } from '../../context/SystemProfileContext';
 
 interface OpportunityAiPrediction {
     opportunityId: number;
@@ -38,7 +39,7 @@ export const AiOpportunityAssistant: React.FC<AiOpportunityAssistantProps> = ({ 
         }
     };
 
-    const fmtMoney = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+    const fmtMoney = (v: number) => formatCurrencyGlobal(v, undefined, 2);
 
     const getRiskBadge = (level: string) => {
         switch (level?.toLowerCase()) {

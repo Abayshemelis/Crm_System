@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/layout/Layout';
 import { Card } from '../components/ui/Card';
@@ -7,15 +8,16 @@ import { Input } from '../components/ui/Input';
 import { api } from '../lib/api';
 import { showToast } from '../lib/toast';
 import {
-  Plus, Search, Receipt, CheckCircle, Clock, AlertTriangle, Download,
+  Plus, Search, Receipt, CheckCircle, CheckCircle2, Clock, AlertTriangle, Download,
   Printer, DollarSign, CreditCard, MoreVertical, FileText, ArrowUpRight,
   Edit3, Trash2, RefreshCw, Users, UserCheck, Send, Link, ExternalLink,
-  ShieldCheck, Landmark, Copy, Check
+  ShieldCheck, Landmark, Copy, Check, X
 } from 'lucide-react';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
+import { useSystemProfile, useFormatCurrency } from '../context/SystemProfileContext';
 import { validatePositiveNumber, validateRequiredSelect, validateDateRange, validateMaxLength } from '../lib/validators';
 import './screens.css';
 import { confirmAction } from '../lib/confirm';
@@ -62,7 +64,8 @@ const InvoiceActionMenu: React.FC<{
   onDelete: (inv: InvoiceItem) => void;
   onView: (inv: InvoiceItem) => void;
   onPrint: (inv: InvoiceItem) => void;
-}> = ({ invoice, onRecordPayment, onSendPaymentRequest, onCopyPaymentLink, onEdit, onDelete, onView, onPrint }) => {
+  onSyncPricing?: (inv: InvoiceItem) => void;
+}> = ({ invoice, onRecordPayment, onSendPaymentRequest, onCopyPaymentLink, onEdit, onDelete, onView, onPrint, onSyncPricing }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -136,6 +139,17 @@ const InvoiceActionMenu: React.FC<{
                   ? `Copy Pay Link ($${(invoice.balanceDue ?? 0).toLocaleString()} Due)`
                   : 'Copy Payment Link'}
               </span>
+            </button>
+          )}
+
+          {!isPaid && !isCancelledOrRefunded && onSyncPricing && (
+            <button
+              type="button"
+              className="crm-action-menu-item"
+              onClick={(e) => { e.stopPropagation(); onSyncPricing(invoice); setOpen(false); }}
+              style={{ color: '#f59e0b' }}
+            >
+              <RefreshCw size={14} /> Sync Catalog Pricing
             </button>
           )}
 
@@ -215,6 +229,8 @@ const formatDisplayDate = (dateStr?: string | Date | null): string => {
 export const InvoicesScreen: React.FC = () => {
   const navigate = useNavigate();
   const { isManagerOrAboveSelected, selectedRole } = useAuth();
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -566,6 +582,16 @@ export const InvoicesScreen: React.FC = () => {
     showToast(`Payment portal link copied: ${url}`, 'success');
   };
 
+  const handleSyncPricing = async (inv: InvoiceItem) => {
+    try {
+      await api.post(`/api/invoices/${inv.invoiceId}/sync-pricing`, {});
+      showToast(`Invoice #${inv.invoiceNumber} amount synchronized with product catalog and quotation!`);
+      fetchInvoices();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to sync invoice pricing', 'error');
+    }
+  };
+
   const handleOpenEditModal = async (inv: InvoiceItem) => {
     setEditingInvoice(inv);
     setEditAmount(inv.amount);
@@ -818,7 +844,7 @@ export const InvoicesScreen: React.FC = () => {
         <div class="invoice-box">
           <div class="header">
             <div>
-              <div class="logo">⚡ Enterprise CRM Solutions Inc.</div>
+              ${profile?.logoUrl ? `<img src="${profile.logoUrl}" style="max-height: 48px; max-width: 180px; object-fit: contain; margin-bottom: 6px;" alt="Logo" />` : `<div class="logo">⚡ ${profile?.companyName || profile?.systemName || 'Enterprise CRM'}</div>`}
               <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Commercial Invoicing &amp; Accounts Receivable</div>
             </div>
             <div>
@@ -833,10 +859,11 @@ export const InvoicesScreen: React.FC = () => {
           <div class="info-grid">
             <div class="info-block">
               <h4>Remit Payment To (Company / Receiver):</h4>
-              <p><strong>Enterprise CRM Solutions Inc.</strong></p>
-              <p>100 Enterprise Way, Suite 400</p>
-              <p>San Francisco, CA 94105, USA</p>
-              <p>Tax ID: US-94829471</p>
+              <p><strong>${profile?.companyName || profile?.systemName || 'Enterprise CRM Solutions'}</strong></p>
+              ${profile?.address ? `<p>${profile.address}</p>` : ''}
+              ${profile?.country ? `<p>${profile.country}</p>` : ''}
+              ${profile?.email ? `<p>✉️ ${profile.email}</p>` : ''}
+              ${profile?.phone ? `<p>📞 ${profile.phone}</p>` : ''}
             </div>
             <div class="info-block" style="text-align: right;">
               <h4>Bill To (Customer / Payer):</h4>
@@ -863,17 +890,17 @@ export const InvoicesScreen: React.FC = () => {
                   ${inv.contractNumber ? `<div style="font-size: 12px; color: #64748b;">Ref Contract: 📄 ${inv.contractNumber} (${inv.contractTitle || ''})</div>` : ''}
                   ${inv.notes ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">${inv.notes}</div>` : ''}
                 </td>
-                <td style="text-align: right; font-weight: 600;">$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style="text-align: right; font-weight: 600;">${formatCurrency(inv.amount, profile?.currency || currency, 2)}</td>
               </tr>
             </tbody>
           </table>
 
           <div class="total-box">
-            <div class="total-row"><span>Subtotal:</span><span>$${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row"><span>Tax (${inv.taxRate}%):</span><span>$${inv.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row total-grand"><span>Total Amount:</span><span>$${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row" style="color: #10b981; font-weight: 700; margin-top: 4px;"><span>Amount Paid:</span><span>$${(inv.amountPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
-            <div class="total-row" style="color: #6366f1; font-weight: 800; font-size: 16px;"><span>Balance Due:</span><span>$${(inv.balanceDue ?? inv.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></div>
+            <div class="total-row"><span>Subtotal:</span><span>${formatCurrency(inv.amount, profile?.currency || currency, 2)}</span></div>
+            <div class="total-row"><span>Tax (${inv.taxRate}%):</span><span>${formatCurrency(inv.taxAmount, profile?.currency || currency, 2)}</span></div>
+            <div class="total-row total-grand"><span>Total Amount:</span><span>${formatCurrency(inv.totalAmount, profile?.currency || currency, 2)}</span></div>
+            <div class="total-row" style="color: #10b981; font-weight: 700; margin-top: 4px;"><span>Amount Paid:</span><span>${formatCurrency(inv.amountPaid || 0, profile?.currency || currency, 2)}</span></div>
+            <div class="total-row" style="color: #6366f1; font-weight: 800; font-size: 16px;"><span>Balance Due:</span><span>${formatCurrency(inv.balanceDue ?? inv.totalAmount, profile?.currency || currency, 2)}</span></div>
           </div>
 
           <div class="footer">
@@ -924,7 +951,7 @@ export const InvoicesScreen: React.FC = () => {
               <Receipt className="metric-icon" size={20} style={{ color: '#6366f1' }} />
             </div>
             <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              ${totalInvoiced.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totalInvoiced, profile?.currency || currency, 2)}
             </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               {invoices.length} total issued invoices
@@ -939,7 +966,7 @@ export const InvoicesScreen: React.FC = () => {
               <DollarSign className="metric-icon" size={20} style={{ color: '#10b981' }} />
             </div>
             <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#10b981' }}>
-              ${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totalCollected, profile?.currency || currency, 2)}
             </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               Settled into Company bank account
@@ -954,7 +981,7 @@ export const InvoicesScreen: React.FC = () => {
               <Clock className="metric-icon" size={20} style={{ color: '#f59e0b' }} />
             </div>
             <div className="metric-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#f59e0b' }}>
-              ${totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totalReceivable, profile?.currency || currency, 2)}
             </div>
             <div className="metric-subtitle" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               Unpaid balance due from customers
@@ -1060,18 +1087,18 @@ export const InvoicesScreen: React.FC = () => {
             />
           ) : (
             <>
-              <div className="contracts-table-wrap" style={{ overflowX: 'auto' }}>
+              <div className="contracts-table-wrap" style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', minWidth: '1050px', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Invoice #</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payer (Customer)</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Contract / Deal Ref</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Total Invoiced</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Balance Due</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Payment Status</th>
-                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>Due Date</th>
-                    <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '160px' }}>Invoice #</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '220px' }}>Payer (Customer)</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '190px' }}>Contract / Deal Ref</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '135px' }}>Total Invoiced</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '130px' }}>Balance Due</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '150px' }}>Payment Status</th>
+                    <th style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap', minWidth: '130px' }}>Due Date</th>
+                    <th style={{ padding: '1rem 1.25rem', textAlign: 'right', whiteSpace: 'nowrap', minWidth: '130px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1081,79 +1108,79 @@ export const InvoicesScreen: React.FC = () => {
                       style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}
                       className="contract-table-row"
                     >
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.9rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '0.9rem', display: 'inline-block', letterSpacing: '0.02em' }}>
                           {inv.invoiceNumber}
                         </span>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem', whiteSpace: 'nowrap' }}>
                           Issued: {formatDisplayDate(inv.issueDate)}
                         </div>
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', minWidth: '220px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', whiteSpace: 'nowrap' }}>
                           {inv.customerName}
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }} title={inv.customerEmail}>
                           {inv.companyName ? `🏢 ${inv.companyName} · ` : ''}{inv.customerEmail}
                         </div>
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', minWidth: '190px' }}>
                         {inv.contractNumber ? (
                           <div>
-                            <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                               📄 {inv.contractNumber}
                             </span>
                             {inv.contractTitle && (
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '190px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={inv.contractTitle}>
                                 {inv.contractTitle}
                               </div>
                             )}
                             {inv.opportunityTitle && (
-                              <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '2px', fontWeight: 600 }}>
+                              <div style={{ fontSize: '0.72rem', color: '#818cf8', marginTop: '2px', fontWeight: 600, maxWidth: '190px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 💼 {inv.opportunityTitle}
                               </div>
                             )}
                           </div>
                         ) : inv.opportunityTitle ? (
                           <div>
-                            <span style={{ fontWeight: 600, color: '#818cf8', fontSize: '0.85rem' }}>
+                            <span style={{ fontWeight: 600, color: '#818cf8', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                               💼 {inv.opportunityTitle}
                             </span>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Linked Opportunity</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Linked Opportunity</div>
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>— Direct Invoice —</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>— Direct Invoice —</span>
                         )}
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>
-                          ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatCurrency(inv.totalAmount, profile?.currency || currency, 2)}
                         </div>
                         {inv.amountPaid > 0 && (
-                          <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600 }}>
-                            Paid: ${inv.amountPaid.toLocaleString()}
+                          <div style={{ fontSize: '0.74rem', color: '#10b981', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            Paid: {formatCurrency(inv.amountPaid, profile?.currency || currency, 2)}
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 800, color: (inv.balanceDue ?? inv.totalAmount) > 0 ? 'var(--accent-primary)' : '#10b981', fontSize: '0.98rem' }}>
-                          ${(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatCurrency(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount), profile?.currency || currency, 2)}
                         </div>
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
                         {statusBadge(inv)}
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td style={{ padding: '1rem 1.25rem', whiteSpace: 'nowrap' }}>
                         {(() => {
                           const overdue = isInvoiceOverdue(inv);
                           const daysOverdue = getDaysOverdue(inv.dueDate);
                           return (
                             <div>
-                              <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500 }}>
+                              <div style={{ color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 500, whiteSpace: 'nowrap' }}>
                                 {formatDisplayDate(inv.dueDate)}
                               </div>
                               {overdue && (
-                                <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+                                <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                   ⚠️ {daysOverdue > 1 ? `${daysOverdue} days late` : 'Due today'}
                                 </div>
                               )}
@@ -1190,6 +1217,7 @@ export const InvoicesScreen: React.FC = () => {
                             onEdit={(invoiceItem) => navigate(`/invoices/${invoiceItem.invoiceId}/edit`)}
                             onDelete={handleDeleteInvoice}
                             onView={setSelectedInvoice}
+                            onSyncPricing={handleSyncPricing}
                           />
                         </div>
                       </td>
@@ -1236,13 +1264,13 @@ export const InvoicesScreen: React.FC = () => {
                       <div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Total Invoiced</div>
                         <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1rem', marginTop: '0.1rem' }}>
-                          ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatCurrency(inv.totalAmount, profile?.currency || currency, 2)}
                         </div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Balance Due</div>
                         <div style={{ fontWeight: 800, color: (inv.balanceDue ?? inv.totalAmount) > 0 ? 'var(--accent-primary)' : '#10b981', fontSize: '1rem', marginTop: '0.1rem' }}>
-                          ${(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatCurrency(inv.balanceDue ?? (inv.status === 'Paid' ? 0 : inv.totalAmount), profile?.currency || currency, 2)}
                         </div>
                       </div>
                     </div>
@@ -1272,6 +1300,7 @@ export const InvoicesScreen: React.FC = () => {
                           onEdit={(invoiceItem) => navigate(`/invoices/${invoiceItem.invoiceId}/edit`)}
                           onDelete={handleDeleteInvoice}
                           onView={setSelectedInvoice}
+                          onSyncPricing={handleSyncPricing}
                         />
                       </div>
                     </div>
@@ -1288,147 +1317,390 @@ export const InvoicesScreen: React.FC = () => {
       {recordingPaymentInvoice && (() => {
         const recInv = recordingPaymentInvoice;
         const remainingBal = recInv.balanceDue ?? (recInv.status === 'Paid' ? 0 : recInv.totalAmount);
-        const isBankMethod = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer';
+        const isBankMethod = paymentMethod === 'Bank Transfer' || paymentMethod === 'Check' || paymentMethod === 'SWIFT Wire Transfer' || paymentMethod === 'Telebirr / CBE Birr';
 
-        return (
-          <div className="crm-modal-overlay">
-            <div className="crm-modal-container" style={{ maxWidth: '520px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-                <div>
-                  <h3 style={{ margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <ShieldCheck size={22} style={{ color: '#10b981' }} /> Record &amp; Verify Payment
-                  </h3>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                    Invoice #{recInv.invoiceNumber} · Internal Ledger Verification
+        return ReactDOM.createPortal(
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              zIndex: 99999,
+            }}
+            onClick={() => setRecordingPaymentInvoice(null)}
+          >
+            <style>{`
+              .rpm-inv-modal input:focus, .rpm-inv-modal select:focus {
+                border-color: #10b981 !important;
+                box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12) !important;
+                outline: none !important;
+              }
+            `}</style>
+            <div
+              className="rpm-inv-modal"
+              style={{
+                width: '100%',
+                maxWidth: '640px',
+                maxHeight: '92vh',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '20px',
+                boxShadow: '0 25px 60px -15px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '1.35rem 1.75rem',
+                  background: '#ffffff',
+                  borderBottom: '1px solid #f1f5f9',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <ShieldCheck size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.025em' }}>
+                      Record Offline / Manual Payment
+                    </h3>
+                    <div style={{ fontSize: '0.79rem', color: '#94a3b8', marginTop: '2px' }}>
+                      Invoice #{recInv.invoiceNumber} · Internal Ledger Verification
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => setRecordingPaymentInvoice(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem' }}>×</button>
+                <button
+                  type="button"
+                  onClick={() => setRecordingPaymentInvoice(null)}
+                  style={{
+                    background: '#f1f5f9',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    padding: '7px',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    lineHeight: 1,
+                  }}
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              {/* Clarification Notice: Internal Company Verification */}
-              <div style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.25)', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
-                <div>
-                  <strong style={{ color: 'var(--text-primary)' }}>Internal Verification:</strong> Record that the <strong>Customer (Payer)</strong> has made a verified payment to <strong>Our Company (Receiver)</strong>.
-                </div>
-              </div>
+              {/* Form with scrollable body */}
+              <form onSubmit={handleRecordPaymentSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    padding: '1.25rem 1.75rem',
+                    overflowY: 'auto',
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem',
+                    background: '#f8fafc',
+                  }}
+                >
+                  {/* Direct Ledger Notice */}
+                  <div
+                    style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: '12px',
+                      padding: '0.85rem 1.1rem',
+                      fontSize: '0.83rem',
+                      color: '#166534',
+                      display: 'flex',
+                      gap: '0.65rem',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>🛡️</span>
+                    <div>
+                      <strong style={{ color: '#14532d' }}>Direct Ledger Credit:</strong> Record that the{' '}
+                      <strong>Customer (Payer)</strong> has made a verified offline payment to <strong>Our Company (Receiver)</strong>.
+                    </div>
+                  </div>
 
-              {/* Explicit Payer vs Receiver Block */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>👤 Payer (Customer)</div>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>{recInv.customerName}</div>
-                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{recInv.companyName || recInv.customerEmail}</div>
-                </div>
-                <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700 }}>🏢 Receiver (Our Company)</div>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.2rem', fontSize: '0.92rem' }}>Enterprise CRM Solutions</div>
-                  <div style={{ fontSize: '0.76rem', color: '#10b981', fontWeight: 600 }}>Balance: ${remainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-                </div>
-              </div>
+                  {/* Payer vs Receiver Block */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                    <div style={{ background: '#ffffff', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>
+                        👤 Payer (Customer)
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem', fontSize: '0.94rem' }}>{recInv.customerName}</div>
+                      <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '2px' }}>{recInv.companyName || recInv.customerEmail}</div>
+                    </div>
+                    <div style={{ background: '#ffffff', padding: '0.9rem 1.1rem', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                      <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>
+                        🏢 Receiver (Our Company)
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '0.25rem', fontSize: '0.94rem' }}>Enterprise CRM Solutions</div>
+                      <div style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700, marginTop: '2px' }}>
+                        Balance Due: {formatCurrency(remainingBal)}
+                      </div>
+                    </div>
+                  </div>
 
-              <form onSubmit={handleRecordPaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="crm-form-2col">
-                  <div>
-                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Amount Paid ($) *
+                  {/* Payment Method Quick Selector */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+                      Payment Method / Channel *
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.45rem' }}>
+                      {[
+                        { id: 'Bank Transfer', label: '🏦 Bank Wire' },
+                        { id: 'Cash', label: '💵 Cash' },
+                        { id: 'Check', label: '📑 Cheque' },
+                        { id: 'Telebirr / CBE Birr', label: '📱 Telebirr/CBE' },
+                        { id: 'Stripe', label: '💳 Card / POS' },
+                        { id: 'SWIFT Wire Transfer', label: '🌐 SWIFT Int.' },
+                      ].map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setPaymentMethod(m.id)}
+                          style={{
+                            padding: '0.5rem 0.6rem',
+                            borderRadius: '10px',
+                            border: paymentMethod === m.id ? '1.5px solid #10b981' : '1.5px solid #e2e8f0',
+                            background: paymentMethod === m.id ? '#f0fdf4' : '#ffffff',
+                            color: paymentMethod === m.id ? '#16a34a' : '#475569',
+                            fontSize: '0.8rem',
+                            fontWeight: paymentMethod === m.id ? 700 : 500,
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.15s ease',
+                            boxShadow: paymentMethod === m.id ? '0 2px 8px rgba(16, 185, 129, 0.15)' : 'none',
+                          }}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Amount & Date */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
+                        Amount Paid &amp; Date *
+                      </label>
+                      {remainingBal > 0 && (
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentAmount(remainingBal)}
+                            style={{
+                              background: paymentAmount === remainingBal ? '#dcfce7' : '#f0fdf4',
+                              border: paymentAmount === remainingBal ? '1.5px solid #16a34a' : '1px solid #bbf7d0',
+                              color: '#16a34a',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Full ({formatCurrency(remainingBal)})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentAmount(Math.round((remainingBal / 2) * 100) / 100)}
+                            style={{
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              color: '#64748b',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            50% ({formatCurrency(remainingBal / 2)})
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={remainingBal > 0 ? remainingBal : recInv.totalAmount}
+                          value={paymentAmount}
+                          onChange={e => setPaymentAmount(Number(e.target.value))}
+                          required
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <Input
+                          type="date"
+                          value={paymentDate}
+                          onChange={e => setPaymentDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bank name (if bank method) */}
+                  {isBankMethod && (
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.45rem' }}>
+                        Receiving / Customer Bank Name
+                      </label>
+                      <SearchableSelect
+                        value={paymentBankName}
+                        onChange={val => setPaymentBankName(String(val))}
+                        options={[
+                          { value: 'Commercial Bank of Ethiopia (Nigd Bank)', label: 'Commercial Bank of Ethiopia (Nigd Bank)' },
+                          { value: 'Awash Bank', label: 'Awash Bank' },
+                          { value: 'Bank of Abyssinia', label: 'Bank of Abyssinia' },
+                          { value: 'Dashen Bank', label: 'Dashen Bank' },
+                          { value: 'Nib International Bank', label: 'Nib International Bank' },
+                          { value: 'Zemen Bank', label: 'Zemen Bank' },
+                          { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
+                          { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
+                          { value: 'Telebirr / Ethio Telecom', label: 'Telebirr / Ethio Telecom' },
+                          { value: 'Other Supported Bank', label: 'Other Supported Bank' },
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {/* Transaction Ref */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: '0.45rem' }}>
+                      Transaction / Slip / Check Reference (Optional)
                     </label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      max={remainingBal > 0 ? remainingBal : recInv.totalAmount}
-                      value={paymentAmount}
-                      onChange={e => setPaymentAmount(Number(e.target.value))}
-                      required
+                      value={paymentRef}
+                      onChange={e => setPaymentRef(e.target.value)}
+                      placeholder="e.g. Bank Deposit Slip #TXN-928374, Check #4092, or Telebirr ID"
                     />
                   </div>
-                  <div>
-                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Payment Date *
-                    </label>
+
+                  {/* Remarks */}
+                  <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                      <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>
+                        Accounting Remarks / Verification Notes
+                      </label>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        {['Direct Bank Deposit', 'Cash in Office', 'Verified on Statement'].map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setPaymentNotes(tag)}
+                            style={{
+                              background: paymentNotes === tag ? '#ede9fe' : '#f8fafc',
+                              border: paymentNotes === tag ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                              color: paymentNotes === tag ? '#4f46e5' : '#64748b',
+                              fontSize: '0.7rem',
+                              padding: '0.12rem 0.45rem',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <Input
-                      type="date"
-                      value={paymentDate}
-                      onChange={e => setPaymentDate(e.target.value)}
-                      required
+                      value={paymentNotes}
+                      onChange={e => setPaymentNotes(e.target.value)}
+                      placeholder="e.g. Deposit payment / Verified against bank statement"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Payment Method (How Customer Paid) *
-                  </label>
-                  <SearchableSelect
-                    value={paymentMethod}
-                    onChange={val => setPaymentMethod(String(val))}
-                    options={[
-                      { value: 'Bank Transfer', label: '🏦 Bank Transfer' },
-                      { value: 'Stripe', label: '💳 Stripe (Credit / Debit Card)' },
-                      { value: 'Cash', label: '💵 Cash Settlement' },
-                      { value: 'Check', label: '📑 Business Check / Cheque' },
-                      { value: 'Telebirr / CBE Birr', label: '📱 Telebirr / CBE Birr' },
-                      { value: 'SWIFT Wire Transfer', label: '🌐 SWIFT International Wire' },
-                      { value: 'Other', label: '⚡ Other Supported Method' }
-                    ]}
-                  />
-                </div>
-
-                {isBankMethod && (
-                  <div>
-                    <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                      Bank Name (Customer's / Receiving Bank)
-                    </label>
-                    <SearchableSelect
-                      value={paymentBankName}
-                      onChange={val => setPaymentBankName(String(val))}
-                      options={[
-                        { value: 'Commercial Bank of Ethiopia (Nigd Bank)', label: 'Commercial Bank of Ethiopia (Nigd Bank)' },
-                        { value: 'Awash Bank', label: 'Awash Bank' },
-                        { value: 'Bank of Abyssinia', label: 'Bank of Abyssinia' },
-                        { value: 'Dashen Bank', label: 'Dashen Bank' },
-                        { value: 'Nib International Bank', label: 'Nib International Bank' },
-                        { value: 'Zemen Bank', label: 'Zemen Bank' },
-                        { value: 'United Bank / Hibret Bank', label: 'United Bank / Hibret Bank' },
-                        { value: 'Cooperative Bank of Oromia', label: 'Cooperative Bank of Oromia' },
-                        { value: 'Other Supported Bank', label: 'Other Supported Bank' }
-                      ]}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Transaction / Check Reference (Optional)
-                  </label>
-                  <Input
-                    value={paymentRef}
-                    onChange={e => setPaymentRef(e.target.value)}
-                    placeholder="e.g. Bank Ref #TXN-928374, Stripe ID, or Check #4092"
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem', fontWeight: 600 }}>
-                    Accounting Remarks (Optional)
-                  </label>
-                  <Input
-                    value={paymentNotes}
-                    onChange={e => setPaymentNotes(e.target.value)}
-                    placeholder="e.g. Deposit payment / Verified against bank statement"
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                  <Button variant="secondary" type="button" onClick={() => setRecordingPaymentInvoice(null)}>Cancel</Button>
-                  <Button type="submit" disabled={recordingPayment} style={{ background: '#10b981', color: '#fff', fontWeight: 700 }}>
-                    <CheckCircle size={16} style={{ marginRight: 6 }} /> {recordingPayment ? 'Recording…' : 'Confirm & Verify Payment'}
-                  </Button>
+                {/* Fixed Footer */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '1rem 1.75rem',
+                    background: '#ffffff',
+                    borderTop: '1px solid #f1f5f9',
+                    flexShrink: 0,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setRecordingPaymentInvoice(null)}
+                    style={{
+                      background: 'transparent',
+                      border: '1.5px solid #e2e8f0',
+                      borderRadius: '10px',
+                      color: '#64748b',
+                      fontWeight: 600,
+                      padding: '0.6rem 1.1rem',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={recordingPayment}
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      padding: '0.6rem 1.35rem',
+                      fontSize: '0.9rem',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: recordingPayment ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                      opacity: recordingPayment ? 0.7 : 1,
+                    }}
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>{recordingPayment ? 'Recording…' : 'Confirm & Verify Payment'}</span>
+                  </button>
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 

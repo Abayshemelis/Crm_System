@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Printer, Send, X, FileText, CheckCircle, Building2, User, Calendar, ShieldCheck, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useSystemProfile, useFormatCurrency } from '../../context/SystemProfileContext';
 
 interface OpportunityLineItem {
   lineItemId: number;
@@ -41,6 +42,8 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
   onSendEmail
 }) => {
   const quoteRef = useRef<HTMLDivElement>(null);
+  const { profile } = useSystemProfile();
+  const { formatCurrency, currency } = useFormatCurrency();
 
   const quoteNumber = `QT-${new Date().getFullYear()}-${String(opportunity.opportunityId).padStart(5, '0')}`;
   const quoteDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -106,8 +109,8 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
 
   const handleEmailQuote = () => {
     if (!onSendEmail) return;
-    const itemsSummary = lineItems.map(i => `- ${i.product?.name || 'Product'} (Qty: ${i.quantity}, Price: $${i.unitPrice}, Total: $${i.totalPrice.toFixed(2)})`).join('\n');
-    const emailBody = `Dear ${opportunity.customerFirstName} ${opportunity.customerLastName},\n\nPlease find your official proposal quote details below:\n\nQuote Reference: ${quoteNumber}\nDate: ${quoteDate}\nValid Until: ${validUntil}\n\nPROPOSAL ITEMS:\n${itemsSummary || 'Standard Consulting Proposal'}\n\nGRAND TOTAL: $${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nPlease let us know if you have any questions.\n\nBest regards,\n${opportunity.ownerName || 'Sales Team'}`;
+    const itemsSummary = lineItems.map(i => `- ${i.product?.name || 'Product'} (Qty: ${i.quantity}, Price: ${formatCurrency(i.unitPrice, profile?.currency || currency, 2)}, Total: ${formatCurrency(i.totalPrice, profile?.currency || currency, 2)})`).join('\n');
+    const emailBody = `Dear ${opportunity.customerFirstName} ${opportunity.customerLastName},\n\nPlease find your official proposal quote details below:\n\nQuote Reference: ${quoteNumber}\nDate: ${quoteDate}\nValid Until: ${validUntil}\n\nPROPOSAL ITEMS:\n${itemsSummary || 'Standard Commercial Proposal'}\n\nGRAND TOTAL: ${formatCurrency(grandTotal, profile?.currency || currency, 2)}\n\nPlease let us know if you have any questions.\n\nBest regards,\n${opportunity.ownerName || 'Sales Team'}`;
     onSendEmail(emailBody);
   };
 
@@ -214,18 +217,22 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
           }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.5rem' }}>
-                <div style={{
-                  background: 'var(--accent-primary)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: '1.2rem',
-                  padding: '0.3rem 0.65rem',
-                  borderRadius: '8px'
-                }}>
-                  CRM
-                </div>
+                {profile?.logoUrl ? (
+                  <img src={profile.logoUrl} alt="Logo" style={{ height: '36px', maxWidth: '120px', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{
+                    background: 'var(--accent-primary)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '1.2rem',
+                    padding: '0.3rem 0.65rem',
+                    borderRadius: '8px'
+                  }}>
+                    {profile?.systemName?.substring(0, 3)?.toUpperCase() || 'CRM'}
+                  </div>
+                )}
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-                  Enterprise Sales CRM
+                  {profile?.companyName || profile?.systemName || 'Enterprise Sales CRM'}
                 </h1>
               </div>
               <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -332,7 +339,7 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Standard enterprise solution package</div>
                     </td>
                     <td style={{ textAlign: 'right', padding: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      ${opportunity.estimatedValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatCurrency(opportunity.estimatedValue, profile?.currency || currency, 2)}
                     </td>
                   </tr>
                 ) : (
@@ -348,13 +355,13 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
                         {item.quantity}
                       </td>
                       <td style={{ textAlign: 'right', padding: '0.85rem 1rem', color: 'var(--text-primary)' }}>
-                        ${item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatCurrency(item.unitPrice, profile?.currency || currency, 2)}
                       </td>
                       <td style={{ textAlign: 'right', padding: '0.85rem 1rem', color: 'var(--text-muted)' }}>
                         {item.discountPercent > 0 ? `${item.discountPercent}%` : '-'}
                       </td>
                       <td style={{ textAlign: 'right', padding: '0.85rem 1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        ${item.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatCurrency(item.totalPrice, profile?.currency || currency, 2)}
                       </td>
                     </tr>
                   ))
@@ -402,12 +409,12 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                 <span>Subtotal:</span>
-                <span>${subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>{formatCurrency(subtotal, profile?.currency || currency, 2)}</span>
               </div>
               {totalDiscount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#10b981' }}>
                   <span>Discount Total:</span>
-                  <span>-${totalDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span>-{formatCurrency(totalDiscount, profile?.currency || currency, 2)}</span>
                 </div>
               )}
               <div style={{
@@ -421,7 +428,7 @@ export const QuoteModal: React.FC<QuoteModalProps> = ({
                 marginTop: '0.25rem'
               }}>
                 <span>Grand Total:</span>
-                <span>${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>{formatCurrency(grandTotal, profile?.currency || currency, 2)}</span>
               </div>
             </div>
           </div>
